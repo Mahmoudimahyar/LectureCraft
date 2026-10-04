@@ -250,6 +250,50 @@ test.describe("lecture workspace", () => {
     await page.keyboard.press("Escape");
   });
 
+  test("UI10 a slide with no suggested link (an untimed transcript) can be linked to the recording by the learner", async ({ page, request }, testInfo) => {
+    // BE 562 lecture 01 mirrors most real sessions: a recording and an untimed transcript, so nothing is suggested.
+    const slide = testInfo.project.name.includes("desktop") ? 1 : 2;
+    await page.goto(`/courses/be562/lectures/lecture-01?page=${slide}`);
+    await expect(page.getByTestId("slide-canvas")).toHaveAttribute("data-rendered", String(slide));
+    const player = page.getByTestId("clip-player");
+    await expect(player).toContainText("No timed match for this slide");
+    await expect(player).toContainText("no start time is guessed");
+    await expect(page.getByTestId("clip-label")).toContainText("0:00 – 0:06"); // the whole recording, by default
+    await page.getByTestId("clip-scrubber").fill("1000"); // listen to where the slide is discussed…
+    await player.getByRole("button", { name: "Link this slide to the recording" }).click();
+
+    const dialog = page.getByRole("dialog", { name: "Link this slide to the recording" });
+    await expect(dialog).toContainText("saved as your own reviewed link");
+    await expect(dialog).toContainText(/deck version v1-[0-9a-f]{12}/);
+    await expect(dialog.getByLabel("Start (seconds)")).toHaveValue("1"); // …and the start is taken from that position
+    await dialog.getByLabel("End (seconds)").fill("99");
+    await expect(dialog.getByRole("alert")).toContainText("the end is outside it");
+    await expect(dialog.getByRole("button", { name: "Save link" })).toBeDisabled();
+    await dialog.getByLabel("End (seconds)").fill("4");
+    await dialog.getByRole("button", { name: "Save link" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByText("Link sent. It appears on this slide once the Brain has recorded it.")).toBeVisible();
+    const card = page.getByRole("region", { name: "Your recent link corrections" }).getByTestId("request-card").first();
+    await expect(card.getByTestId("publication-line")).toContainText("source annotation: saved", { timeout: 20_000 });
+    await settle(request);
+
+    await page.reload();
+    await expect(page.getByTestId("clip-label")).toContainText("0:01 – 0:04");
+    await expect(player).toContainText("Shown during · Reviewed link");
+    await player.getByRole("button", { name: "Edit match" }).click();
+    const edit = page.getByRole("dialog", { name: "Edit match" });
+    await expect(edit).toContainText("revision 1 · Reviewed link");
+    await expect(edit).toContainText("manual review");
+    await page.keyboard.press("Escape");
+    await expect(player.getByRole("button", { name: "Add another link" })).toBeVisible(); // a slide the lecturer returns to can have several
+    // The other slide of this deck is untouched: nothing was inferred for it.
+    const other = slide === 1 ? "Next slide" : "Previous slide";
+    if (testInfo.project.name.includes("desktop")) {
+      await page.getByRole("button", { name: other }).click();
+      await expect(player).toContainText("No timed match for this slide");
+    }
+  });
+
   test("UI18 a note is the learner's own record on an exact slide version, and never assessed or sent to the tutor", async ({ page, request, unique }) => {
     const text = unique("Check how the operator position affects leakiness");
     await page.goto(`${L2}?page=2`);

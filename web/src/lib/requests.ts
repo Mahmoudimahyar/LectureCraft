@@ -200,6 +200,24 @@ export function reviseAnnotation(current: { record: AnnotationRecord; artifact: 
   return record;
 }
 
+/**
+ * The learner's own first link between a slide and a stretch of the recording. It is an ordinary
+ * revision-1 annotation: confirmed by the learner, citing the recording file as its support, and
+ * pinned to the exact slide-deck and recording versions on screen.
+ */
+export function newOccurrenceAnnotation(args: { courseId: string; lectureId: string; slide: SourceRef; recording: { source_id: string; version_id: string; sha256: string; artifact: Artifact };
+  startMs: number; endMs: number }): AnnotationRecord {
+  const page = Number(args.slide.locator.page ?? 0);
+  const suffix = crypto.randomUUID().replace(/-/g, "").slice(0, 10);
+  return {
+    contract: "ll.annotation/1", annotation_id: `ann-learner-${args.lectureId}-p${String(page).padStart(3, "0")}-${suffix}`, scope: scopeOf(args.courseId), revision: 1, supersedes: null,
+    relation: "displayed_during", from: args.slide,
+    to: { source_id: args.recording.source_id, version_id: args.recording.version_id, sha256: args.recording.sha256,
+          locator: { kind: "media", start_ms: Math.round(args.startMs), end_ms: Math.round(args.endMs), origin: "original_source_start" } },
+    review_state: "confirmed", basis: "manual_review", support: [args.recording.artifact], reviewer_ref: "learner", created_at: isoNow(),
+  };
+}
+
 export async function draftAttachment(text: string): Promise<{ file: BundleFile; artifact: Artifact }> {
   const bytes = new TextEncoder().encode(text);
   return { file: { path: "draft.txt", bytes, mediaType: "text/plain" }, artifact: { path: "draft.txt", sha256: await sha256Hex(bytes), bytes: bytes.byteLength, media_type: "text/plain" } };

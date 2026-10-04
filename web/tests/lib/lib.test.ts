@@ -7,7 +7,7 @@ import { parseStrictJson, validate, validatePayload } from "@/contracts/validate
 import { buildRequestBundle, isoNow } from "@/lib/bundle";
 import * as db from "@/lib/db";
 import { forgetDeviceForTests, formatFingerprint, fromBase64, getOrCreateDevice, setBrain, setPairing, sha256Hex, signManifest, toBase64, verifyManifest } from "@/lib/device";
-import { askPayload, flushOutbox, NotPairedError, stableIds, submit, submissionPayload } from "@/lib/requests";
+import { askPayload, flushOutbox, newOccurrenceAnnotation, NotPairedError, stableIds, submit, submissionPayload } from "@/lib/requests";
 import { verifyResult, ResultVerificationError, type ResultEnvelope } from "@/lib/transport";
 import { applyTheme, getThemePref, resolveTheme } from "@/lib/theme";
 import { canonicalJsonBytes } from "@/contracts/validate";
@@ -148,6 +148,24 @@ describe("request bundles", () => {
     const laterSitting = await stableIds("ask:quick", "tutor:be505:lecture-01", "Give me a hint");
     expect(laterSitting.requestId).not.toBe(otherDevice.requestId); // asking again another day is a new request
     expect(await stableIds("ask:quick", "tutor:be505:lecture-01", "Give me a hint")).toEqual(laterSitting); // a double click is not
+  });
+});
+
+describe("a link the learner creates", () => {
+  it("is a valid revision-1 annotation pinned to exact versions and citing the recording as its support", () => {
+    const artifact = { path: "materials/sessions/2026-09-04-lecture/rec.m4a", sha256: "b".repeat(64), bytes: 1234, media_type: "audio/mp4" };
+    const record = newOccurrenceAnnotation({ courseId: "be562", lectureId: "lecture-01", slide: { ...source, source_id: "unreg-0123456789abcdef0123", version_id: "disk-aaaaaaaaaaaa" },
+      recording: { source_id: "src-lecture-01-audio", version_id: "disk-bbbbbbbbbbbb", sha256: "b".repeat(64), artifact }, startMs: 61_250.4, endMs: 185_000 });
+    expect(validate("annotation", record)).toEqual([]);
+    expect(record.revision).toBe(1);
+    expect(record.supersedes).toBeNull();
+    expect(record.annotation_id).toMatch(/^ann-learner-lecture-01-p002-[a-f0-9]{10}$/);
+    expect(record.to.locator).toEqual({ kind: "media", start_ms: 61250, end_ms: 185000, origin: "original_source_start" });
+    expect([record.review_state, record.basis, record.reviewer_ref, record.relation]).toEqual(["confirmed", "manual_review", "learner", "displayed_during"]);
+    expect(record.support).toEqual([artifact]);
+    // Two links for the same slide never share an id.
+    const again = newOccurrenceAnnotation({ courseId: "be562", lectureId: "lecture-01", slide: source, recording: { source_id: "r", version_id: "disk-bbbbbbbbbbbb", sha256: "b".repeat(64), artifact }, startMs: 0, endMs: 1000 });
+    expect(again.annotation_id).not.toBe(record.annotation_id);
   });
 });
 

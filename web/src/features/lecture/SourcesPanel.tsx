@@ -133,6 +133,74 @@ function OtherFiles({ courseId, others, back }: { courseId: string; others: Othe
   );
 }
 
+export interface NewMatchDraft {
+  page: number;
+  recordingName: string;
+  recordingVersion: string;
+  deckVersion: string;
+  startMs: number;
+  durationMs: number | null;
+}
+
+/** Create the first (or another) link between this slide and the recording, by typed times — no dragging. */
+export function AddMatchDialog({ draft, onClose, onPreview, onSubmit }: { draft: NewMatchDraft | null; onClose: () => void; onPreview: (startMs: number) => void;
+  onSubmit: (startMs: number, endMs: number) => Promise<void> }) {
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [seeded, setSeeded] = useState<NewMatchDraft | null>(null);
+  if (draft && seeded !== draft) {
+    setSeeded(draft);
+    const from = Math.floor(draft.startMs / 1000);
+    setStart(String(from));
+    setEnd(String(draft.durationMs !== null ? Math.min(from + 60, Math.floor(draft.durationMs / 1000)) : from + 60));
+    setError(null);
+  }
+  if (!draft) return null;
+  const startMs = Math.round(Number(start) * 1000);
+  const endMs = Math.round(Number(end) * 1000);
+  const problem = !Number.isFinite(startMs) || !Number.isFinite(endMs) || start.trim() === "" || end.trim() === "" ? "Enter both times as seconds."
+    : startMs < 0 ? "The start cannot be negative."
+    : endMs <= startMs ? "The end must be after the start."
+    : draft.durationMs !== null && endMs > draft.durationMs + 500 ? `The recording is ${formatMs(draft.durationMs)} long; the end is outside it.` : null;
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()} title="Link this slide to the recording"
+      description="Say which part of the recording belongs to this slide. It is saved as your own reviewed link; you can correct or reject it later, and every version is kept."
+      footer={<>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="primary" busy={busy} disabled={!!problem} onClick={async () => {
+          setBusy(true);
+          setError(null);
+          try {
+            await onSubmit(startMs, endMs);
+            onClose();
+          } catch (e) {
+            setError((e as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}>Save link</Button>
+      </>}>
+      <div className="flex flex-col gap-3">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+          <dt className="text-muted">Slide</dt><dd>{draft.page} · deck version {draft.deckVersion}</dd>
+          <dt className="text-muted">Recording</dt><dd className="break-words">{draft.recordingName} · version {draft.recordingVersion}{draft.durationMs !== null ? ` · ${formatMs(draft.durationMs)} long` : ""}</dd>
+        </dl>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Start (seconds)" htmlFor="new-match-start"><input id="new-match-start" className="ll-input" inputMode="decimal" value={start} onChange={(e) => setStart(e.target.value)} aria-invalid={!!problem} aria-describedby="new-match-problem" /></Field>
+          <Field label="End (seconds)" htmlFor="new-match-end"><input id="new-match-end" className="ll-input" inputMode="decimal" value={end} onChange={(e) => setEnd(e.target.value)} aria-invalid={!!problem} aria-describedby="new-match-problem" /></Field>
+        </div>
+        <p id="new-match-problem" role={problem ? "alert" : undefined} className={problem ? "text-sm font-medium text-danger" : "text-sm text-muted"}>
+          {problem ?? `Proposed: ${formatMs(startMs)}–${formatMs(endMs)}. The start is filled in from where the recording is now.`}
+        </p>
+        <div><Button size="sm" disabled={!!problem} onClick={() => onPreview(startMs)}>Preview from the start</Button></div>
+        {error && <Callout tone="danger" role="alert" title="The link was not sent">{error}</Callout>}
+      </div>
+    </Dialog>
+  );
+}
+
 interface EditMatchProps {
   occurrence: Occurrence | null;
   recording: RecordingView | undefined;

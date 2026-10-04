@@ -15,6 +15,10 @@ export interface ClipPlayerHandle {
   seekTo(ms: number): void;
   currentMs(): number;
   isPlaying(): boolean;
+  /** Length reported by the media element itself (null until its metadata has loaded). */
+  durationMs(): number | null;
+  /** The recording currently loaded in the player. */
+  recording(): RecordingView | null;
 }
 
 interface ClipPlayerProps {
@@ -23,13 +27,15 @@ interface ClipPlayerProps {
   page: number;
   onTime?: (ms: number, playing: boolean) => void;
   onEditMatch?: (occurrence: Occurrence) => void;
+  /** Offered when the learner may create a link for this slide (paired device, identified files). */
+  onAddMatch?: () => void;
   announce?: (message: string) => void;
 }
 
 const RATES = [0.75, 1, 1.25, 1.5, 2];
 const MEDIA_ERRORS: Record<number, string> = { 1: "Playback was aborted.", 2: "A network problem interrupted loading the recording.", 3: "The recording could not be decoded by this browser.", 4: "This browser cannot play this recording's format." };
 
-export const ClipPlayer = forwardRef<ClipPlayerHandle, ClipPlayerProps>(function ClipPlayer({ recordings, occurrences, page, onTime, onEditMatch, announce }, ref) {
+export const ClipPlayer = forwardRef<ClipPlayerHandle, ClipPlayerProps>(function ClipPlayer({ recordings, occurrences, page, onTime, onEditMatch, onAddMatch, announce }, ref) {
   const mediaRef = useRef<HTMLAudioElement & HTMLVideoElement>(null);
   const [choice, setChoice] = useState<string>("whole");
   const [repeat, setRepeat] = useState(false);
@@ -48,6 +54,10 @@ export const ClipPlayer = forwardRef<ClipPlayerHandle, ClipPlayerProps>(function
   clipRef.current = clip;
   const repeatRef = useRef(repeat);
   repeatRef.current = repeat;
+  const durationRef = useRef<number | null>(null);
+  durationRef.current = durationMs ?? recording?.duration_ms ?? null;
+  const recordingRef = useRef<RecordingView | null>(null);
+  recordingRef.current = recording;
 
   // Changing slide pauses playback and selects that slide's first occurrence (never autoplay).
   useEffect(() => {
@@ -87,6 +97,8 @@ export const ClipPlayer = forwardRef<ClipPlayerHandle, ClipPlayerProps>(function
     },
     currentMs: () => Math.round((mediaRef.current?.currentTime ?? 0) * 1000),
     isPlaying: () => !!mediaRef.current && !mediaRef.current.paused,
+    durationMs: () => durationRef.current,
+    recording: () => recordingRef.current,
   }), []);
 
   const onTimeUpdate = () => {
@@ -185,7 +197,11 @@ export const ClipPlayer = forwardRef<ClipPlayerHandle, ClipPlayerProps>(function
       </div>
 
       {occurrences.length === 0 && (
-        <Callout tone="unassessed" title="No timed match for this slide">No reviewed or suggested interval links this slide to the recording. You can browse the whole recording; no start time is guessed.</Callout>
+        <Callout tone="unassessed" title="No timed match for this slide"
+          actions={onAddMatch ? <Button size="sm" onClick={onAddMatch}>Link this slide to the recording</Button> : undefined}>
+          No reviewed or suggested interval links this slide to the recording. You can browse the whole recording; no start time is guessed.
+          {onAddMatch ? " When you reach the part where this slide is discussed, you can record that yourself." : ""}
+        </Callout>
       )}
 
       <div className="flex items-center gap-2">
@@ -223,6 +239,7 @@ export const ClipPlayer = forwardRef<ClipPlayerHandle, ClipPlayerProps>(function
           </select>
         </label>
         {occurrence && onEditMatch && <Button size="sm" variant="quiet" className="ml-auto" onClick={() => onEditMatch(occurrence)}>Edit match</Button>}
+        {occurrences.length > 0 && onAddMatch && <Button size="sm" variant="quiet" onClick={onAddMatch}>Add another link</Button>}
       </div>
       {error && <Callout tone="danger" role="alert" title="Playback problem">{error} The recording file itself was not changed.</Callout>}
     </section>

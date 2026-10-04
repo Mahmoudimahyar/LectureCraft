@@ -191,6 +191,9 @@ export interface RecordingView {
   session_id: string;
   content: string;
   duration_ms: number | null;
+  bytes: number | null;
+  /** The recording file as a citable artifact (present once its bytes are identified). */
+  artifact: Artifact | null;
 }
 
 export interface TranscriptView {

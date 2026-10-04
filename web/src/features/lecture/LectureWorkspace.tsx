@@ -7,14 +7,14 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { ChevronLeft, ChevronRight, Maximize, Minimize, NotebookPen, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useApp } from "@/app/state";
-import { Button, Callout, cn, Dialog, ErrorState, Field, IconButton, LoadingState, StatusChip, Tab, TabList, TabPanel, Tabs } from "@/components/ui";
+import { Button, Callout, cn, Dialog, ErrorState, Field, IconButton, LoadingState, StatusChip, Tab, TabList, TabPanel, Tabs, formatMs } from "@/components/ui";
 import { contentUrl } from "@/lib/api";
 import { isoNow, newId } from "@/lib/bundle";
 import type { SourceRef } from "@/lib/db";
 import { getOrCreateDevice, nextSequence } from "@/lib/device";
 import { dispositionLabel } from "@/lib/labels";
 import { useLecture, useNotes, useResume } from "@/lib/queries";
-import { draftAttachment, reviseAnnotation, sessionId, TERM } from "@/lib/requests";
+import { draftAttachment, reviseAnnotation, sessionId, TERM, newOccurrenceAnnotation } from "@/lib/requests";
 import type { Occurrence } from "@/lib/types";
 import { ReturnLink } from "@/features/search/SearchOverlay";
 import { useLocalRequests, useSubmitActions } from "@/features/tutor/actions";
@@ -22,7 +22,7 @@ import { RequestCard } from "@/features/tutor/RequestCard";
 import { TutorPanel } from "@/features/tutor/TutorPanel";
 import { ClipPlayer, type ClipPlayerHandle } from "./ClipPlayer";
 import { SlideCanvas, SlideThumb } from "./SlideCanvas";
-import { EditMatchDialog, SourcesPanel } from "./SourcesPanel";
+import { AddMatchDialog, EditMatchDialog, SourcesPanel, type NewMatchDraft } from "./SourcesPanel";
 import { TranscriptPanel } from "./TranscriptPanel";
 
 type Panel = "slide" | "tutor" | "transcript" | "sources";
@@ -74,6 +74,7 @@ export function LectureWorkspace() {
   const [position, setPosition] = useState({ ms: 0, playing: false });
   const [pinned, setPinned] = useState<Array<{ source: SourceRef; label: string }>>([]);
   const [editing, setEditing] = useState<Occurrence | null>(null);
+  const [adding, setAdding] = useState<NewMatchDraft | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [region, setRegion] = useState({ x: "", y: "", w: "", h: "" });
@@ -156,6 +157,27 @@ export function LectureWorkspace() {
     setNotice("Correction sent. The current reviewed view stays in place until the new revision is accepted.");
     window.setTimeout(() => void queryClient.invalidateQueries({ queryKey: ["lecture", courseId, lectureId] }), 2500);
   };
+
+  // A new link needs exact identities of both ends and a paired device; otherwise it is not offered.
+  const startAddMatch = () => {
+    const recording = playerRef.current?.recording() ?? null;
+    if (!recording?.version_id || !lecture.deck?.version_id) return;
+    playerRef.current?.pause();
+    setAdding({ page, recordingName: recording.filename, recordingVersion: recording.version_id, deckVersion: lecture.deck.version_id, startMs: playerRef.current?.currentMs() ?? 0,
+      durationMs: playerRef.current?.durationMs() ?? null });
+  };
+  const submitNewMatch = async (startMs: number, endMs: number) => {
+    const recording = playerRef.current?.recording() ?? null;
+    if (!slideRef || !recording?.version_id || !recording.sha256 || !recording.artifact) throw new Error("The slide or the recording is not identified yet, so an exact link cannot be made.");
+    const record = newOccurrenceAnnotation({ courseId, lectureId, slide: slideRef, startMs, endMs,
+      recording: { source_id: recording.source_id, version_id: recording.version_id, sha256: recording.sha256, artifact: recording.artifact } });
+    await actions.record(courseId, "correct_source", record as unknown as Record<string, unknown>, {
+      label: `New link · slide ${page}`, text: `Link slide ${page} to ${formatMs(startMs)}–${formatMs(endMs)} of the recording (${record.annotation_id})`, context: { lectureId, page, label: `Slide ${page}` },
+    });
+    setNotice("Link sent. It appears on this slide once the Brain has recorded it.");
+    window.setTimeout(() => void queryClient.invalidateQueries({ queryKey: ["lecture", courseId, lectureId] }), 2500);
+  };
+  const canAddMatch = app.pairing.state === "paired" && !!slideRef && lecture.recordings.some((r) => r.version_id && r.sha256 && r.artifact);
 
   const saveNote = async () => {
     if (!slideRef || !noteText.trim()) return;
@@ -297,7 +319,7 @@ export function LectureWorkspace() {
             </>
           )}
 
-          <ClipPlayer ref={playerRef} recordings={lecture.recordings} occurrences={occurrences} page={page} onTime={(ms, playing) => setPosition({ ms, playing })} onEditMatch={setEditing} announce={app.announce} />
+          <ClipPlayer ref={playerRef} recordings={lecture.recordings} occurrences={occurrences} page={page} onTime={(ms, playing) => setPosition({ ms, playing })} onEditMatch={setEditing} onAddMatch={canAddMatch ? startAddMatch : undefined} announce={app.announce} />
 
           {corrections.length > 0 && (
             <section aria-label="Your recent link corrections" className="flex flex-col gap-2">
@@ -344,6 +366,7 @@ export function LectureWorkspace() {
         )}
       </div>
 
+      <AddMatchDialog draft={adding} onClose={() => setAdding(null)} onPreview={(startMs) => playerRef.current?.seekTo(startMs)} onSubmit={submitNewMatch} />
       <EditMatchDialog occurrence={editing} recording={lecture.recordings.find((r) => r.source_id === editing?.source.source_id)} onClose={() => setEditing(null)}
         onPreview={(startMs) => playerRef.current?.seekTo(startMs)} onSubmit={submitMatch} />
 

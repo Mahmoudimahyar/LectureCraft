@@ -133,12 +133,39 @@ describe("request bundles", () => {
     expect((await stableIds("explain", "draft-1", "edited text")).requestId).not.toBe(a.requestId);
     expect(a.requestId).toMatch(/^req-[a-f0-9]{24}$/);
   });
+
+  it("never share an identity between two devices or two sittings that typed the same words", async () => {
+    const first = await stableIds("ask:quick", "tutor:be505:lecture-01", "Give me a hint");
+    forgetDeviceForTests();
+    await db.resetDbForTests();
+    await new Promise<void>((done) => {
+      const request = indexedDB.deleteDatabase("lecture-learning");
+      request.onsuccess = request.onerror = request.onblocked = () => done();
+    });
+    const otherDevice = await stableIds("ask:quick", "tutor:be505:lecture-01", "Give me a hint");
+    expect(otherDevice.requestId).not.toBe(first.requestId); // a second device must not collide with (or be refused as) the first
+    window.sessionStorage.removeItem("ll.session");
+    const laterSitting = await stableIds("ask:quick", "tutor:be505:lecture-01", "Give me a hint");
+    expect(laterSitting.requestId).not.toBe(otherDevice.requestId); // asking again another day is a new request
+    expect(await stableIds("ask:quick", "tutor:be505:lecture-01", "Give me a hint")).toEqual(laterSitting); // a double click is not
+  });
 });
 
 describe("submission and outbox", () => {
   const args = (requestId: string, text: string) => ({ courseId: "be505", bindingRevision: SHA, action: "ask", depth: "quick" as const, requestId, logicalInputId: `input-${requestId}`,
     payload: askPayload("be505", requestId, text, [source]), label: "Slide 2", context: { lectureId: "lecture-01", page: 2, label: "Slide 2" }, text });
 
+
+  it("uses the binding revision stored at pairing when the workspace view has not loaded yet, and refuses plainly when neither is known", async () => {
+    await setPairing({ state: "paired", bindingRevision: SHA, courses: ["be505"] });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 200 }));
+    const early = { ...args("req-early-1", "Sent before the workspace view arrived"), bindingRevision: "" };
+    const outcome = await submit(early);
+    expect(outcome.delivery).toBe("uploaded");
+    await setPairing({ state: "paired", courses: ["be505"] });
+    await expect(submit({ ...args("req-early-2", "No binding known anywhere"), bindingRevision: "" })).rejects.toThrow(/has not loaded yet.*nothing was sent/i);
+    expect(await db.getLocalRequest("req-early-2")).toBeUndefined(); // no half-built request is left behind
+  });
   it("refuse to send from an unpaired device while keeping the draft", async () => {
     await db.saveDraft({ draftId: "d", courseId: "be505", mode: "quick", context: { label: "Slide 2" }, text: "kept", updatedAt: isoNow() });
     await expect(submit(args("req-a", "Q"))).rejects.toBeInstanceOf(NotPairedError);

@@ -46,9 +46,14 @@ export function sessionId(): string {
 }
 let sessionIdFallback: string | null = null;
 
-/** Stable identity for "the same input submitted again" (double click, retry of the same draft text). */
+/**
+ * Stable identity for "the same input submitted again" (double click, retry of the same draft text).
+ * It is scoped to this device and this sitting: another device, or the same words typed on another
+ * day, is a new request rather than a collision with (or a silent duplicate of) an earlier one.
+ */
 export async function stableIds(kind: string, key: string, text: string): Promise<{ requestId: string; logicalInputId: string }> {
-  const digest = (await sha256Hex(new TextEncoder().encode(`${kind}\u0000${key}\u0000${text}`))).slice(0, 24);
+  const device = await getOrCreateDevice();
+  const digest = (await sha256Hex(new TextEncoder().encode([device.deviceId, sessionId(), kind, key, text].join("\u0000")))).slice(0, 24);
   return { requestId: `req-${digest}`, logicalInputId: `input-${digest}` };
 }
 
@@ -89,16 +94,23 @@ async function deliver(bundle: BuiltBundle, record: LocalRequest): Promise<Submi
   return { requestId: bundle.requestId, logicalInputId: bundle.logicalInputId, delivery: "uploaded" };
 }
 
+const BINDING = /^[a-f0-9]{64}$/;
+
 export async function submit(args: SubmitArgs): Promise<SubmitOutcome> {
   const existing = await getLocalRequest(args.requestId);
   if (existing) {
     // Same input submitted again: reuse the original identity instead of creating a second request.
     return { requestId: existing.requestId, logicalInputId: existing.logicalInputId, delivery: existing.upload === "uploaded" ? "uploaded" : "retained_locally", duplicate: true };
   }
-  if ((await getPairing()).state !== "paired") throw new NotPairedError();
+  const pairing = await getPairing();
+  if (pairing.state !== "paired") throw new NotPairedError();
+  // The workspace view may not have arrived yet (a fast submit after opening a page): fall back to the
+  // binding this device was paired under. The Brain refuses a stale binding, so this cannot widen scope.
+  const bindingRevision = BINDING.test(args.bindingRevision) ? args.bindingRevision : (pairing.bindingRevision ?? "");
+  if (!BINDING.test(bindingRevision)) throw new Error("The workspace state from the Brain has not loaded yet, so nothing was sent. Your text is kept here — try again in a moment.");
   const device = await getOrCreateDevice();
   const bundle = await buildRequestBundle({
-    device, sequence: await nextSequence(), courseId: args.courseId, term: TERM, threadKey: `tutor-${args.courseId}`, bindingRevision: args.bindingRevision, action: args.action,
+    device, sequence: await nextSequence(), courseId: args.courseId, term: TERM, threadKey: `tutor-${args.courseId}`, bindingRevision, action: args.action,
     depth: args.depth, payload: args.payload, requestId: args.requestId, logicalInputId: args.logicalInputId, parentRequestId: args.parentRequestId ?? null, attachments: args.attachments,
   });
   const record: LocalRequest = {

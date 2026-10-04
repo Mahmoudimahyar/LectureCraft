@@ -1,0 +1,169 @@
+// SC16 Session wrap-up (UI31). The recap is built only from what actually happened: requests this
+// device sent in this session and the Brain's own job phases and receipts. Viewing a slide is not
+// reported as learning, a quick answer is "not assessed", and nothing here edits a calendar or deadline.
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router";
+import { useApp, courseName } from "@/app/state";
+import { Button, Callout, formatMs, formatWhen, LoadingState, PageHeader, StatusChip } from "@/components/ui";
+import { listDrafts, listOutbox, type LocalRequest } from "@/lib/db";
+import { JOB_STATE } from "@/lib/labels";
+import { useActivity, useResume, useReview } from "@/lib/queries";
+import { reviewItemPayload } from "@/lib/requests";
+import type { ActivityJob, QuestionRecord } from "@/lib/types";
+import { useLocalRequests, useSubmitActions } from "@/features/tutor/actions";
+
+const ANSWERS = new Set(["explain", "practice", "review_answer", "diagnose"]);
+const TERMINAL = new Set(["SUCCEEDED", "FAILED_FINAL", "CANCELLED", "SUPERSEDED"]);
+
+function publicationOf(job: ActivityJob | undefined): { label: string; tone: "success" | "caution" | "unassessed" | "neutral" } {
+  if (!job) return { label: "Not received by the Brain yet", tone: "caution" };
+  const publication = job.phases.publication;
+  if (/^attempt: (saved|already_saved)/.test(publication)) return { label: "Assessed and saved to your course record", tone: "success" };
+  if (/blocked|incomplete/.test(publication)) return { label: `Response kept; course record not saved (${job.phases.publication_reason ?? publication})`, tone: "caution" };
+  if (!TERMINAL.has(job.state)) return { label: JOB_STATE[job.state]?.label ?? job.state, tone: "caution" };
+  return { label: "Not assessed in this exchange", tone: "unassessed" };
+}
+
+export function SessionWrapUp() {
+  const { sessionId = "" } = useParams();
+  const [params] = useSearchParams();
+  const app = useApp();
+  const courseId = params.get("course") ?? app.courseId;
+  const lectureId = params.get("lecture");
+  const page = params.get("page");
+  const local = useLocalRequests(courseId);
+  const activity = useActivity(true);
+  const resume = useResume(courseId);
+  const review = useReview(courseId);
+  const actions = useSubmitActions();
+  const [device, setDevice] = useState<{ drafts: number; outbox: number } | null>(null);
+  const [chosen, setChosen] = useState<Set<string>>(new Set());
+  const [saved, setSaved] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void Promise.all([listDrafts(courseId), listOutbox()]).then(([d, o]) => setDevice({ drafts: d.filter((x) => x.text.trim()).length, outbox: o.length }));
+  }, [courseId, local.dataUpdatedAt]);
+
+  const mine = useMemo(() => (local.data ?? []).filter((r) => r.sessionId === sessionId).sort((a, b) => a.createdAt.localeCompare(b.createdAt)), [local.data, sessionId]);
+  const jobs = useMemo(() => new Map((activity.data?.jobs ?? []).filter((j) => j.request_id).map((j) => [j.request_id!, j])), [activity.data]);
+
+  if (!courseId) return <Callout tone="caution" title="No course selected">Open a course to see its session summary.</Callout>;
+  if (local.isLoading) return <LoadingState />;
+
+  const asked = mine.filter((r) => r.action === "ask");
+  const answered = mine.filter((r) => ANSWERS.has(r.action));
+  const other = mine.filter((r) => r.action !== "ask" && !ANSWERS.has(r.action) && r.action !== "resume" && r.action !== "cancel");
+  const assessed = answered.filter((r) => publicationOf(jobs.get(r.requestId)).tone === "success");
+  const pending = mine.filter((r) => {
+    const job = jobs.get(r.requestId);
+    return r.upload !== "uploaded" || !job || !TERMINAL.has(job.state);
+  });
+  const head = resume.data?.current ?? null;
+  const here = head && head.session_id === sessionId ? head : null;
+
+  // Suggestions come only from course questions this session actually touched and that are not in the list yet.
+  const inList = new Set((review.data?.items ?? []).map((i) => i.question.question_id).filter(Boolean));
+  const touched = [...new Set(mine.map((r) => r.context.questionId).filter((q): q is string => !!q))];
+  const suggestions = touched.map((id) => review.data?.available_questions.find((q) => q.question_id === id)).filter((q): q is NonNullable<typeof q> => !!q && !inList.has(q.question_id));
+
+  const saveChosen = async () => {
+    setBusy(true);
+    try {
+      let count = 0;
+      for (const q of suggestions.filter((s) => chosen.has(s.question_id))) {
+        const record: QuestionRecord = { question_id: q.question_id, family_id: q.family_id, family_revision: q.family_revision, prompt: q.prompt, sources: [], attachments: [] };
+        const itemId = `item-${q.question_id.toLowerCase()}`;
+        await actions.record(courseId, "select_review", reviewItemPayload({ courseId, itemId, revision: 1, question: record, kind: "explanation", selection: "saved_only", schedulerConfig: null, supersedes: null }),
+          { label: `Review selection · ${itemId}`, text: "saved_only" });
+        count += 1;
+      }
+      setSaved(`${count} item${count === 1 ? "" : "s"} sent as "saved only". They get no due date, and nothing was added to a calendar, task list or course deadline.`);
+      setChosen(new Set());
+    } catch (error) {
+      setSaved(`Not saved: ${(error as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const row = (r: LocalRequest) => {
+    const job = jobs.get(r.requestId);
+    const status = ANSWERS.has(r.action) ? publicationOf(job) : { label: !job ? "Not received by the Brain yet" : r.action === "ask" && job.state === "SUCCEEDED" ? "Answer received — not assessed in this exchange" : (JOB_STATE[job.state]?.label ?? job.state), tone: (!job || !TERMINAL.has(job.state) ? "caution" : "unassessed") as "caution" | "unassessed" };
+    return (
+      <li key={r.requestId} className="rounded border border-line/40 p-2 text-sm" data-testid="wrapup-row">
+        <p className="font-medium">{r.label}</p>
+        <p className="text-muted">{r.text.slice(0, 160)}{r.text.length > 160 ? "…" : ""}</p>
+        <p className="mt-1 flex flex-wrap items-center gap-2"><StatusChip tone={status.tone}>{status.label}</StatusChip><Link className="underline" to={`/activity/${encodeURIComponent(r.requestId)}`}>Details</Link></p>
+      </li>
+    );
+  };
+
+  return (
+    <div className="mx-auto max-w-3xl">
+      <PageHeader title="Session summary" subtitle={`${courseName(app.workspace, courseId)} · built from this session's actual requests and receipts, not from a model's recollection.`} />
+
+      <section className="ll-card mb-4 p-4" aria-labelledby="where-h">
+        <h2 id="where-h" className="text-lg font-semibold">Where you stopped</h2>
+        {here ? (
+          <p className="mt-1">Slide {String((here.cursor.source.locator as { page?: number }).page ?? "?")} of {here.cursor.lecture_id}{here.cursor.position_ms != null ? ` · recording at ${formatMs(here.cursor.position_ms)}` : ""} · synchronised {formatWhen(here.updated_at)}.{here.cursor.draft ? " Your unsent draft text was saved with it." : ""}</p>
+        ) : lectureId ? (
+          <p className="mt-1">Slide {page ?? "?"} of {lectureId}. <StatusChip tone="caution">Position not confirmed by the Brain yet</StatusChip> {head ? `The last synchronised position is from ${formatWhen(head.updated_at)}.` : "It is remembered on this device only."}</p>
+        ) : <p className="mt-1 text-muted">No lecture position was recorded in this session.</p>}
+        {resume.data?.conflict && <Callout tone="caution" title="Two devices stopped in different places" actions={<Link className="ll-btn ll-btn-sm" to={`/activity/conflicts/resume-${courseId}`}>Choose which to keep</Link>}>{resume.data.conflict.note}</Callout>}
+        {lectureId && <Link className="ll-btn mt-2" to={`/courses/${courseId}/lectures/${lectureId}${page ? `?page=${page}` : ""}`}>Continue this lecture</Link>}
+      </section>
+
+      <section className="ll-card mb-4 p-4" aria-labelledby="did-h">
+        <h2 id="did-h" className="text-lg font-semibold">What actually happened</h2>
+        <dl className="mt-2 grid grid-cols-3 gap-2 text-center" data-testid="wrapup-counts">
+          <div className="rounded border border-line/40 p-2"><dt className="text-sm text-muted">Answers requested</dt><dd className="text-2xl font-semibold">{asked.length}</dd></div>
+          <div className="rounded border border-line/40 p-2"><dt className="text-sm text-muted">Responses you submitted</dt><dd className="text-2xl font-semibold">{answered.length}</dd></div>
+          <div className="rounded border border-line/40 p-2"><dt className="text-sm text-muted">Assessed and saved</dt><dd className="text-2xl font-semibold">{assessed.length}</dd></div>
+        </dl>
+        {mine.length === 0 && <p className="mt-2 text-muted">You looked at material without sending anything. That is fine; viewing is not recorded as learning or as a gap.</p>}
+        {asked.length > 0 && answered.length === 0 && <Callout tone="neutral" role="note" className="mt-3" title="Understanding was not assessed in this session">You asked for answers. Receiving an answer says nothing about what you know, so no result — and no failure — was recorded.</Callout>}
+        {asked.length > 0 && <><h3 className="mt-3 font-medium">Answers you asked for</h3><ul className="mt-1 flex flex-col gap-2">{asked.map(row)}</ul></>}
+        {answered.length > 0 && <><h3 className="mt-3 font-medium">Your own responses</h3><ul className="mt-1 flex flex-col gap-2">{answered.map(row)}</ul></>}
+        {other.length > 0 && <><h3 className="mt-3 font-medium">Notes and corrections</h3><ul className="mt-1 flex flex-col gap-2">{other.map(row)}</ul></>}
+        <p className="mt-3 text-sm text-muted">Time spent and slides viewed are observations only; they are never treated as evidence of knowledge.</p>
+      </section>
+
+      <section className="ll-card mb-4 p-4" aria-labelledby="pending-h">
+        <h2 id="pending-h" className="text-lg font-semibold">Still pending</h2>
+        {pending.length === 0 && (device?.outbox ?? 0) === 0 ? <p className="mt-1" data-testid="pending-none">Nothing from this session is waiting. Everything listed above has a final state.</p> : (
+          <div className="mt-1 flex flex-col gap-2" data-testid="pending-some">
+            <p>{pending.length} request{pending.length === 1 ? "" : "s"} from this session {pending.length === 1 ? "has" : "have"} no final state yet{(device?.outbox ?? 0) > 0 ? `, and ${device!.outbox} signed request(s) are held on this device waiting to be sent` : ""}.</p>
+            <p className="text-sm text-muted">Leaving this page does not cancel work the Brain already accepted, and nothing is submitted again when you come back. Requests held only on this device are sent the next time the app is open and the Brain is reachable.</p>
+            <div><Link className="ll-btn" to="/activity">Open Activity</Link></div>
+          </div>
+        )}
+        {(device?.drafts ?? 0) > 0 && <p className="mt-2 text-sm text-muted">{device!.drafts} unsent draft{device!.drafts === 1 ? "" : "s"} stay on this device until you send or discard them.</p>}
+      </section>
+
+      <section className="ll-card mb-4 p-4" aria-labelledby="next-h">
+        <h2 id="next-h" className="text-lg font-semibold">Optional next steps</h2>
+        {suggestions.length === 0 ? <p className="mt-1 text-muted">No course question from this session is waiting to be added to your review list.</p> : (
+          <>
+            <p className="mt-1 text-sm text-muted">Tick only what you want to keep. Unticked suggestions are dropped — they do not become scheduled work.</p>
+            <ul className="mt-2 flex flex-col gap-2">
+              {suggestions.map((q) => (
+                <li key={q.question_id}><label className="flex items-start gap-2"><input type="checkbox" className="mt-1 size-5" checked={chosen.has(q.question_id)} onChange={(e) => setChosen((prev) => {
+                  const next = new Set(prev);
+                  if (e.target.checked) next.add(q.question_id); else next.delete(q.question_id);
+                  return next;
+                })} /><span><span className="font-medium">{q.title ?? q.question_id}</span><span className="block text-sm text-muted">{q.prompt.slice(0, 140)}{q.prompt.length > 140 ? "…" : ""}</span></span></label></li>
+              ))}
+            </ul>
+          </>
+        )}
+        {saved && <p role="status" className="mt-2 text-sm">{saved}</p>}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {suggestions.length > 0 && <Button busy={busy} disabled={chosen.size === 0} onClick={saveChosen}>Save selected for later</Button>}
+          <Link className="ll-btn" to="/review">Review now</Link>
+          <Link className="ll-btn ll-btn-primary" to="/study">Done</Link>
+        </div>
+      </section>
+    </div>
+  );
+}

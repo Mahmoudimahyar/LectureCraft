@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
 // Static SPA only: no SSR, no hosted inference backend. The dev server binds loopback.
-// In development /brain is proxied to the loopback Brain operator surface; production
+// In development /api is proxied to the loopback Brain operator surface; production
 // cross-device builds use the Drive transport instead and never reach a PC port.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -19,7 +19,7 @@ export default defineConfig({
     strictPort: true,
     fs: { allow: [here("."), here("../contracts"), here("../config"), here("../docs/project")] },
     proxy: {
-      "/brain": { target: `http://127.0.0.1:${process.env.LL_BRAIN_PORT ?? "8765"}`, changeOrigin: false, rewrite: (p) => p.replace(/^\/brain/, "") },
+      "/api": { target: `http://127.0.0.1:${process.env.LL_BRAIN_PORT ?? "8765"}`, changeOrigin: false },
     },
   },
   preview: { host: "127.0.0.1", port: 4173, strictPort: true },

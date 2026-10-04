@@ -252,13 +252,16 @@ body {
 
 /* Form controls never force a row wider than the screen (narrow viewports, enlarged text):
    a long option label is clipped inside its own control instead of pushing the page sideways. */
-label {
-  max-width: 100%;
-  min-width: 0;
-}
-select.ll-input,
-input.ll-input,
-textarea.ll-input {
-  max-width: 100%;
-  min-width: 0;
+@layer base {
+  /* In the base layer on purpose: a utility such as max-w-[...] on one control must still win. */
+  label {
+    max-width: 100%;
+    min-width: 0;
+  }
+  select.ll-input,
+  input.ll-input,
+  textarea.ll-input {
+    max-width: 100%;
+    min-width: 0;
+  }
 }

@@ -60,8 +60,10 @@ for (const course of workspace.courses) {
     row.transcript_lines = await lines.count();
     if (!row.transcript_lines) row.transcript = (await none.count()) ? "none (explained)" : "missing without explanation";
     await page.getByRole("tab", { name: "Sources", exact: true }).click();
-    row.other_files_listed = await page.getByRole("region", { name: "Other files in this lecture unit" }).getByRole("listitem").count();
     row.other_files_expected = lecture.other_materials_count ?? null;
+    const others = page.getByRole("region", { name: "Other files in this lecture unit" }).getByRole("listitem");
+    if (row.other_files_expected) await others.first().waitFor({ timeout: 15_000 }).catch(() => undefined);
+    row.other_files_listed = await others.count();
     if (shots) await page.screenshot({ path: join(out, `${course.course_id}-${lecture.lecture_id}.png`) });
   }
   // One recording per course: metadata must load and a short Range-backed play must advance (no autoplay, then paused again).

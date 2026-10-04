@@ -61,6 +61,13 @@ test.describe("workspace access", () => {
     await expect(page.getByRole("heading", { name: "Study", level: 1 })).toBeVisible();
     await expect(page.getByRole("listitem").filter({ has: page.getByRole("heading", { level: 2 }) })).toHaveCount(5);
     await expect(page.getByText("reading or replaying a lecture is never treated as an assessment")).toBeVisible();
+    // The course selector stays compact however long a course name is, so the header keeps to one row on wide screens.
+    const selector = (await page.getByLabel("Active course").boundingBox())!;
+    expect(selector.width).toBeLessThanOrEqual(258);
+    if (!isNarrow(page)) {
+      const appearance = (await page.getByRole("radiogroup", { name: "Appearance" }).boundingBox())!;
+      expect(Math.abs(appearance.y + appearance.height / 2 - (selector.y + selector.height / 2)), "header controls share one row").toBeLessThan(12);
+    }
     // A course with no attempts says "Not assessed", never zero or failed.
     await expect(page.getByRole("listitem").filter({ hasText: "ds551" }).getByText("Not assessed")).toBeVisible();
 

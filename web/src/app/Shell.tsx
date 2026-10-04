@@ -61,8 +61,8 @@ export function Shell() {
     <div className="flex min-h-dvh flex-col bg-bg text-ink">
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-surface focus:p-2">Skip to content</a>
       {!focusMode && (
-        <header className="top-0 z-30 flex flex-wrap items-center gap-3 border-b border-line/40 bg-surface px-4 py-2 md:sticky">
-          <Link to="/study" className="flex items-center gap-2 text-lg font-bold">
+        <header className="top-0 z-30 flex flex-wrap items-center gap-3 border-b border-line/40 bg-surface px-4 py-2 md:sticky wide:flex-nowrap">
+          <Link to="/study" className="flex shrink-0 items-center gap-2 text-lg font-bold">
             <GraduationCap aria-hidden className="size-7 text-accent" />
             <span>Lecture Learning</span>
           </Link>
@@ -76,12 +76,12 @@ export function Shell() {
               ))}
             </select>
           </label>
-          <button type="button" onClick={() => app.setSearchOpen(true)} className="ll-btn ll-btn-sm ml-auto min-w-0 max-w-full gap-2 text-muted" aria-keyshortcuts="Control+K /">
+          <button type="button" onClick={() => app.setSearchOpen(true)} className="ll-btn ll-btn-sm ml-auto min-w-0 max-w-full gap-2 text-muted wide:max-w-[30rem] wide:shrink" aria-keyshortcuts="Control+K /">
             <Search aria-hidden className="size-4 shrink-0" />
             <span className="truncate">Search {courseName(app.workspace, app.courseId)}</span>
-            <kbd className="hidden rounded border border-line/50 px-1 text-xs sm:inline">Ctrl K</kbd>
+            <kbd className="hidden shrink-0 rounded border border-line/50 px-1 text-xs sm:inline">Ctrl K</kbd>
           </button>
-          <Segmented label="Appearance" value={app.theme} onChange={(value) => app.setTheme(value)} options={themeOptions} className="max-md:hidden" />
+          <Segmented label="Appearance" value={app.theme} onChange={(value) => app.setTheme(value)} options={themeOptions} className="shrink-0 max-md:hidden" />
         </header>
       )}
       {!focusMode && app.workspace?.fixture_label && (

@@ -76,12 +76,27 @@ export interface SessionView {
   items: InventoryItem[];
 }
 
+export interface OtherMaterial {
+  source_id: string;
+  filename: string | null;
+  role: "deck" | "extra";
+  kind: string;
+  state: string;
+  registration: string;
+  rendition: string;
+  media_type: string | null;
+  bytes: number | null;
+  available: boolean;
+}
+
 export interface CourseLecture {
   lecture_id: string;
   title: string;
   session_link: string;
   deck: (InventoryItem & { rendition: string }) | null;
   displayable: boolean;
+  /** Other files in the same lecture unit (further decks, notes); each is reachable from the lecture. */
+  other_materials_count: number;
   sessions: SessionView[];
   disposition: string;
   pages: number | null;
@@ -203,6 +218,7 @@ export interface LectureView {
   transcripts: TranscriptView[];
   sessions: Array<{ session_id: string; state: string }>;
   preparation: Record<string, { status: string; reason?: string; note?: string }>;
+  other_materials: OtherMaterial[];
   link_conflicts: Array<{ conflict_id: string; annotation_id: string; proposed: AnnotationRecord; current: AnnotationRecord | null }>;
 }
 

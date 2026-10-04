@@ -24,7 +24,7 @@ from .journal import Journal, JobState as S, TERMINAL
 from .ownerio import OwnerReadError
 from .ownerio.attempts import learning_view_status, read_attempt_records
 from .ownerio.catalogs import read_families, read_question_index, read_skills
-from .ownerio.inventory import build_inventory
+from .ownerio.inventory import build_inventory, other_materials, primary_deck
 from .preparation import Preparation
 from .resume import ResumeStore
 from .review import ReviewStore
@@ -106,13 +106,14 @@ class Projector:
 
         lectures = []
         for lecture in inventory["lectures"]:
-            deck = lecture["decks"][0] if lecture["decks"] else None
+            deck = primary_deck(lecture)
             cov = coverage.get(lecture["lecture_id"], {})
             rendition = ((cov.get("stages") or {}).get("rendition") or {})
             displayable = bool(deck) and (deck["rendition"] == "native_pdf" and deck["state"] in {"registered_readable", "present_unindexed"} or rendition.get("status") == "rendition")
             lectures.append({"lecture_id": lecture["lecture_id"], "title": lecture["title"], "session_link": lecture["session_link"],
                              "deck": ({k: deck[k] for k in ("source_id", "state", "registration", "rendition", "filename", "bytes")} if deck else None),
-                             "displayable": displayable, "sessions": [session(s) for s in lecture["sessions"]], "disposition": cov.get("disposition", "not_processed"),
+                             "displayable": displayable, "other_materials_count": len(other_materials(lecture)),
+                             "sessions": [session(s) for s in lecture["sessions"]], "disposition": cov.get("disposition", "not_processed"),
                              "pages": cov.get("pages"), "pages_confirmed": cov.get("pages_confirmed", 0), "pages_suggested": cov.get("pages_suggested", 0),
                              "pages_unresolved": cov.get("pages_unresolved")})
         records = self._records(course_id)
@@ -135,7 +136,7 @@ class Projector:
         items.update({i["source_id"]: i for i in inventory["other_sources"]})
         state = self.preparation.state(course_id, lecture_id) or {}
         stages = state.get("stages", {})
-        deck = lecture["decks"][0] if lecture["decks"] else None
+        deck = primary_deck(lecture)
         display: dict[str, Any] = {"kind": "unavailable", "reason": "No slide deck file is present for this lecture unit."}
         if deck is not None:
             rendition = stages.get("rendition", {})
@@ -236,6 +237,7 @@ class Projector:
                           "registration": deck["registration"], "rendition": deck["rendition"]} if deck else None),
                 "display": display, "page_count": page_count, "slides": slides, "recordings": recordings, "transcripts": transcripts,
                 "sessions": [{"session_id": s["session_id"], "state": s["state"]} for s in lecture["sessions"]], "preparation": stages,
+                "other_materials": other_materials(lecture),
                 "link_conflicts": [{"conflict_id": x["conflict_id"], "annotation_id": x["annotation_id"], "proposed": x["proposed"], "current": x["current"]} for x in loaded["conflicts"]]}
 
     # ---- questions -----------------------------------------------------------------------------

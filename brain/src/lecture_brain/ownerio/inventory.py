@@ -46,6 +46,37 @@ def disk_version_id(sha256: str) -> str:
     return "disk-" + sha256[:12]
 
 
+_OPENABLE = {"registered_readable", "present_unindexed"}
+
+
+def primary_deck(lecture: dict) -> dict | None:
+    """The deck a lecture unit is shown with. A unit may hold several files: prefer one that can actually be
+    displayed (a readable PDF), then any readable deck, and among equals the one the course index registered.
+    An empty or unconvertible file that merely sorts first never hides a usable deck beside it."""
+    decks = lecture["decks"]
+    if not decks:
+        return None
+
+    def rank(deck: dict) -> tuple[int, int]:
+        readable = deck["state"] in _OPENABLE
+        return (0 if readable and deck["rendition"] == "native_pdf" else 1 if readable else 2, 0 if deck["registration"] == "registered" else 1)
+
+    return min(decks, key=rank)  # min keeps list (name) order among equals
+
+
+def other_materials(lecture: dict) -> list[dict]:
+    """Every other file of the unit — further decks and non-deck material — so none is unreachable."""
+    primary = primary_deck(lecture)
+    rows = []
+    for role, items in (("deck", lecture["decks"]), ("extra", lecture["extra_materials"])):
+        for item in items:
+            if primary is not None and item["source_id"] == primary["source_id"]:
+                continue
+            rows.append({"source_id": item["source_id"], "filename": item["filename"], "role": role, "kind": item["kind"], "state": item["state"], "registration": item["registration"],
+                         "rendition": item["rendition"], "media_type": item["media_type"], "bytes": item["bytes"], "available": item["state"] in _OPENABLE})
+    return rows
+
+
 def media_type_for(name: str) -> str:
     return _MEDIA_TYPES.get(Path(name).suffix.lower(), "application/octet-stream")
 
@@ -196,7 +227,8 @@ def build_inventory(binding: CourseBinding) -> dict[str, Any]:
             lecture_id = directory.name.lower()
             for session_id in linked:
                 sessions[session_id]["linked_lecture_ids"].append(lecture_id)
-            title = Path(decks[0]["filename"]).stem if decks else directory.name
+            shown = primary_deck({"decks": decks})
+            title = Path(shown["filename"]).stem if shown else directory.name
             result["lectures"].append({"lecture_id": lecture_id, "unit_dir": directory.relative_to(root).as_posix(), "title": title, "decks": decks, "extra_materials": extras,
                                        "sessions": [sessions[s] for s in sorted(linked)], "session_link": "owner_related_sources" if linked else "none_recorded"})
 

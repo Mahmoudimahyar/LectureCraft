@@ -3,11 +3,11 @@
 // A correction is a new revision submitted to the owner — never an in-place overwrite.
 import { useState } from "react";
 import { Link, useLocation } from "react-router";
-import { BookMarked, FileQuestion, Network } from "lucide-react";
+import { BookMarked, FileQuestion, Files, Network } from "lucide-react";
 import { Button, Callout, Dialog, Field, formatMs, StatusChip } from "@/components/ui";
 import type { SourceRef } from "@/lib/db";
-import { kindLabel, REVIEW_STATE } from "@/lib/labels";
-import type { Occurrence, RecordingView, SlideView } from "@/lib/types";
+import { kindLabel, REVIEW_STATE, SOURCE_STATE } from "@/lib/labels";
+import type { Occurrence, OtherMaterial, RecordingView, SlideView } from "@/lib/types";
 
 function locatorText(source: SourceRef): string {
   const loc = source.locator as Record<string, unknown>;
@@ -28,13 +28,16 @@ function locatorText(source: SourceRef): string {
 interface SourcesPanelProps {
   courseId: string;
   slide: SlideView | undefined;
+  /** Other files stored in this lecture unit's folder. They belong to the unit, not to one slide. */
+  others?: OtherMaterial[];
   onPin: (source: SourceRef, label: string) => void;
 }
 
-export function SourcesPanel({ courseId, slide, onPin }: SourcesPanelProps) {
+export function SourcesPanel({ courseId, slide, others = [], onPin }: SourcesPanelProps) {
   const location = useLocation();
   const back = { returnTo: location.pathname + location.search, returnLabel: "Return to slide" };
-  if (!slide) return <Callout tone="unassessed" title="No slide selected" />;
+  if (!slide && others.length === 0) return <Callout tone="unassessed" title="No slide selected" />;
+  if (!slide) return <div className="flex flex-col gap-4"><OtherFiles courseId={courseId} others={others} back={back} /></div>;
   const nothing = slide.related.length === 0 && slide.questions.length === 0 && slide.concepts.length === 0;
   return (
     <div className="flex flex-col gap-4">
@@ -83,6 +86,7 @@ export function SourcesPanel({ courseId, slide, onPin }: SourcesPanelProps) {
           </ul>
         </section>
       )}
+      <OtherFiles courseId={courseId} others={others} back={back} />
       {slide.concepts.length > 0 && (
         <section aria-labelledby="src-concepts">
           <h3 id="src-concepts" className="ll-label mb-1 flex items-center gap-1"><Network aria-hidden className="size-4" /> On this slide</h3>
@@ -94,6 +98,38 @@ export function SourcesPanel({ courseId, slide, onPin }: SourcesPanelProps) {
         </section>
       )}
     </div>
+  );
+}
+
+function sizeText(n: number | null): string {
+  if (n === null) return "size unknown";
+  return n >= 1_048_576 ? `${(n / 1_048_576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
+}
+
+/** Further decks and notes kept in the same lecture unit. Listed so no file of the unit is unreachable; each opens as its original. */
+function OtherFiles({ courseId, others, back }: { courseId: string; others: OtherMaterial[]; back: { returnTo: string; returnLabel: string } }) {
+  if (others.length === 0) return null;
+  return (
+    <section aria-label="Other files in this lecture unit">
+      <h3 className="ll-label mb-1 flex items-center gap-1"><Files aria-hidden className="size-4" /> Other files in this lecture unit ({others.length})</h3>
+      <ul className="flex flex-col gap-1">
+        {others.map((item) => {
+          const state = SOURCE_STATE[item.state] ?? { label: item.state.replace(/_/g, " "), tone: "neutral" as const, detail: "" };
+          return (
+            <li key={item.source_id} className="ll-card flex flex-wrap items-center justify-between gap-2 p-2">
+              <div className="min-w-0">
+                <p className="break-words font-medium">{item.filename ?? item.source_id}</p>
+                <p className="text-sm text-muted">{item.role === "deck" ? "Slides or reading" : kindLabel(item.kind)} · {sizeText(item.bytes)}{item.registration === "unregistered" ? " · not registered by the course updater" : ""}{item.rendition === "needs_rendition" ? " · needs a PDF rendition to display here" : ""}</p>
+              </div>
+              {item.available
+                ? <Link className="ll-btn ll-btn-sm" to={`/courses/${courseId}/sources/${encodeURIComponent(item.source_id)}`} state={back}>Open</Link>
+                : <StatusChip tone={state.tone}>{state.label}</StatusChip>}
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-1 text-xs text-muted">Only the unit's main slides are prepared for search and slide links. These files open as their originals.</p>
+    </section>
   );
 }
 

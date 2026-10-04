@@ -188,6 +188,30 @@ test.describe("lecture workspace", () => {
     await expect(page.getByTestId("slide-canvas")).toHaveAttribute("data-rendered", "1");
   });
 
+  test("UI09 a lecture unit holding several files lists every other file and opens each original", async ({ page }) => {
+    await page.goto("/courses/be562/lectures/lecture-02");
+    await expect(page.getByTestId("slide-canvas")).toHaveAttribute("data-rendered", "1");
+    // The unit's main slides are shown; the other files are announced next to the slide, not hidden.
+    if (isNarrow(page)) await pane(page, "Slide");
+    await page.getByRole("button", { name: "2 other files in this lecture unit" }).click();
+    const others = page.getByRole("region", { name: "Other files in this lecture unit" });
+    await expect(others.getByRole("listitem")).toHaveCount(2);
+    await expect(others).toContainText("Only the unit's main slides are prepared for search and slide links.");
+    const reading = others.getByRole("listitem").filter({ hasText: "Fixture 562 Reading A.pdf" });
+    await expect(reading).toContainText("not registered by the course updater");
+    await expect(others.getByRole("listitem").filter({ hasText: "Fixture 562 unit notes.txt" }).getByRole("link", { name: "Open" })).toBeVisible();
+    await reading.getByRole("link", { name: "Open" }).click();
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Fixture 562 Reading A.pdf");
+    await expect(page.getByTestId("slide-canvas")).toHaveAttribute("data-rendered", "1"); // the original, as its own document
+    await page.getByRole("link", { name: "← Return to slide" }).click();
+    await expect(page).toHaveURL(/courses\/be562\/lectures\/lecture-02/);
+    await expect(page.getByTestId("slide-position")).toHaveText("Slide 1 of 1");
+    // A unit with a single file shows no such list.
+    await page.goto(`${L1}?page=1`);
+    await expect(page.getByTestId("slide-canvas")).toHaveAttribute("data-rendered", "1");
+    await expect(page.getByRole("button", { name: /other files? in this lecture unit/ })).toHaveCount(0);
+  });
+
   test("UI10 correcting a link validates the range, keeps history as revisions and reports the real save state", async ({ page, request }, testInfo) => {
     const desktop = testInfo.project.name.includes("desktop");
     const [start, end, label] = desktop ? ["1", "11", "0:01 – 0:11"] : ["2", "12", "0:02 – 0:12"];

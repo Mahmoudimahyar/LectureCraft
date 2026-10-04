@@ -228,3 +228,31 @@ def test_fixture_question_index_carries_the_policy_keys_the_owner_helper_reads(b
     index = json.loads((be505 / "learning/question-index.json").read_text(encoding="utf-8"))
     assert set(index["policy"]) >= {"shared_concept", "strict_containment", "unassessed", "family_matching", "future_attempts", "coverage"}
     assert all(isinstance(v, str) and v for v in index["policy"].values())
+
+
+def test_local_state_dir_comes_from_the_private_binding_file_and_never_sits_inside_a_course(workspace, tmp_path):
+    """Derived files for real courses live where the private binding says — inside the code workspace, not in a course."""
+    import shutil
+
+    from lecture_brain.config import ConfigError, repo_root
+
+    repo = tmp_path / "repo"
+    (repo / "config" / "local-bindings").mkdir(parents=True)
+    for name in ("defaults.json", "workspace.example.json"):
+        shutil.copy(repo_root() / "config" / name, repo / "config" / name)
+    planner = workspace / "University" / "Fixture Brain" / "planner-config.yaml"
+    binding = repo / "config" / "local-bindings" / "workspace.json"
+    binding.write_text(json.dumps({"planner_config": str(planner), "local_state_dir": ".local/state/real"}), encoding="utf-8")
+
+    s = load_settings("local", env={}, repo=repo)
+    assert s.state_dir == repo / ".local" / "state" / "real"  # a relative path is anchored in the workspace
+    assert s.app_area("be505").is_relative_to(repo / ".local") and s.course_writes_enabled is False
+    # An explicit environment override still wins over the file.
+    assert load_settings("local", env={"LL_LOCAL_STATE_DIR": str(tmp_path / "env")}, repo=repo).state_dir == tmp_path / "env"
+
+    # A state directory inside a course folder or the planner folder is refused outright.
+    for inside in (s.course("be505").root / ".agent" / "ll-state", planner.parent / "ll-state"):
+        binding.write_text(json.dumps({"planner_config": str(planner), "local_state_dir": str(inside)}), encoding="utf-8")
+        with pytest.raises(ConfigError, match="inside a course or planner folder"):
+            load_settings("local", env={}, repo=repo)
+        assert not inside.exists()

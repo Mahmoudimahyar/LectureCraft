@@ -99,6 +99,7 @@ export function SourcesPage() {
                   <dd>{lecture.deck ? `${lecture.deck.filename} — ${SOURCE_STATE[lecture.deck.state]?.label ?? lecture.deck.state}${lecture.deck.rendition === "needs_rendition" ? " · needs a PDF rendition to display" : ""}` : "No slide file in this unit"}</dd>
                   <dt className="text-muted">Slide links</dt>
                   <dd>{lecture.pages ? `${lecture.pages_confirmed} reviewed · ${lecture.pages_suggested} suggested · ${lecture.pages_unresolved ?? 0} unresolved of ${lecture.pages} slides` : "not prepared"}</dd>
+                  {lecture.other_materials_count > 0 && <><dt className="text-muted">Other files</dt><dd>{lecture.other_materials_count} more in this unit — listed under Sources when the lecture is open</dd></>}
                   <dt className="text-muted">Sessions</dt>
                   <dd>{lecture.sessions.length ? lecture.sessions.map((s) => `${s.date}: ${SESSION_STATE[s.state]?.label ?? s.state}`).join(" · ") : "none linked by the course records"}</dd>
                 </dl>

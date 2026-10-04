@@ -235,7 +235,9 @@ OTHER_COURSES = {
         "display_name": "FIXTURE BE 562 - Probabilistic Models (synthetic)",
         "lectures": [
             {"unit": "lecture-01", "deck": "Fixture 562 Lecture 01.pdf", "indexed": True, "slides": ["Chain rule for probabilities", "Conditional independence"]},
-            {"unit": "lecture-02", "deck": "Fixture 562 Lecture 02.pdf", "indexed": False, "slides": ["Bayesian networks"]},
+            # A unit holding several files, as real course folders do: a second deck and a note beside the slides.
+            {"unit": "lecture-02", "deck": "Fixture 562 Lecture 02.pdf", "indexed": False, "slides": ["Bayesian networks"],
+             "more_decks": [("Fixture 562 Reading A.pdf", ["Reading A: d-separation", "Reading A: worked example"])], "notes": ["Fixture 562 unit notes.txt"]},
         ],
         "sessions": [
             {"date": "2026-09-04", "transcript": "Fixture 562 Lec 1.txt", "recording": "Fixture 562 Lec 1.wav", "index_transcript": True, "index_recording": True},

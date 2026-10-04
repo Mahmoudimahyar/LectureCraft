@@ -25,7 +25,7 @@ from ..ownerio.attempts import learning_input_digest
 from ..ownerio.inventory import disk_version_id, unregistered_source_id
 from . import content as c
 
-FIXTURE_VERSION = "7"
+FIXTURE_VERSION = "8"
 MARKER = ".ll-synthetic-fixture"
 TERM = "2026-fall"
 FIXED_TIME = "2026-09-12T12:00:00Z"
@@ -402,6 +402,10 @@ def _build_other(root: Path, cid: str, spec: dict) -> None:
             write_pdf(root / rel, [{"title": t, "bullets": ["Synthetic fixture slide."], "figure": "ring"} for t in lecture["slides"]])
         if lecture["indexed"]:
             sources.append(_entry(root, f"src-{lecture['unit']}-slides", "lecture_slides", rel))
+        for name, titles in lecture.get("more_decks", []):
+            write_pdf(root / f"materials/lectures/{lecture['unit']}/{name}", [{"title": t, "bullets": ["Synthetic fixture reading."], "figure": "marker"} for t in titles])
+        for name in lecture.get("notes", []):
+            _write(root / f"materials/lectures/{lecture['unit']}/{name}", "Synthetic fixture note for this lecture unit.\n")
     for i, session in enumerate(spec["sessions"], start=1):
         directory = f"materials/sessions/{session['date']}-lecture"
         (root / directory).mkdir(parents=True, exist_ok=True)

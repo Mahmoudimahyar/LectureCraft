@@ -193,7 +193,11 @@ def load_settings(profile: str | None = None, *, env: Mapping[str, str] | None =
             raise ConfigError("No planner config bound; set LL_PLANNER_CONFIG or config/local-bindings/workspace.json")
         planner_config = Path(candidate)
         default_state = Path(env.get("LOCALAPPDATA", str(Path.home()))) / "LectureLearning" / profile
-        state_dir = state_dir or Path(env.get("LL_LOCAL_STATE_DIR") or default_state)
+        # Precedence: explicit argument, environment, the private binding file, then the per-user default.
+        configured = workspace.get("local_state_dir")
+        if configured and not Path(configured).is_absolute():
+            configured = repo / configured  # a relative path stays inside the code workspace
+        state_dir = state_dir or Path(env.get("LL_LOCAL_STATE_DIR") or configured or default_state)
 
     planner = read_planner_config(planner_config)
     declared = planner.get("courses") or {}
@@ -211,6 +215,12 @@ def load_settings(profile: str | None = None, *, env: Mapping[str, str] | None =
                                                "Course is not present in the planner configuration")
             continue
         courses[course_id] = _bind_course(course_id, Path(entry["root"]), native_threads)
+
+    # Journal, staged candidates and derived files must never live inside a course or the planner folder.
+    resolved_state = Path(state_dir).resolve()
+    for owned in [planner_config.parent, *(b.root for b in courses.values() if b.status != "missing_root")]:
+        if resolved_state == owned.resolve() or resolved_state.is_relative_to(owned.resolve()):
+            raise ConfigError(f"The local state directory {state_dir} is inside a course or planner folder; choose a private local folder outside them")
 
     def flag(name: str, default: bool) -> bool:
         return str(env.get(name, str(default))).strip().lower() in {"1", "true", "yes"}

@@ -221,7 +221,7 @@ export function LectureWorkspace() {
           }} />
       </TabPanel>
       <TabPanel value="sources" className="min-h-0 flex-1 overflow-y-auto pt-3">
-        <SourcesPanel courseId={courseId} slide={slide} onPin={(source, label) => { setPinned((p) => [...p, { source, label }]); update({ panel: "tutor" }, true); }} />
+        <SourcesPanel courseId={courseId} slide={slide} others={lecture.other_materials} onPin={(source, label) => { setPinned((p) => [...p, { source, label }]); update({ panel: "tutor" }, true); }} />
         {slideNotes.length > 0 && (
           <section className="mt-4" aria-labelledby="notes-heading">
             <h3 id="notes-heading" className="ll-label mb-1">Your notes on this slide</h3>
@@ -310,6 +310,9 @@ export function LectureWorkspace() {
             </Callout>
           )}
           {notice && <p role="status" className="text-sm text-muted">{notice}</p>}
+          {lecture.other_materials.length > 0 && (
+            <p className="text-sm"><button type="button" className="ll-chip hover:underline" onClick={() => update({ panel: "sources" }, true)}>{lecture.other_materials.length} other file{lecture.other_materials.length === 1 ? "" : "s"} in this lecture unit</button></p>
+          )}
 
           {(slide?.concepts.length || slide?.related.length || slide?.questions.length) ? (
             <div className="flex flex-col gap-2 text-sm">

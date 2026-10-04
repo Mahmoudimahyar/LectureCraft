@@ -36,7 +36,7 @@ from . import contracts as c
 from .annotations import AnnotationStore, media_duration_ms
 from .config import Settings
 from .fsutil import replace_atomic
-from .ownerio.inventory import build_inventory, disk_version_id
+from .ownerio.inventory import build_inventory, disk_version_id, primary_deck
 
 TOOL_VERSION = "prep-2"
 _WORD = re.compile(r"[a-z][a-z0-9'-]{2,}")
@@ -269,7 +269,7 @@ class Preparation:
         lecture_id = lecture["lecture_id"]
         stages: dict[str, Any] = {}
         result = {"lecture_id": lecture_id, "tool_version": TOOL_VERSION, "stages": stages, "suggestions": {"created": 0, "kept_existing": 0}}
-        deck = lecture["decks"][0] if lecture["decks"] else None
+        deck = primary_deck(lecture)
         transcripts = [i for s in lecture["sessions"] for i in s["items"] if i["kind"] == "lecture_transcript" and i["path"] and i["rendition"] == "native_text"]
         recordings = [i for s in lecture["sessions"] for i in s["items"] if i["kind"] == "lecture_recording" and i["path"]]
         fingerprint = c.sha256_hex(c.dump_json({"v": TOOL_VERSION, "deck": [deck["path"], deck["bytes"], deck["sha256"]] if deck else None,
@@ -380,7 +380,7 @@ class Preparation:
             rows = []
             for lecture in inventory["lectures"]:
                 state = self.state(course_id, lecture["lecture_id"])
-                deck = lecture["decks"][0] if lecture["decks"] else None
+                deck = primary_deck(lecture)
                 pages = (state or {}).get("stages", {}).get("slide_text", {}).get("pages")
                 linked = by_deck.get(deck["source_id"], {"confirmed": set(), "suggested": set(), "rejected": set()}) if deck else {"confirmed": set(), "suggested": set(), "rejected": set()}
                 confirmed = len(linked["confirmed"])

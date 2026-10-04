@@ -185,3 +185,47 @@ def test_file_views_carry_valid_view_records_with_no_new_assessment_facts(projec
         output = settings.app_area("be505") / record["outputs"][0]["path"]
         assert c.sha256_hex(output.read_bytes()) == record["outputs"][0]["sha256"]
     assert not (settings.course("be505").root / "learning" / "gaps.json").exists()  # no second gap ledger beside the owner's records
+
+
+# ---- lecture units with several files (real courses have many) -----------------------------------
+@pytest.fixture()
+def multi_file_unit(settings, clock):
+    """lecture-03 gets an empty file that sorts first, a second readable deck and a non-deck extra."""
+    import shutil
+
+    root = settings.course("be505").root
+    unit = root / "materials/lectures/lecture-03"
+    original = next(unit.glob("*.pdf"))
+    (unit / "000 placeholder.pdf").write_bytes(b"")
+    shutil.copy(root / "materials/lectures/lecture-01" / next((root / "materials/lectures/lecture-01").glob("*.pdf")).name, unit / "Second reading.pdf")
+    (unit / "notes for the unit.txt").write_text("Synthetic extra material.\n", encoding="utf-8")
+    journal = Journal.open(settings.journal_path, clock=clock, synced_roots=[])
+    prep = Preparation(settings, converter=None, now=lambda: NOW)
+    prep.prepare_course("be505")
+    yield Projector(settings, journal, preparation=prep, now=lambda: NOW), original.name, prep
+    journal.close()
+
+
+def test_unit_with_several_files_shows_a_readable_deck_and_lists_every_other_file(multi_file_unit):
+    projector, original_name, prep = multi_file_unit
+    row = next(l for l in projector.course_view("be505")["lectures"] if l["lecture_id"] == "lecture-03")
+    # An empty file that happens to sort first must not make the unit look unusable.
+    assert row["deck"]["filename"] in {original_name, "Second reading.pdf"} and row["displayable"] is True
+    assert row["disposition"].split(":")[0] != "no_source"
+    assert row["other_materials_count"] == 3
+    view = projector.lecture_view("be505", "lecture-03")
+    assert view["deck"]["filename"] == row["deck"]["filename"] and view["page_count"] >= 2
+    others = {m["filename"]: m for m in view["other_materials"]}
+    assert set(others) == {"000 placeholder.pdf", "Second reading.pdf", "notes for the unit.txt", original_name} - {row["deck"]["filename"]}
+    assert others["000 placeholder.pdf"]["available"] is False and others["notes for the unit.txt"]["available"] is True
+    other_deck = next(m for m in view["other_materials"] if m["role"] == "deck" and m["available"])
+    assert other_deck["media_type"] == "application/pdf" and other_deck["source_id"]
+    assert all(set(m) == {"source_id", "filename", "role", "kind", "state", "registration", "rendition", "media_type", "bytes", "available"} for m in view["other_materials"])
+    # The unit keeps one identity and is counted once in the all-lecture denominator.
+    assert sum(1 for l in prep.coverage()["courses"]["be505"]["lectures"]) == 3
+
+
+def test_single_file_units_list_no_other_files(projector):
+    view = projector.lecture_view("be505", "lecture-01")
+    assert view["other_materials"] == []
+    assert all(l["other_materials_count"] == 0 for l in projector.course_view("be505")["lectures"])

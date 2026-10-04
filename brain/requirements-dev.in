@@ -1,0 +1,6 @@
+# Development/test-only additions. Constrained by the runtime lock.
+-c requirements.lock
+pytest
+httpx
+fpdf2
+pip-tools

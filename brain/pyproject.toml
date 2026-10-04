@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lecture-brain"
+version = "0.1.0a1"
+description = "Lecture Learning Brain-PC service: transport, coordinator, owner adapters, projections (private)"
+requires-python = ">=3.13"
+# Exact runtime pins live in requirements.lock (pip-compile with hashes); this list names direct dependencies.
+dependencies = [
+  "fastapi", "uvicorn", "sqlalchemy", "alembic", "jsonschema", "referencing",
+  "rfc3339-validator", "cryptography", "fsrs", "pyyaml", "pypdf",
+]
+
+[project.scripts]
+lecture-brain = "lecture_brain.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+lecture_brain = ["migrations/*.py", "migrations/versions/*.py", "migrations/script.py.mako"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q -p no:cacheprovider"
+filterwarnings = ["error::DeprecationWarning:lecture_brain.*"]

@@ -1,0 +1,12 @@
+# Direct runtime dependencies of the Brain service (selected stack, docs/engineering/stack.md).
+fastapi
+uvicorn
+sqlalchemy
+alembic
+jsonschema
+referencing
+rfc3339-validator
+cryptography
+fsrs
+pyyaml
+pypdf

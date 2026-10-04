@@ -21,3 +21,8 @@ playwright-report/
 *.tsbuildinfo
 .claude/settings.local.json
 .mcp.json
+
+# Implementation outputs (0.10.0 build)
+*.egg-info/
+web/storybook-static/
+web/.vite/

@@ -289,3 +289,19 @@ def test_be505_helper_requires_question_id_on_attempts(be505, helper, tmp_path):
     writer = _be505_writer(be505, helper)
     outcome = writer.commit({"record_kind": "attempt", "attempt_id": "x", "recorded_at": NOW, "question": {"family_id": "f"}}, b"{}", tmp_path / "c.json")
     assert outcome.status == "blocked" and "question_id" in outcome.reason
+
+
+def test_be505_identical_retry_and_id_clash_are_decided_without_running_the_helper(facade, capture, be505, helper, monkeypatch):
+    """The owner's helper regenerates derived files even on an identical retry, and a failure there hides the
+    real outcome. An existing record is therefore compared by bytes first; the helper is not started again."""
+    monkeypatch.setattr(facade, "writer_for", lambda course_id: _be505_writer(be505, helper))
+    sub, ref = _frozen(capture)
+    record = _candidate(sub, ref)
+    assert facade.publish_attempt("be505", record, capture=ref, submission=sub, request_id="req-1", now="2026-10-04T10:00:31Z")["status"] == "saved"
+    helper.write_text("raise SystemExit('the helper must not be started for an existing record')", encoding="utf-8")
+    writer = Be505StudyIndexWriter(be505, interpreter=Path(sys.executable), helper=helper, helper_sha256=hashlib.sha256(helper.read_bytes()).hexdigest())
+    monkeypatch.setattr(facade, "writer_for", lambda course_id: writer)
+    again = facade.publish_attempt("be505", record, capture=ref, submission=sub, request_id="req-1", now="2026-10-04T10:00:41Z")
+    assert again["status"] == "already_saved"
+    clash = facade.publish_attempt("be505", _candidate(sub, ref, outcome="partial"), capture=ref, submission=sub, request_id="req-1", now="2026-10-04T10:00:51Z")
+    assert clash["status"] == "blocked" and "different bytes" in clash["reason"]

@@ -47,6 +47,11 @@ def stages(extra: list[str]) -> dict[str, list[tuple[list[str], Path]]]:
             ([py, "-m", "unittest", "discover", "-s", "tests/handoff"], ROOT),
         ],
         "brain": [([py, "-m", "pytest", *(extra or ["brain/tests"])], ROOT)],
+        # Application tooling (candidate packaging) and the dependency inventory against the real lock files.
+        "tools": [
+            ([py, "-m", "pytest", "tests/app", "-q", "-p", "no:cacheprovider"], ROOT),
+            ([py, "tools/dependency_inventory.py", "--check"], ROOT),
+        ],
         "web-types": [
             ([_node(), "scripts/gen-types.mjs", "--check"], WEB),
             ([_node(), "scripts/gen-tokens.mjs", "--check"], WEB),

@@ -236,7 +236,7 @@ test.describe("operations and recovery", () => {
     await expectNoHorizontalOverflow(page);
   });
 
-  test("UI30 export and cleanup are previewed, scoped and honest about what they do not touch", async ({ page }, testInfo) => {
+  test("UI30 export and cleanup are previewed, scoped and honest about what they do not touch", async ({ page, request }, testInfo) => {
     page.on("dialog", (dialog) => void dialog.accept());
     await pair(page);
     await page.goto("/settings/data");
@@ -265,6 +265,11 @@ test.describe("operations and recovery", () => {
     if (await removable.isEnabled()) {
       await removable.click();
       await expect(cleanup.getByRole("status")).toContainText(/Removed \d+ item\(s\); \d+ protected item\(s\) untouched\./);
+      // Removing rebuildable data never leaves a silent gap: the rebuild is queued and slide text comes back.
+      await expect(cleanup.getByRole("status")).toContainText("Preparation was queued again");
+      await settle(request);
+      const index = await (await request.get(`/api/courses/${COURSE}/search-index`)).json();
+      expect((index.entries as Array<{ type: string }>).some((e) => e.type === "slide"), "slide text is searchable again").toBe(true);
     }
     await expectAccessible(page, testInfo, "settings-data");
     await shot(page, testInfo, "settings-data");

@@ -183,3 +183,27 @@ def test_built_app_is_served_with_browser_safe_types_and_policy(runtime, tmp_pat
     page = app_client.get("/courses/be505/lectures/lecture-02")  # client-side route falls back to the app shell
     assert page.status_code == 200 and "font-src 'self' data:" in page.headers["content-security-policy"]
     assert app_client.get("/api/not-a-route").status_code == 404
+
+
+def test_cleanup_of_rebuildable_data_queues_its_rebuild_so_nothing_stays_unprocessed(client, runtime):
+    """Removing prepared slide text must not silently leave lectures unsearchable: the rebuild is queued and runs."""
+    for _ in range(6):
+        client.post("/api/supervisor/tick")
+    slides = lambda: [e for e in client.get("/api/courses/be505/search-index").json()["entries"] if e["type"] == "slide"]  # noqa: E731
+    assert slides(), "slide text is searchable after the first preparation"
+    preview = client.get("/api/cleanup/be505/preview").json()
+    assert any(i["path"].endswith("/prepared") for i in preview["removable"])
+    receipt = client.post("/api/cleanup/be505/apply", json={"preview_id": preview["preview_id"]}).json()
+    assert receipt["status"] == "done"
+    assert receipt["rebuild"] == {"queued": True, "note": "Preparation was queued again and runs in bounded background batches; until it finishes, removed slide text is listed as not yet searchable."}
+    assert not slides() and client.get("/api/courses/be505/search-index").json()["unindexed"]  # honest in the meantime
+    for _ in range(6):
+        client.post("/api/supervisor/tick")
+    assert slides(), "the queued rebuild restored the slide text"
+    coverage = client.get("/api/coverage").json()["courses"]["be505"]["lectures"]
+    assert all(l["disposition"] != "not_processed" for l in coverage)
+    # A cleanup that removed nothing rebuildable queues nothing.
+    again = client.get("/api/cleanup/be562/preview").json()
+    if not any(i["path"].endswith("/prepared") for i in again["removable"]):
+        quiet = client.post("/api/cleanup/be562/apply", json={"preview_id": again["preview_id"]}).json()
+        assert quiet["rebuild"]["queued"] is False

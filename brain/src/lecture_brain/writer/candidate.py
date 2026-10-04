@@ -71,7 +71,8 @@ def excerpt_of(text: str, limit: int = 600) -> str:
     return text if len(text) <= limit else text[:limit]
 
 
-def build_attempt_candidate(*, submission: dict, capture: dict, attempt_id: str, recorded_at: str, observations: list[dict], review_suggestion: dict | None = None) -> dict:
+def build_attempt_candidate(*, submission: dict, capture: dict, attempt_id: str, recorded_at: str, observations: list[dict], review_suggestion: dict | None = None,
+                            question_version: int | None = None) -> dict:
     question = submission["question"]
     if question["family_id"] is None:
         raise CandidateError("family_missing", "no question family/rubric is bound to this response; it stays captured as assessment pending")
@@ -88,7 +89,8 @@ def build_attempt_candidate(*, submission: dict, capture: dict, attempt_id: str,
     }
     if question["question_id"] is not None:
         record["question"]["question_id"] = question["question_id"]
-        record["question"]["question_version"] = 1
+        # The course index owns the version; 1 is only the documented default when a course keeps no index.
+        record["question"]["question_version"] = question_version if question_version is not None else 1
     if review_suggestion is not None:
         record["review_suggestion"] = review_suggestion
     return record

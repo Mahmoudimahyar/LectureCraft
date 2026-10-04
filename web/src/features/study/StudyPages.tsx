@@ -31,11 +31,21 @@ function ContinueCard({ course }: { course: WorkspaceCourse }) {
   const head = resume.data?.current;
   if (head) {
     const page = (head.cursor.source.locator as { page?: number }).page ?? 1;
+    // The synchronised position is written when a session is finished; this device may have moved on since.
+    const moved = local && (local.lectureId !== head.cursor.lecture_id || local.page !== page);
     return (
-      <Link to={`/courses/${course.course_id}/lectures/${head.cursor.lecture_id}?page=${page}`} className="ll-btn ll-btn-primary w-full justify-between">
-        <span>Continue: {head.cursor.lecture_id.replace("-", " ")}, slide {page}</span>
-        <span className="text-xs font-normal opacity-90">synchronised {formatWhen(head.updated_at)} · paused</span>
-      </Link>
+      <div className="flex flex-col gap-2">
+        <Link to={`/courses/${course.course_id}/lectures/${head.cursor.lecture_id}?page=${page}`} className="ll-btn ll-btn-primary w-full justify-between">
+          <span>Continue: {head.cursor.lecture_id.replace("-", " ")}, slide {page}</span>
+          <span className="text-xs font-normal opacity-90">synchronised {formatWhen(head.updated_at)} · paused</span>
+        </Link>
+        {moved && (
+          <Link to={`/courses/${course.course_id}/lectures/${local.lectureId}?page=${local.page}`} className="ll-btn w-full justify-between">
+            <span>Continue on this device: {local.lectureId.replace("-", " ")}, slide {local.page}</span>
+            <ArrowRight aria-hidden className="size-4" />
+          </Link>
+        )}
+      </div>
     );
   }
   if (local) {

@@ -403,3 +403,19 @@ def test_owner_workflows_publish_typed_receipts_without_a_native_turn(env):
     assert env.result("req-hint")["publication"]["kind"] == "none"
     assert any(j["workflow"] == "WF02" and j["request_id"] is None for j in env.journal.jobs())
     assert env.adapter.calls == 0
+
+
+def test_saved_attempt_carries_the_question_version_from_the_course_index(env):
+    """The owner's save helper refuses an attempt whose question_version differs from its index; never assume 1."""
+    index_path = env.root / "learning/question-index.json"
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    for question in index["questions"]:
+        if question["question_id"] == "BE505-L01-Q01":
+            question["version"] = 3
+    index_path.write_text(json.dumps(index, indent=2) + "\n", encoding="utf-8", newline="\n")
+    env.explain("req-ver")
+    env.coordinator.tick()
+    pub = env.result("req-ver")["publication"]
+    assert pub["status"] == "saved"
+    record = json.loads((env.root / pub["canonical_record"]["artifact"]["path"]).read_text(encoding="utf-8"))
+    assert record["question"]["question_id"] == "BE505-L01-Q01" and record["question"]["question_version"] == 3

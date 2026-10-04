@@ -152,6 +152,13 @@ class Be505StudyIndexWriter:
             return CommitOutcome("blocked", "This helper requires question.question_id on attempts; the candidate stays staged")
         record_id = record["attempt_id"] if record["record_kind"] == "attempt" else record["event_id"]
         rel = f"learning/attempts/{cand.month_of(record['recorded_at'])}/{record_id}.json"
+        # An existing record is decided by bytes, without starting the helper: its identical-retry path
+        # regenerates derived files, and a failure there would hide that the record is already saved.
+        existing = self.root / rel
+        if existing.is_file():
+            if existing.read_bytes() == data:
+                return CommitOutcome("already_saved", None, rel, {"helper_started": False})
+            return CommitOutcome("blocked", "Same ID with different bytes; no overwrite", rel, {"conflict": True, "helper_started": False})
         argv = [str(self.interpreter), "-B", "-X", "utf8", str(self.helper), "save-attempt", "--candidate", str(staged_path)]
         env = {k: v for k, v in os.environ.items() if k.upper() in {"SYSTEMROOT", "PATH", "LOCALAPPDATA", "APPDATA", "USERPROFILE", "TEMP", "TMP", "HOMEDRIVE", "HOMEPATH"}}
         env["PYTHONDONTWRITEBYTECODE"] = "1"

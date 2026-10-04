@@ -136,6 +136,19 @@ def select_context(settings: Settings, *, request: dict, sources: list[dict], sk
     return receipt, {"instruction_text": instruction_text, "spans": spans, "attempts": attempt_summaries, "rubric": rubric, "assessor_guidance": guidance}
 
 
+def question_version_for(settings: Settings, course_id: str, question_id: str | None) -> int | None:
+    """The version the course's own question index gives this question (None when there is no index or no such id)."""
+    if question_id is None:
+        return None
+    try:
+        index = read_question_index(settings.course(course_id).root, course_id)
+    except OwnerReadError:  # an unreadable index is reported by the catalog views; the owner's writer still validates the candidate
+        return None
+    question = (index or {}).get("questions", {}).get(question_id)
+    version = question.get("version") if question else None
+    return version if isinstance(version, int) else None
+
+
 def family_for(settings: Settings, course_id: str, family_id: str | None, family_revision: int | None) -> dict | None:
     if family_id is None or family_revision is None:
         return None

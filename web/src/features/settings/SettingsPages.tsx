@@ -267,7 +267,7 @@ function DataAndPrivacy() {
   const [exportPreview, setExportPreview] = useState<{ items: Array<{ kind: string; bytes: number }>; total_bytes: number; excluded: Array<{ what: string; why: string }> } | null>(null);
   const [exported, setExported] = useState<{ path: string; files: number; bytes: number } | null>(null);
   const [cleanup, setCleanup] = useState<CleanupPreview | null>(null);
-  const [receipt, setReceipt] = useState<{ status: string; removed?: Array<{ path: string }>; blocked?: unknown[]; reason?: string; note?: string } | null>(null);
+  const [receipt, setReceipt] = useState<{ status: string; removed?: Array<{ path: string }>; blocked?: unknown[]; reason?: string; note?: string; rebuild?: { queued: boolean; note: string } } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const guard = async (fn: () => Promise<void>) => {
     setError(null);
@@ -323,7 +323,7 @@ function DataAndPrivacy() {
           </div>
         )}
         {receipt && <Callout tone={receipt.status === "done" ? "success" : "caution"} role="status" title={receipt.status === "done" ? "Cleanup receipt" : "Nothing was removed"}>
-          {receipt.status === "done" ? `Removed ${receipt.removed?.length ?? 0} item(s); ${receipt.blocked?.length ?? 0} protected item(s) untouched. ${receipt.note ?? ""}` : receipt.reason}
+          {receipt.status === "done" ? `Removed ${receipt.removed?.length ?? 0} item(s); ${receipt.blocked?.length ?? 0} protected item(s) untouched. ${receipt.rebuild?.queued ? receipt.rebuild.note : ""} ${receipt.note ?? ""}` : receipt.reason}
         </Callout>}
         <p className="text-sm text-muted">There is no "delete everything" button: removing a response that an attempt refers to needs the course's own writer and an approved deletion policy. This app does not claim to erase copies held by a provider or on other devices.</p>
       </Section>

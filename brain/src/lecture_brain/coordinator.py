@@ -37,7 +37,7 @@ from .transport import signing
 from .transport.bundles import read_manifest, write_bundle
 from .transport.inbox import InboxScanner
 from .transport.pairing import PairingRegistry
-from .tutoring.context import family_for, select_context
+from .tutoring.context import family_for, select_context, question_version_for
 from .tutoring.outputs import TutorOutput, parse_tutor_output
 from .tutoring.prompts import build_prompt
 from .writer import WriterFacade
@@ -343,7 +343,8 @@ class Coordinator:
             record = stored  # resumed after an interruption: commit exactly the staged candidate, never a re-timed copy
         else:
             record = cand.build_attempt_candidate(submission=submission, capture=capture, attempt_id=self._attempt_id(course_id, submission["logical_input_id"]),
-                                                  recorded_at=self.now_offset(), observations=observations)
+                                                  recorded_at=self.now_offset(), observations=observations,
+                                                  question_version=question_version_for(self.settings, course_id, question["question_id"]))
             self._store_candidate(job, record["attempt_id"], record)
         self._settle(job, lease, S.COMMIT_PENDING)
         publication = self.writer.publish_attempt(course_id, record, capture=capture, submission=submission, request_id=request["request_id"], now=self.now())

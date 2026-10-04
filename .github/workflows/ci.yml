@@ -1,0 +1,83 @@
+# Local application checks, as one contract (tools/ci.py). This file is prepared in the private
+# workspace and has NOT been pushed or enabled anywhere: no remote, secret, branch rule or
+# deployment is implied by its presence. It runs only synthetic fixtures; it never has access to
+# real course folders, a native tutor, Drive or any account, and it cannot establish live acceptance.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: windows-latest   # the Brain targets the learner's always-on Windows PC
+    timeout-minutes: 45
+    env:
+      LL_PROFILE: fixture
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install Brain (hash-locked)
+        run: |
+          python -m venv .venv
+          .venv\Scripts\python -m pip install --require-hashes -r brain/requirements.lock -r brain/requirements-dev.lock
+          .venv\Scripts\python -m pip install --no-deps -e brain
+
+      - name: Install web (lockfile only)
+        working-directory: web
+        run: npm ci
+
+      - name: Install the test browser
+        working-directory: web
+        run: npx playwright install chromium
+
+      - name: Specification baseline and contracts
+        run: .venv\Scripts\python tools/ci.py --only kit
+
+      - name: Packaging tool tests and dependency inventory
+        run: .venv\Scripts\python tools/ci.py --only tools
+
+      - name: Brain tests
+        run: .venv\Scripts\python tools/ci.py --only brain
+
+      - name: Generated types, tokens and typecheck
+        run: .venv\Scripts\python tools/ci.py --only web-types
+
+      - name: Web unit tests
+        run: .venv\Scripts\python tools/ci.py --only web-unit
+
+      - name: Component states (Storybook build)
+        run: .venv\Scripts\python tools/ci.py --only storybook
+
+      - name: Real-browser flows, accessibility and theme sweep (fixture Brain on loopback)
+        run: .venv\Scripts\python tools/ci.py --only e2e
+
+      - name: Keep browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: .local/e2e-results
+          retention-days: 7
+          if-no-files-found: ignore

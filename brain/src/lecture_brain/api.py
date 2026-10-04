@@ -427,7 +427,7 @@ def create_app(runtime: Runtime, *, extra_hosts: set[str] | None = None, static_
     async def cleanup_apply(course_id: str, request: Request):
         course(course_id)
         preview_id = (await request.json()).get("preview_id", "")
-        return locked(lambda: runtime.retention.cleanup_apply(course_id, preview_id))
+        return runtime.cleanup_apply(course_id, preview_id)
 
     @app.post("/api/evidence-deletion")
     async def evidence_deletion(request: Request):

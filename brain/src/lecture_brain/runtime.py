@@ -8,6 +8,7 @@ the user has started ``lecture-brain serve``.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 import threading
 import time
 from typing import Any, Callable
@@ -58,6 +59,22 @@ class Runtime:
                                           input_digest=f"{job['input_digest'][:40]}-cont-{report['remaining_unprepared']:04d}"[:64].ljust(64, "0"),
                                           detail={"kind": "inventory-refresh", "reason": "continuation of a bounded preparation batch", "needs_native": False})
         return report
+
+    def cleanup_apply(self, course_id: str, preview_id: str) -> dict[str, Any]:
+        """Apply a previewed cleanup. Removed rebuildable preparation data is queued for rebuild, never left as a silent gap."""
+        with self._lock:
+            receipt = self.retention.cleanup_apply(course_id, preview_id)
+            removed_prepared = receipt.get("status") == "done" and any(str(item.get("path", "")).endswith("/prepared") for item in receipt.get("removed", []))
+            if removed_prepared:
+                digest = hashlib.sha256(f"rebuild-after-cleanup|{course_id}|{preview_id}|{self.now()}".encode()).hexdigest()
+                self.journal.enqueue_internal(workflow="WF02", course_id=course_id, thread_key=f"prep-{course_id}", priority=4, input_digest=digest,
+                                              detail={"kind": "inventory-refresh", "reason": "rebuild after cleanup of reproducible data", "needs_native": False})
+                receipt["rebuild"] = {"queued": True, "note": "Preparation was queued again and runs in bounded background batches; until it finishes, removed slide text is listed as not yet searchable."}
+            else:
+                receipt["rebuild"] = {"queued": False, "note": "Nothing that needs rebuilding was removed."}
+        if removed_prepared:
+            self.nudge()
+        return receipt
 
     # ---- lifecycle -------------------------------------------------------------------------------
     def startup(self) -> dict[str, Any]:

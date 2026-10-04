@@ -25,7 +25,7 @@ from ..ownerio.attempts import learning_input_digest
 from ..ownerio.inventory import disk_version_id, unregistered_source_id
 from . import content as c
 
-FIXTURE_VERSION = "6"
+FIXTURE_VERSION = "7"
 MARKER = ".ll-synthetic-fixture"
 TERM = "2026-fall"
 FIXED_TIME = "2026-09-12T12:00:00Z"
@@ -326,7 +326,9 @@ def _build_be505(root: Path) -> None:
     _write(root / "learning/question-index.json", _json({
         "contract_version": "be505-question-index-v1", "revision": 1, "course_id": cid, "term": TERM, "record_state": "live", "questions": questions, "concepts": c.BE505_CONCEPTS,
         "relationships": [dict(r, automatic_credit=False) for r in c.BE505_RELATIONSHIPS], "legacy_attempt_links": [],
-        "policy": {"automatic_credit": False, "note": c.FIXTURE_NOTE}, "source_index_digest": sha256_hex((root / ".agent/source-index.json").read_bytes()), "unassessed_artifacts": []}))
+        "policy": {"shared_concept": "Synthetic: a shared concept alone never grants credit.", "strict_containment": "Synthetic: containment is a relation between questions, not automatic credit.",
+                   "unassessed": "Synthetic: artifacts without a genuine response are not attempts.", "family_matching": "Synthetic: a question is matched to its family by id and revision.",
+                   "future_attempts": "Synthetic: new attempts carry question_id and question_version.", "coverage": c.FIXTURE_NOTE}, "source_index_digest": sha256_hex((root / ".agent/source-index.json").read_bytes()), "unassessed_artifacts": []}))
     # Answer guidance stays in a separate restricted file, as in the real course.
     _write(root / "work/lecture-review/lecture-01-question-map-v1.json", _json({"contract_version": "be505-lecture-question-map-v1", "questions": [{"question_id": q["question_id"], "answer": q["answer"]} for q in c.BE505_QUESTIONS]}))
     _write(root / "work/lecture-review/lecture-01-assessor-guide-v1.md", "# Fixture assessor guide (restricted)\n\n" + "\n".join(f"- {q['question_id']}: {q['answer']}" for q in c.BE505_QUESTIONS) + "\n")

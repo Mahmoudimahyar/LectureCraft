@@ -221,3 +221,10 @@ def test_real_roots_metadata_smoke_read_only(tmp_path):
     summary = coverage_summary(s)
     assert sorted(summary["courses"]) == ["be505", "be562", "be572", "cs542", "ds551"]
     assert summary["totals"]["lecture_units"] > 0
+
+
+def test_fixture_question_index_carries_the_policy_keys_the_owner_helper_reads(be505):
+    """The owner's refresh reads index['policy']['coverage']; a synthetic root without it cannot exercise that code."""
+    index = json.loads((be505 / "learning/question-index.json").read_text(encoding="utf-8"))
+    assert set(index["policy"]) >= {"shared_concept", "strict_containment", "unassessed", "family_matching", "future_attempts", "coverage"}
+    assert all(isinstance(v, str) and v for v in index["policy"].values())

@@ -178,3 +178,18 @@ def test_recording_length_is_read_from_mp4_and_m4a_headers(tmp_path, name, data,
     path = tmp_path / name
     path.write_bytes(data)
     assert media_duration_ms(path) == expected
+
+
+def test_recording_length_is_remembered_until_the_file_changes(tmp_path, monkeypatch):
+    """Recordings sit on a synced drive; their header is read once per file version, not on every view."""
+    from lecture_brain import annotations
+
+    path = tmp_path / "session.m4a"
+    path.write_bytes(_mp4(30 * 1000, 1000))
+    calls = []
+    original = annotations._mp4_duration_ms
+    monkeypatch.setattr(annotations, "_mp4_duration_ms", lambda p: calls.append(p) or original(p))
+    assert annotations.media_duration_ms(path) == 30_000 and annotations.media_duration_ms(path) == 30_000
+    assert len(calls) == 1
+    path.write_bytes(_mp4(45 * 1000, 1000) + b"\x00" * 16)  # a different file under the same name
+    assert annotations.media_duration_ms(path) == 45_000 and len(calls) == 2

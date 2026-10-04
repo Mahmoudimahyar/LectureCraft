@@ -96,13 +96,24 @@ def _mp4_duration_ms(path: Path) -> int | None:
     return None
 
 
+_DURATIONS: dict[tuple[str, int, int], int | None] = {}
+
+
 def media_duration_ms(path: Path) -> int | None:
-    """Duration when it can be read from the file itself without extra tools (WAV, m4a/mp4); otherwise unknown."""
+    """Duration when it can be read from the file itself without extra tools (WAV, m4a/mp4); otherwise unknown.
+    Remembered per file version (path, size, modification time) for the life of the process."""
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
     if not path.is_file():
         return None
     suffix = path.suffix.lower()
     if suffix in _MP4_SUFFIXES:
-        return _mp4_duration_ms(path)
+        key = (str(path), stat.st_size, stat.st_mtime_ns)
+        if key not in _DURATIONS:
+            _DURATIONS[key] = _mp4_duration_ms(path)
+        return _DURATIONS[key]
     if suffix != ".wav":
         return None
     try:

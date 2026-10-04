@@ -31,7 +31,7 @@
     "LL027": [["brain", ["brain/tests/test_coordinator.py", "-k", "dispute or capture_correction"]], ["e2e", ["flows/03-tutoring", "-g", "UI17", "@flows"]]],
     "LL028": [["e2e", ["flows/04-progress-review", "-g", "UI22|UI23", "@flows"]]],
     "LL029": [["brain", ["brain/tests/test_review_resume.py"]], ["e2e", ["flows/04-progress-review", "-g", "UI24", "@flows"]]],
-    "LL030": [["brain", ["brain/tests/test_projections.py"]], ["e2e", ["flows/03-tutoring", "flows/04-progress-review", "-g", "UI13|UI17|UI20|UI21", "@flows"]]],
+    "LL030": [["brain", ["brain/tests/test_projections.py"]], ["e2e", ["flows/03-tutoring", "flows/04-progress-review", "-g", "UI11 a quick|UI13|UI17|UI20|UI21", "@flows"]]],
     "LL031": [["brain", ["brain/tests/test_review_resume.py"]], ["e2e", ["flows/04-progress-review", "flows/05-operations", "-g", "UI26|UI31", "@flows"]]],
     "LL032": [["brain", ["brain/tests/test_ops.py"]], ["e2e", ["flows/05-operations", "-g", "UI30", "@flows"]]],
     "LL033": [["brain", ["brain/tests/test_ops.py", "brain/tests/test_api.py"]], ["e2e", ["flows/03-tutoring", "flows/05-operations", "-g", "UI13 a typed|UI25|UI27|UI29|UI32", "@flows"]]],

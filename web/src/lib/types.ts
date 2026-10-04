@@ -229,7 +229,10 @@ export interface QuestionView {
   course_id: string;
   question_id: string;
   title: string | null;
+  /** The question's wording, or — when the course index holds none — a pointer to the original page (never invented wording). */
   prompt: string;
+  prompt_in_index: boolean;
+  prompt_status: string | null;
   collection: string | null;
   origin: string | null;
   source_refs: Array<{ source_id: string; version_id: string; locator: string }>;
@@ -368,7 +371,7 @@ export interface ReviewView {
   course_id: string;
   items: ReviewRow[];
   due_count: number;
-  available_questions: Array<{ question_id: string; title: string | null; prompt: string; origin: string | null; family_id: string | null; family_revision: number | null; source_refs: Array<{ source_id: string; version_id: string; locator: string }> }>;
+  available_questions: Array<{ question_id: string; title: string | null; prompt: string; prompt_in_index: boolean; origin: string | null; family_id: string | null; family_revision: number | null; source_refs: Array<{ source_id: string; version_id: string; locator: string }> }>;
   default_session_size: number;
   scheduler_config: Artifact;
   note: string;

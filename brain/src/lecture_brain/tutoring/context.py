@@ -22,6 +22,15 @@ from ..preparation import current_identity
 MAX_SPAN_CHARS = 6000
 
 
+def _all_items(inventory: dict):
+    for lecture in inventory["lectures"]:
+        yield from lecture["decks"]
+        yield from lecture["extra_materials"]
+    for session in inventory["sessions"]:
+        yield from session["items"]
+    yield from inventory["other_sources"]
+
+
 def _find_item(inventory: dict, source_id: str) -> dict | None:
     for lecture in inventory["lectures"]:
         for item in [*lecture["decks"], *lecture["extra_materials"]]:
@@ -130,6 +139,18 @@ def select_context(settings: Settings, *, request: dict, sources: list[dict], sk
         question = index["questions"].get(question_id) if index else None
         if question:
             rubric = [{"criterion_id": k["criterion_id"], "skill_id": k["skill_id"], "observable": k["observable"]} for k in question["criteria"]]
+            if not question["prompt_in_index"] and question.get("source_path") and question.get("page"):
+                # The learner answered from the original page; the tutor must read that same page, not only a pointer to it.
+                original = next((i for i in _all_items(inventory) if i.get("path") == question["source_path"]), None)
+                if original is not None and original["disclosure"] != "restricted_solution":
+                    locator = {"kind": "page", "page": int(question["page"]), "printed_label": None}
+                    version_id, sha256 = current_identity(root, original)
+                    text = read_span(root, original, locator)
+                    already = any(s["source_id"] == original["source_id"] and s["locator"] == locator for s in supplied_sources)
+                    if text and sha256 and not already:
+                        ref = {"source_id": original["source_id"], "version_id": version_id, "sha256": sha256, "locator": locator}
+                        supplied_sources.append(ref)
+                        spans.append({"index": len(spans), "source": ref, "filename": original["filename"], "text": text})
         guidance = read_answer_guidance(root, question_id)  # assessor-only material; never echoed to the client
     exposure = {"seen_solution": "yes", "unseen_reported": "no_known_exposure"}.get(prior_exposure or "", "unknown")
     receipt = {

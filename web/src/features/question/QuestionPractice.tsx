@@ -127,7 +127,13 @@ export function QuestionPractice() {
 
       <section aria-labelledby="prompt-h" className="ll-card mb-4 p-4">
         <h2 id="prompt-h" className="ll-label mb-1">Question</h2>
-        <p className="whitespace-pre-wrap text-lg" data-testid="question-prompt">{q.prompt}</p>
+        <p className={q.prompt_in_index ? "whitespace-pre-wrap text-lg" : "whitespace-pre-wrap"} data-testid="question-prompt">{q.prompt}</p>
+        {!q.prompt_in_index && (
+          <Callout tone="neutral" role="note" className="mt-2" title="Read this question in the original">
+            The course's question index does not store the wording of this question; the original page is the authority, including its figures and givens.
+            Open it below, then answer here. Your answer is assessed against the same page.
+          </Callout>
+        )}
         <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
           <span className="text-muted">Original source:</span>
           {refs.map(({ ref, item }) => item

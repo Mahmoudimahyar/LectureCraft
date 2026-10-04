@@ -45,6 +45,23 @@ def families_digest(root: Path) -> str:
     return sha256_hex(read_owner_bytes(root / "learning" / "question-families.yaml", what="learning/question-families.yaml"))
 
 
+def _with_usable_prompt(question: dict) -> dict:
+    """Some entries (problem sets, in-class questions) carry no wording: the owner marks the original page as
+    authoritative. Readers still need a string. It is a pointer to that original — never invented wording — and
+    ``prompt_in_index`` tells every consumer which kind it is."""
+    question = dict(question)
+    question["prompt_in_index"] = isinstance(question.get("prompt"), str) and bool(question["prompt"].strip())
+    if not question["prompt_in_index"]:
+        where = question.get("source_path") or question.get("bank_path")
+        location = ""
+        if where:
+            location = f" ({Path(where).name}" + (f", page {question['page']}" if question.get("page") else "") + ")"
+        status = str(question.get("prompt_status") or "").strip()
+        question["prompt"] = (f"{question.get('title') or question['question_id']} — the exact wording, givens and figures are in the original source{location}."
+                              + (f" {status}" if status else ""))
+    return question
+
+
 def read_question_index(root: Path, course_id: str) -> dict[str, Any] | None:
     """BE 505-style question index when a course has one; ``None`` otherwise (other courses do not)."""
     path = root / "learning" / "question-index.json"
@@ -53,7 +70,7 @@ def read_question_index(root: Path, course_id: str) -> dict[str, Any] | None:
     data = read_owner_bytes(path, what="learning/question-index.json")
     doc = parse_owner_json(data, what="learning/question-index.json")
     require_identity(doc, course_id, what="learning/question-index.json")
-    questions = {q["question_id"]: q for q in doc.get("questions") or []}
+    questions = {q["question_id"]: _with_usable_prompt(q) for q in doc.get("questions") or []}
     concepts = {c["concept_id"]: c for c in doc.get("concepts") or []}
     return {"contract_version": doc.get("contract_version"), "revision": doc.get("revision"), "sha256": sha256_hex(data), "questions": questions,
             "concepts": concepts, "relationships": list(doc.get("relationships") or []), "policy": doc.get("policy") or {}}

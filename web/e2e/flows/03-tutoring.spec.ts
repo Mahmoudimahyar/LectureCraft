@@ -241,6 +241,37 @@ test.describe("tutoring", () => {
     expect(skill.latest!.assistance).toBe("hint");
   });
 
+  test("UI15 a question whose wording lives only in the original source is found, opened and assessed against that page", async ({ page, request, unique }) => {
+    await pair(page);
+    // Search must not break on such entries (it did, on real data), and finds them by title.
+    await page.goto("/study");
+    await page.getByRole("button", { name: /^Search / }).click();
+    const dialog = page.getByRole("dialog", { name: "Search" });
+    await dialog.getByLabel("Search query").fill("problem set 1 question 2");
+    await dialog.getByRole("list", { name: "Search results" }).getByRole("link").filter({ hasText: "Problem set 1, question 2" }).first().click();
+    await expect(page).toHaveURL(/questions\/BE505-PS01-Q02$/);
+
+    const prompt = page.getByTestId("question-prompt");
+    await expect(prompt).toContainText("the exact wording, givens and figures are in the original source (Fixture PS01.pdf, page 2)");
+    await expect(page.getByRole("note").filter({ hasText: "Read this question in the original" })).toContainText("the original page is the authority");
+    await expect(page.locator("main")).not.toContainText("metabolic burden"); // no criterion or answer is shown in its place
+    await page.getByRole("link", { name: /Fixture PS01\.pdf/ }).click();
+    await expect(page.getByTestId("slide-canvas")).toHaveAttribute("data-rendered", "2"); // the original opens on the stated page
+    await page.getByRole("link", { name: "← Return to the question" }).click();
+
+    const answer = unique("A strong promoter on a high-copy plasmid places a metabolic burden on the host cell.");
+    await page.locator("#practice-answer").fill(answer);
+    await page.getByTestId("submit-answer").click();
+    const feedback = page.getByTestId("request-card").filter({ hasText: answer }).getByTestId("feedback");
+    await expect(feedback).toContainText("Demonstrated", { timeout: 20_000 });
+    await expect(feedback.getByRole("list", { name: "Save status" })).toContainText("Saved to course");
+    await settle(request);
+    const history = await (await request.get(`/api/courses/${COURSE}/history`)).json();
+    const saved = (history.attempts as Array<{ response: { full_text: string | null }; question: { prompt: string; question_id?: string } }>).find((a) => a.response.full_text === answer)!;
+    expect(saved.question.question_id).toBe("BE505-PS01-Q02");
+    expect(saved.question.prompt).toContain("original source"); // the record points at the original; it does not make up the wording
+  });
+
   test("UI16 a weak answer offers an optional, bounded diagnostic with hypotheses — and the way back to the slide", async ({ page, request, unique }) => {
     await pair(page);
     const tutor = await openTutor(page, `${L2}?page=1`, "1");

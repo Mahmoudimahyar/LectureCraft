@@ -252,3 +252,21 @@ def test_files_the_course_index_has_not_registered_are_identified_by_their_conte
     # A changed file gets a new identity instead of silently keeping the old one.
     deck_path.write_bytes(deck_path.read_bytes() + b"\n%% changed\n")
     assert projector.lecture_view("be562", "lecture-02")["deck"]["sha256"] != digest
+
+
+# ---- questions whose wording the course index does not hold -----------------------------------------
+def test_a_question_without_wording_in_the_index_is_usable_and_points_to_its_original(projector):
+    """Real problem-set entries keep `prompt: null` with a note that the original page is authoritative. Search,
+    review and practice must work for them, and nothing may invent the wording."""
+    view = projector.question_view("be505", "BE505-PS01-Q02")
+    assert view["prompt_in_index"] is False
+    assert "Fixture PS01.pdf" in view["prompt"] and "page 2" in view["prompt"] and "Original source is authoritative" in view["prompt"]
+    assert "burden" not in view["prompt"]  # neither the criterion nor the answer leaks into the stand-in text
+    assert projector.question_view("be505", "BE505-L01-Q01")["prompt_in_index"] is True
+
+    entries = projector.search_index("be505")["entries"]  # used to fail outright on such a question
+    hit = next(e for e in entries if e["type"] == "question" and e["ref"]["question_id"] == "BE505-PS01-Q02")
+    assert hit["title"] == "Problem set 1, question 2" and isinstance(hit["text"], str)
+    offered = next(q for q in projector.review_view("be505")["available_questions"] if q["question_id"] == "BE505-PS01-Q02")
+    assert isinstance(offered["prompt"], str) and offered["prompt_in_index"] is False
+    assert all(isinstance(q["prompt"], str) for q in projector.review_view("be505")["available_questions"])

@@ -261,6 +261,7 @@ class Projector:
                 evidence.append({"attempt_id": attempt_id, "recorded_at": attempt["recorded_at"], "assessment_id": effective["assessment_id"],
                                  "outcomes": {o["skill_id"]: o["outcome"] for o in effective["observations"]}, "link_scope": "same question" if attempt["question"].get("question_id") == question_id else "same family"})
         return {"course_id": course_id, "question_id": question_id, "version": question.get("version"), "title": question.get("title"), "prompt": question["prompt"],
+                "prompt_in_index": question["prompt_in_index"], "prompt_status": question.get("prompt_status"),
                 "collection": question.get("collection"), "origin": question.get("origin"), "source_refs": question.get("source_refs", []), "page": question.get("page"),
                 "family": {"family_id": family["family_id"], "revision": family["revision"], "skill_ids": family["skill_ids"]} if family else None,
                 "rubric_available": family is not None, "criteria_count": len(question.get("criteria", [])),
@@ -465,7 +466,8 @@ class Projector:
         available = []
         for question in ((catalogs["questions"] or {}).get("questions") or {}).values():
             if question["question_id"] not in selected:
-                available.append({"question_id": question["question_id"], "title": question.get("title"), "prompt": question["prompt"], "origin": question.get("origin"),
+                available.append({"question_id": question["question_id"], "title": question.get("title"), "prompt": question["prompt"], "prompt_in_index": question["prompt_in_index"],
+                                  "origin": question.get("origin"),
                                   "family_id": question.get("family_id"), "family_revision": question.get("family_revision"), "source_refs": question.get("source_refs", [])})
         return {"course_id": course_id, "items": rows, "due_count": sum(1 for r in rows if r["is_due"]), "available_questions": available[:200],
                 "default_session_size": int(self.settings.policy["review_default_max_items"]), "scheduler_config": self.reviews.scheduler_config(course_id),

@@ -25,7 +25,7 @@ from ..ownerio.attempts import learning_input_digest
 from ..ownerio.inventory import disk_version_id, unregistered_source_id
 from . import content as c
 
-FIXTURE_VERSION = "8"
+FIXTURE_VERSION = "9"
 MARKER = ".ll-synthetic-fixture"
 TERM = "2026-fall"
 FIXED_TIME = "2026-09-12T12:00:00Z"
@@ -310,14 +310,15 @@ def _build_be505(root: Path) -> None:
         skill_ids = [crit[0] for crit in q["criteria"]]
         ref = {"source_id": q["source"][0], "version_id": version_of(q["source"][0]), "locator": q["source"][1]}
         families.append({"family_id": q["family_id"], "revision": 1, "format": "short written explanation", "skill_ids": skill_ids,
-                         "reasoning_signature": "Explain mechanism and boundary.", "prompt_template": q["prompt"], "origin": q["origin"], "source_refs": [ref],
+                         "reasoning_signature": "Explain mechanism and boundary.", "prompt_template": q["prompt"] or q["prompt_status"], "origin": q["origin"], "source_refs": [ref],
                          "rubric": [{"skill_id": crit[0], "criterion": crit[2]} for crit in q["criteria"]], "question_ids": [q["question_id"]]})
         questions.append({"question_id": q["question_id"], "version": 1, "collection": q["collection"], "number": q["number"], "title": q["title"], "prompt": q["prompt"],
                           "criteria": [{"criterion_id": f"{q['question_id']}.C{i:02d}", "tag": "core", "action": crit[3][0], "observable": crit[2], "concept_id": crit[1], "skill_id": crit[0], "action_types": crit[3]}
                                        for i, crit in enumerate(q["criteria"], start=1)],
                           "origin": q["origin"], "source_refs": [ref], "source_note": c.FIXTURE_NOTE, "bank_path": "work/lecture-review/fixture-question-bank.md", "input_files": {},
                           "topic": "be505.topic.plasmids", "family_id": q["family_id"], "family_revision": 1, "page": q["page"],
-                          "assessor_path": "work/lecture-review/lecture-01-assessor-guide-v1.md"})
+                          "assessor_path": "work/lecture-review/lecture-01-assessor-guide-v1.md",
+                          **({"prompt_status": q["prompt_status"], "source_path": q["source_path"]} if q["prompt"] is None else {})})
     families.append({"family_id": "be505.family.slide-teach-back-unrubriced", "revision": 1, "format": "open teach-back", "skill_ids": ["be505.skill.selection.interpret"],
                      "reasoning_signature": "Fixture family used to exercise catalog reads.", "prompt_template": "Explain this slide in your own words.", "origin": "generated_practice",
                      "source_refs": [{"source_id": "src-lecture-01-slides", "version_id": version_of("src-lecture-01-slides"), "locator": "slide 4"}],

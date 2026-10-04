@@ -197,6 +197,13 @@ BE505_QUESTIONS = [
      "family_id": "be505.family.question.ps01-q01", "origin": "course_source", "source": ("src-ps-01-brief", "page 1, question 1"), "page": 1,
      "criteria": [("be505.skill.selection.interpret", "be505.concept.selectable-marker", "States that growth shows the plasmid (marker) is present, not that the gene of interest is expressed.", ["interpret"])],
      "answer": "Growth shows the cells carry the plasmid with the resistance marker; it does not show expression of the gene of interest."},
+    # As in real problem sets: the course index keeps NO wording for this one — the original page is authoritative.
+    {"question_id": "BE505-PS01-Q02", "collection": "PS01", "number": 2, "title": "Problem set 1, question 2", "prompt": None,
+     "prompt_status": "Original source is authoritative; open the stated page including figures and givens (synthetic fixture).",
+     "source_path": "materials/assignments/ps-01/Fixture PS01.pdf",
+     "family_id": "be505.family.question.ps01-q02", "origin": "course_source", "source": ("src-ps-01-brief", "page 2, question 2"), "page": 2,
+     "criteria": [("be505.skill.promoter.explain", "be505.concept.promoter", "States that a strong promoter on a high-copy plasmid places a metabolic burden on the host cell.", ["explain"])],
+     "answer": "Very high expression from many copies diverts the cell's resources and can slow growth or select for loss of the plasmid."},
     {"question_id": "BE505-L02-Q01", "collection": "L02", "number": 1, "title": "How induction works",
      "prompt": "Explain how adding an inducer switches on an inducible promoter.",
      "family_id": "be505.family.question.l02-q01", "origin": "generated_practice", "source": ("src-lecture-02-slides", "slides 1-2"), "page": 1,

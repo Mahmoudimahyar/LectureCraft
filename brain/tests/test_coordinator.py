@@ -573,3 +573,20 @@ def test_read_only_profile_keeps_a_complete_submission_locally_and_writes_nothin
         assert any("My own note." in p.read_text(encoding="utf-8") for p in (tmp_path / "private-state").rglob("notes/*.json"))
     finally:
         env.journal.close()
+
+
+def test_assessing_a_question_without_indexed_wording_gives_the_tutor_the_original_page(env):
+    """The learner answers from the original; the tutor must see that same page, not only a pointer to it."""
+    sub = submission("req-ps2", text="A strong promoter on a high-copy plasmid places a metabolic burden on the host cell.", question_id="BE505-PS01-Q02",
+                     prompt="Problem set 1, question 2 — the exact wording, givens and figures are in the original source (Fixture PS01.pdf, page 2).",
+                     family=("be505.family.question.ps01-q02", 1), interaction="practice")
+    env.send("req-ps2", "practice", sub, depth="standard")
+    env.coordinator.tick()
+    result = env.result("req-ps2")
+    assert result["publication"]["status"] == "saved"
+    used = [(s["source_id"], s["locator"]) for s in result["context"]["sources"]]
+    assert ("src-ps-01-brief", {"kind": "page", "page": 2, "printed_label": None}) in used
+    record = json.loads((env.root / result["publication"]["canonical_record"]["artifact"]["path"]).read_text(encoding="utf-8"))
+    assert record["question"]["question_id"] == "BE505-PS01-Q02" and "original source" in record["question"]["prompt"]
+    # The solutions file is never the page that gets attached.
+    assert all("solutions" not in s["source_id"] for s in result["context"]["sources"])

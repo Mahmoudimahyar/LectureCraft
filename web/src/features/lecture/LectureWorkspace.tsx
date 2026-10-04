@@ -27,6 +27,36 @@ import { TranscriptPanel } from "./TranscriptPanel";
 
 type Panel = "slide" | "tutor" | "transcript" | "sources";
 
+const PANES: Array<{ value: Panel; label: string }> = [{ value: "slide", label: "Slide" }, { value: "tutor", label: "Tutor" }, { value: "transcript", label: "Transcript" }, { value: "sources", label: "Sources" }];
+
+/** Narrow screens show one pane at a time. Each tab controls a region that exists on the page (the slide or the context panel). */
+function PaneTabs({ value, onChange }: { value: Panel; onChange: (value: Panel) => void }) {
+  const refs = useRef<Array<HTMLButtonElement | null>>([]);
+  const move = (index: number) => {
+    const next = PANES[(index + PANES.length) % PANES.length]!;
+    onChange(next.value);
+    refs.current[(index + PANES.length) % PANES.length]?.focus();
+  };
+  return (
+    <div role="tablist" aria-label="Workspace pane" className="flex gap-1 border-b border-line/40 lg:hidden">
+      {PANES.map((pane, index) => (
+        <button key={pane.value} ref={(node) => { refs.current[index] = node; }} type="button" role="tab" aria-selected={value === pane.value} aria-controls={pane.value === "slide" ? "pane-slide" : "pane-context"}
+          tabIndex={value === pane.value ? 0 : -1} onClick={() => onChange(pane.value)}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowRight") move(index + 1);
+            else if (event.key === "ArrowLeft") move(index - 1);
+            else return;
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          className={cn("min-h-[44px] flex-1 border-b-2 border-transparent px-2 font-medium text-muted", value === pane.value && "border-accent text-accent")}>
+          {pane.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function LectureWorkspace() {
   const { courseId = "", lectureId = "" } = useParams();
   const [params, setParams] = useSearchParams();
@@ -217,11 +247,7 @@ export function LectureWorkspace() {
       </div>
 
       {/* Narrow screens: explicit single-pane navigation with the same actions. */}
-      <div className="lg:hidden">
-        <Tabs value={panel} onValueChange={(value) => update({ panel: value }, true)}>
-          <TabList label="Workspace pane"><Tab value="slide">Slide</Tab><Tab value="tutor">Tutor</Tab><Tab value="transcript">Transcript</Tab><Tab value="sources">Sources</Tab></TabList>
-        </Tabs>
-      </div>
+      <PaneTabs value={panel} onChange={(value) => update({ panel: value }, true)} />
 
       <div className={cn("grid gap-4", focus ? "grid-cols-1" : "lg:grid-cols-[auto_minmax(0,1fr)_minmax(22rem,30rem)]")}>
         {!focus && (
@@ -242,7 +268,7 @@ export function LectureWorkspace() {
           </aside>
         )}
 
-        <section className={cn("min-w-0 flex-col gap-3", panel === "slide" || focus ? "flex" : "hidden lg:flex")} aria-label="Slide and recording">
+        <section id="pane-slide" className={cn("min-w-0 flex-col gap-3", panel === "slide" || focus ? "flex" : "hidden lg:flex")} aria-label="Slide and recording">
           <div className="flex flex-wrap items-end justify-between gap-2">
             <div className="min-w-0">
               <h1 className="text-xl font-bold">{slide?.title ?? lecture.title}</h1>
@@ -309,7 +335,7 @@ export function LectureWorkspace() {
         </section>
 
         {!focus && (
-          <aside className={cn("min-h-[32rem] min-w-0 lg:sticky lg:top-[76px] lg:h-[calc(100dvh-96px)]", panel === "slide" ? "hidden lg:block" : "block")} aria-label="Context panel">
+          <aside id="pane-context" className={cn("min-h-[32rem] min-w-0 lg:sticky lg:top-[76px] lg:h-[calc(100dvh-96px)]", panel === "slide" ? "hidden lg:block" : "block")} aria-label="Context panel">
             <div className="ll-card h-full p-3">{contextPanel}</div>
           </aside>
         )}

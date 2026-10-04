@@ -24,7 +24,7 @@ export function loadPdf(url: string): Promise<PdfDocument> {
   return doc;
 }
 
-async function renderPage(doc: PdfDocument, pageNumber: number, canvas: HTMLCanvasElement, cssWidth: number, textLayer?: HTMLDivElement | null): Promise<{ width: number; height: number }> {
+async function renderPage(doc: PdfDocument, pageNumber: number, canvas: HTMLCanvasElement, cssWidth: number, textLayer?: HTMLDivElement | null, onTask?: (task: { cancel: () => void }) => void): Promise<{ width: number; height: number }> {
   const page = await doc.getPage(pageNumber);
   const base = page.getViewport({ scale: 1 });
   const scale = cssWidth / base.width;
@@ -34,7 +34,9 @@ async function renderPage(doc: PdfDocument, pageNumber: number, canvas: HTMLCanv
   canvas.height = Math.floor(viewport.height);
   canvas.style.width = `${Math.floor(base.width * scale)}px`;
   canvas.style.height = `${Math.floor(base.height * scale)}px`;
-  await page.render({ canvas, viewport, background: "#ffffff" }).promise;
+  const task = page.render({ canvas, viewport, background: "#ffffff" });
+  onTask?.(task);
+  await task.promise;
   if (textLayer) {
     textLayer.replaceChildren();
     const cssViewport = page.getViewport({ scale });
@@ -69,11 +71,15 @@ export function SlideCanvas({ url, page, label, onPageCount, hidden }: SlideCanv
   const [fitWidth, setFitWidth] = useState(0);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
+  const [rendered, setRendered] = useState<number | null>(null);
 
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame) return;
-    const update = () => setFitWidth(Math.max(240, frame.clientWidth - 2));
+    // A hidden pane measures 0: keep the last real width so switching panes never re-renders the slide.
+    const update = () => {
+      if (frame.clientWidth > 0) setFitWidth(Math.max(240, frame.clientWidth - 2));
+    };
     update();
     const observer = new ResizeObserver(update);
     observer.observe(frame);
@@ -83,14 +89,19 @@ export function SlideCanvas({ url, page, label, onPageCount, hidden }: SlideCanv
   useEffect(() => {
     if (!fitWidth || hidden) return;
     let cancelled = false;
+    let task: { cancel: () => void } | null = null;
     setState("loading");
+    setRendered(null);
     loadPdf(url)
       .then(async (doc) => {
         if (cancelled) return;
         onPageCount?.(doc.numPages);
         if (page < 1 || page > doc.numPages) throw new Error(`This deck has ${doc.numPages} page(s); page ${page} does not exist.`);
-        await renderPage(doc, page, canvasRef.current!, fitWidth * zoom, textRef.current);
-        if (!cancelled) setState("ready");
+        await renderPage(doc, page, canvasRef.current!, fitWidth * zoom, textRef.current, (t) => { task = t; });
+        if (!cancelled) {
+          setState("ready");
+          setRendered(page);
+        }
       })
       .catch((e: Error) => {
         if (!cancelled && e?.name !== "RenderingCancelledException") {
@@ -100,6 +111,7 @@ export function SlideCanvas({ url, page, label, onPageCount, hidden }: SlideCanv
       });
     return () => {
       cancelled = true;
+      task?.cancel(); // one render per canvas at a time: a quick slide change never draws a stale page
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, page, fitWidth, zoom, hidden]);
@@ -122,7 +134,7 @@ export function SlideCanvas({ url, page, label, onPageCount, hidden }: SlideCanv
           <div className="p-4"><Callout tone="danger" role="alert" title="This slide could not be shown">{error} The original file is unchanged; nothing was regenerated in its place.</Callout></div>
         ) : (
           <div className="ll-source-surface relative mx-auto w-fit" data-testid="slide-surface" data-render-state={state}>
-            <canvas ref={canvasRef} role="img" aria-label={label} className="block" data-testid="slide-canvas" />
+            <canvas ref={canvasRef} role="img" aria-label={label} className="block" data-testid="slide-canvas" data-rendered={rendered ?? ""} />
             <div ref={textRef} className="ll-pdf-textlayer" />
             {state === "loading" && <div className="absolute inset-0 flex items-center justify-center bg-white/70 text-[#132238]"><LoadingState label="Rendering slide…" /></div>}
           </div>

@@ -23,7 +23,7 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   reporter: [["list"], ["json", { outputFile: "../.local/e2e-results/report.json" }]],
   use: { baseURL, trace: "retain-on-failure", screenshot: "only-on-failure", actionTimeout: 10_000, launchOptions: { args: ["--autoplay-policy=no-user-gesture-required"] } },
-  webServer: { command: "node e2e/serve-brain.mjs", url: `${baseURL}/api/health`, reuseExistingServer: false, timeout: 120_000, stdout: "pipe", stderr: "pipe" },
+  webServer: { command: "node e2e/serve-brain.mjs", url: `${baseURL}/api/health`, reuseExistingServer: !!process.env.LL_E2E_REUSE, timeout: 120_000, stdout: "pipe", stderr: "pipe" },
   projects: [
     // Flows: every journey in a wide Light layout and a narrow Dark layout.
     { ...viewport("flows-desktop-light", 1280, 800, "light"), testMatch: /flows\/.*\.spec\.ts/ },

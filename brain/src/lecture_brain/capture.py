@@ -103,6 +103,19 @@ class CaptureStore:
             raise CaptureError("unsafe_locator", f"unknown run folder {folder}")
         return self._publish(course_id, f"{self.run_rel(session_id)}/{folder}/{safe_name(record_id)}.json", data)
 
+    def write_or_existing(self, course_id: str, session_id: str, folder: str, record_id: str, data: bytes) -> dict:
+        """For records regenerated when a job resumes (context receipts): the first write stands."""
+        try:
+            return self.write_record(course_id, session_id, folder, record_id, data)
+        except CaptureConflict:
+            rel = f"{self.run_rel(session_id)}/{folder}/{safe_name(record_id)}.json"
+            return c.artifact_for_bytes((self._settings.write_root(course_id) / rel).read_bytes(), rel, "application/json")
+
+    def read_message(self, course_id: str, session_id: str, message_id: str) -> tuple[dict, dict]:
+        rel = f"{self.run_rel(session_id)}/messages/{safe_name(message_id)}.json"
+        data = (self._settings.write_root(course_id) / rel).read_bytes()
+        return c.parse_json(data), c.artifact_for_bytes(data, rel, "application/json")
+
     # ---- verify ------------------------------------------------------------------------------
     def _resolve(self, course_id: str, rel: str) -> Path:
         if not isinstance(rel, str) or not rel.startswith(RUNS_PREFIX) or not c.safe_relative(rel):

@@ -250,8 +250,13 @@ class Journal:
             state, reason = S.READY, None
             parent = request["parent_request_id"]
             if parent is not None:
-                parent_state = conn.execute(sa.select(t.jobs.c.state).where(t.jobs.c.request_id == parent)).scalar()
-                if parent_state != S.SUCCEEDED:
+                parent_row = conn.execute(sa.select(t.jobs.c.job_id, t.jobs.c.state).where(t.jobs.c.request_id == parent)).first()
+                parent_state = parent_row.state if parent_row else None
+                if parent_state == S.WAITING_USER:
+                    # The learner's real answer to a waiting question arrived: the parent is answered, not failed.
+                    conn.execute(t.jobs.update().where(t.jobs.c.job_id == parent_row.job_id).values(state=S.SUCCEEDED, waiting_reason=None, updated_at=now))
+                    self._event(conn, "state", job_id=parent_row.job_id, request_id=parent, frm=S.WAITING_USER, to=S.SUCCEEDED, reason=f"answered by {rid}")
+                elif parent_state != S.SUCCEEDED:
                     state, reason = S.WAITING_SYNC, f"parent:{parent}"
             job_id = uuid.uuid4().hex
             conn.execute(
@@ -289,7 +294,12 @@ class Journal:
         """Compare-and-swap claim of the most urgent runnable job whose native thread is free."""
         now = self.now()
         with self.tx() as conn:
-            busy = {r[0] for r in conn.execute(sa.select(t.jobs.c.thread_key).where(t.jobs.c.state.in_(list(THREAD_BUSY))).distinct())}
+            # One native turn per thread. Deterministic jobs (controls, notes, link corrections) do not occupy a
+            # native thread and are never held back by one; a job without the flag is treated as thread-exclusive.
+            def exclusive(detail: str) -> bool:
+                return bool(json.loads(detail or "{}").get("needs_native", True))
+
+            busy = {r.thread_key for r in conn.execute(sa.select(t.jobs.c.thread_key, t.jobs.c.detail).where(t.jobs.c.state.in_(list(THREAD_BUSY)))) if exclusive(r.detail)}
             query = sa.select(t.jobs).where(
                 sa.or_(t.jobs.c.state == S.READY, sa.and_(t.jobs.c.state == S.FAILED_RETRYABLE, t.jobs.c.next_attempt_at <= now))
             )
@@ -299,7 +309,7 @@ class Journal:
             if excluded:
                 query = query.where(t.jobs.c.workflow.notin_(excluded))
             candidates = [self._row(r) for r in conn.execute(query)]
-            candidates = [c for c in candidates if c["thread_key"] not in busy]
+            candidates = [c for c in candidates if not c["detail"].get("needs_native", True) or c["thread_key"] not in busy]
             if not candidates:
                 return None
 
@@ -577,7 +587,8 @@ class Journal:
             return {
                 "jobs": sum(by_state.values()),
                 "by_state": by_state,
-                "dispatches": conn.execute(sa.select(sa.func.count()).select_from(t.dispatches)).scalar() or 0,
+                # Dispatches that actually reached a runtime (refusals before send are not model requests).
+                "dispatches": conn.execute(sa.select(sa.func.count()).select_from(t.dispatches).where(t.dispatches.c.state != "not_sent")).scalar() or 0,
                 "admissions": conn.execute(sa.select(sa.func.count()).select_from(t.admissions)).scalar() or 0,
             }
 

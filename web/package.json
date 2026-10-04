@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "gen:types": "node scripts/gen-types.mjs",
+    "gen:tokens": "node scripts/gen-tokens.mjs",
     "test": "vitest run",
     "e2e": "playwright test",
     "storybook": "storybook dev -p 6006 --host 127.0.0.1 --no-open",

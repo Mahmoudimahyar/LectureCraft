@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+import struct
 import wave
 from typing import Any
 
@@ -50,9 +51,59 @@ def precision_of(record: dict) -> str:
     return {"text": "broad_reference", "media": "time_interval", "page": "exact_page", "lines": "line_range", "figure": "figure_region"}[kind]
 
 
+_MP4_SUFFIXES = {".m4a", ".mp4", ".m4v", ".mov"}
+
+
+def _mp4_duration_ms(path: Path) -> int | None:
+    """Movie-header duration of an ISO-BMFF file (m4a/mp4): walk the top-level boxes to ``moov``, then to
+    ``mvhd``. Only box headers and the small ``moov`` box are read — never the media data."""
+    try:
+        size = path.stat().st_size
+        with open(path, "rb") as handle:
+            offset = 0
+            while offset + 8 <= size:
+                handle.seek(offset)
+                length, kind = struct.unpack(">I4s", handle.read(8))
+                header = 8
+                if length == 1:  # 64-bit box size
+                    length = struct.unpack(">Q", handle.read(8))[0]
+                    header = 16
+                elif length == 0:  # box runs to the end of the file
+                    length = size - offset
+                if length < header or offset + length > size:
+                    return None
+                if kind == b"moov":
+                    if length > 64 * 1024 * 1024:
+                        return None
+                    moov = handle.read(length - header)
+                    cursor = 0
+                    while cursor + 8 <= len(moov):
+                        inner, inner_kind = struct.unpack(">I4s", moov[cursor:cursor + 8])
+                        if inner < 8 or cursor + inner > len(moov):
+                            return None
+                        if inner_kind == b"mvhd":
+                            body = moov[cursor + 8:cursor + inner]
+                            if body[:1] == bytes([1]):  # version 1 uses 64-bit times
+                                timescale, duration = struct.unpack(">IQ", body[20:32])
+                            else:
+                                timescale, duration = struct.unpack(">II", body[12:20])
+                            return int(duration * 1000 / timescale) if timescale > 0 else None
+                        cursor += inner
+                    return None
+                offset += length
+    except (OSError, struct.error):
+        return None
+    return None
+
+
 def media_duration_ms(path: Path) -> int | None:
-    """Duration when it can be read without extra tools (WAV); otherwise unknown."""
-    if path.suffix.lower() != ".wav" or not path.is_file():
+    """Duration when it can be read from the file itself without extra tools (WAV, m4a/mp4); otherwise unknown."""
+    if not path.is_file():
+        return None
+    suffix = path.suffix.lower()
+    if suffix in _MP4_SUFFIXES:
+        return _mp4_duration_ms(path)
+    if suffix != ".wav":
         return None
     try:
         with wave.open(str(path), "rb") as handle:

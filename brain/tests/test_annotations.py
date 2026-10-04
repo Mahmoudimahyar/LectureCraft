@@ -146,3 +146,35 @@ def test_learner_can_create_the_first_link_for_a_slide_that_has_no_suggestion(st
             store.propose("be562", c.dump_json(stale))
     finally:
         journal.close()
+
+
+# ---- recording length for the formats real sessions use ----------------------------------------------
+def _mp4(duration_ticks: int, timescale: int, *, version: int = 0, moov_last: bool = True) -> bytes:
+    """A minimal ISO-BMFF file: ftyp, a (possibly large) mdat and moov/mvhd — synthetic, no media content."""
+    import struct
+
+    def box(kind: bytes, payload: bytes) -> bytes:
+        return struct.pack(">I4s", 8 + len(payload), kind) + payload
+
+    if version == 0:
+        mvhd = struct.pack(">B3xIIII", 0, 0, 0, timescale, duration_ticks) + b"\x00" * 80
+    else:
+        mvhd = struct.pack(">B3xQQIQ", 1, 0, 0, timescale, duration_ticks) + b"\x00" * 80
+    moov = box(b"moov", box(b"udta", b"xx") + box(b"mvhd", mvhd))
+    mdat = box(b"mdat", b"\x00" * 4096)
+    return box(b"ftyp", b"M4A \x00\x00\x00\x00") + (mdat + moov if moov_last else moov + mdat)
+
+
+@pytest.mark.parametrize("name,data,expected", [
+    ("a.m4a", _mp4(5120 * 44100, 44100), 5_120_000),
+    ("b.mp4", _mp4(90_000 * 75 + 45_000, 90_000, version=1, moov_last=False), 75_500),
+    ("c.m4a", b"not an mp4 at all", None),
+    ("d.m4a", _mp4(10, 0), None),  # a zero timescale is not a duration
+    ("e.mp4", _mp4(1000, 1000)[:40], None),  # truncated before moov
+])
+def test_recording_length_is_read_from_mp4_and_m4a_headers(tmp_path, name, data, expected):
+    from lecture_brain.annotations import media_duration_ms
+
+    path = tmp_path / name
+    path.write_bytes(data)
+    assert media_duration_ms(path) == expected

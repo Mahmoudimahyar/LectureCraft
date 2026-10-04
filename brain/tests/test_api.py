@@ -147,7 +147,24 @@ def test_operator_controls_pause_fixture_modes_and_repair_preview(client, runtim
     assert client.post("/api/fixture/native-mode", json={"mode": "be-a-real-tutor"}).status_code == 400
     settings_view = client.get("/api/settings").json()
     assert settings_view["limits"]["additional_paid_inference_budget_usd"] == 0 and settings_view["devices"][0]["state"] == "paired"
-    assert "private" not in json.dumps(settings_view).lower() and "pem" not in json.dumps(settings_view).lower()
+    # No key material or credential-like field is exposed. (Checked exactly: a random base64 PUBLIC key may contain any
+    # three-letter sequence, so a substring search for "pem" over the whole view is not a meaningful test.)
+    dumped = json.dumps(settings_view)
+    key_file = next(settings.state_dir.rglob("brain-signing-key.pem"))
+    secret_lines = [line for line in key_file.read_text(encoding="ascii").splitlines() if line and not line.startswith("-----")]
+    assert secret_lines and not any(line in dumped for line in secret_lines)
+    assert "PRIVATE KEY" not in dumped and "-----BEGIN" not in dumped
+
+    def field_names(value):
+        if isinstance(value, dict):
+            for key, inner in value.items():
+                yield key
+                yield from field_names(inner)
+        elif isinstance(value, list):
+            for inner in value:
+                yield from field_names(inner)
+
+    assert not [name for name in field_names(settings_view) if any(word in name.lower() for word in ("private", "secret", "token", "password", "cookie"))]
 
 
 def test_startup_queues_preparation_from_updater_receipts_and_the_loop_runs_it(client, runtime):

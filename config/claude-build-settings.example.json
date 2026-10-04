@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.local)",
+      "Read(./.env.production)",
+      "Read(./.local/secrets/**)",
+      "Bash(git push *)",
+      "Bash(gh repo create *)",
+      "Bash(gh release *)",
+      "Bash(schtasks *)",
+      "Bash(reg add *)"
+    ]
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "contract": "ll.control/1",
+  "event_id": "control-fixture",
+  "request_id": "req-fixture",
+  "scope": {
+    "course_id": "fixture-course",
+    "term": "fixture-term"
+  },
+  "created_at": "2026-10-03T12:00:00Z",
+  "command": {
+    "kind": "correct_assessment",
+    "attempt": {
+      "record_id": "attempt-fixture",
+      "artifact": {
+        "path": "attempts/fixture.json",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bytes": 12,
+        "media_type": "application/json"
+      }
+    },
+    "reason": "Synthetic assessment dispute; preserve original answer.",
+    "support": []
+  }
+}

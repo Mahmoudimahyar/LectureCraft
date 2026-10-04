@@ -1,0 +1,4 @@
+# Dependencies only for this offline baseline checker, not application locks.
+# Versions below are the observed local checker environment, not newly downloaded.
+jsonschema==4.26.0
+referencing==0.37.0

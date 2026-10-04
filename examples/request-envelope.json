@@ -1,0 +1,29 @@
+{
+  "kind": "DESIGN_EXAMPLE_NOT_EXECUTABLE",
+  "request_id": "example-request-001",
+  "workflow_id": "WF05",
+  "course_id": "example-course",
+  "session_id": "example-session",
+  "turn_id": "example-turn",
+  "parent_turn_id": null,
+  "mode": "learn",
+  "submission_kind": "learner_explanation",
+  "client_submitted_at": "2026-10-03T10:00:00-04:00",
+  "client_time_basis": "client_reported",
+  "source_refs": [
+    {
+      "source_id": "example-deck",
+      "version_id": "example-v1",
+      "locator": {
+        "type": "slide",
+        "index": 3
+      }
+    }
+  ],
+  "payload_files": [
+    "task.md",
+    "question.md",
+    "learner-response.md"
+  ],
+  "authorization": "Resolved by trusted actor and workflow policy; never granted by this field"
+}

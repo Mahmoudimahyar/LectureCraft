@@ -1,0 +1,29 @@
+{
+  "kind": "SUPERSEDED_GAP_EVENT_EXAMPLE_NOW_DIAGNOSTIC_PROPOSAL_ONLY",
+  "course_id": "example-course",
+  "attempt_id": "example-attempt",
+  "assessment_id": "example-assessment",
+  "skill_id": "example.skill.conditioning.explain",
+  "criterion_id": "example-criterion",
+  "concept_ids": [
+    "example.concept.conditional-events"
+  ],
+  "observed_outcome": "partial",
+  "hypothesis": {
+    "status": "candidate",
+    "cause": "possible reversal of conditioning population",
+    "alternatives": [
+      "notation confusion",
+      "transcription ambiguity",
+      "incorrect assessment"
+    ],
+    "confidence": "uncertain",
+    "next_check": "Ask which group defines the denominator."
+  },
+  "event_time_basis": "example_only",
+  "recorded_at": null,
+  "note": "Synthetic proposal only. Published assessments remain canonical; current gap views derive from their effective corrections. No real timestamp, ID, outcome or permission is asserted.",
+  "proposal_id": "example-gap-event",
+  "authority": "NO_CANONICAL_LEARNER_AUTHORITY",
+  "storage": "Proposed operational run/proposals child, never learning/attempts or a canonical gap ledger"
+}

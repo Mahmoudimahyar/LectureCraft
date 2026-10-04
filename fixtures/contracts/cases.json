@@ -1,0 +1,597 @@
+{
+  "status": "synthetic contract cases; not live records",
+  "cases": [
+    {
+      "id": "request-valid",
+      "schema": "request",
+      "fixture": "fixtures/contracts/request.valid.json",
+      "expected_valid": true,
+      "layer": "schema-and-semantic",
+      "note": "Synthetic payload. Digests/signatures are shapes, not real verification evidence."
+    },
+    {
+      "id": "request-unknown-field",
+      "schema": "request",
+      "fixture": "fixtures/contracts/request.unknown-field.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "request-wrong-version",
+      "schema": "request",
+      "fixture": "fixtures/contracts/request.wrong-version.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "request-required-missing",
+      "schema": "request",
+      "fixture": "fixtures/contracts/request.required-missing.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "bundle-valid",
+      "schema": "bundle",
+      "fixture": "fixtures/contracts/bundle.valid.json",
+      "expected_valid": true,
+      "layer": "schema-and-semantic",
+      "note": "Synthetic payload. Digests/signatures are shapes, not real verification evidence."
+    },
+    {
+      "id": "bundle-unknown-field",
+      "schema": "bundle",
+      "fixture": "fixtures/contracts/bundle.unknown-field.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "bundle-wrong-version",
+      "schema": "bundle",
+      "fixture": "fixtures/contracts/bundle.wrong-version.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "bundle-required-missing",
+      "schema": "bundle",
+      "fixture": "fixtures/contracts/bundle.required-missing.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "signature-valid",
+      "schema": "signature",
+      "fixture": "fixtures/contracts/signature.valid.json",
+      "expected_valid": true,
+      "layer": "schema-and-semantic",
+      "note": "Synthetic payload. Digests/signatures are shapes, not real verification evidence."
+    },
+    {
+      "id": "signature-unknown-field",
+      "schema": "signature",
+      "fixture": "fixtures/contracts/signature.unknown-field.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "signature-wrong-version",
+      "schema": "signature",
+      "fixture": "fixtures/contracts/signature.wrong-version.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "signature-required-missing",
+      "schema": "signature",
+      "fixture": "fixtures/contracts/signature.required-missing.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "submission-valid",
+      "schema": "submission",
+      "fixture": "fixtures/contracts/submission.valid.json",
+      "expected_valid": true,
+      "layer": "schema-and-semantic",
+      "note": "Synthetic payload. Digests/signatures are shapes, not real verification evidence."
+    },
+    {
+      "id": "submission-unknown-field",
+      "schema": "submission",
+      "fixture": "fixtures/contracts/submission.unknown-field.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "submission-wrong-version",
+      "schema": "submission",
+      "fixture": "fixtures/contracts/submission.wrong-version.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "submission-required-missing",
+      "schema": "submission",
+      "fixture": "fixtures/contracts/submission.required-missing.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "message-valid",
+      "schema": "message",
+      "fixture": "fixtures/contracts/message.valid.json",
+      "expected_valid": true,
+      "layer": "schema-and-semantic",
+      "note": "Synthetic payload. Digests/signatures are shapes, not real verification evidence."
+    },
+    {
+      "id": "message-unknown-field",
+      "schema": "message",
+      "fixture": "fixtures/contracts/message.unknown-field.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "message-wrong-version",
+      "schema": "message",
+      "fixture": "fixtures/contracts/message.wrong-version.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "message-required-missing",
+      "schema": "message",
+      "fixture": "fixtures/contracts/message.required-missing.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "context-valid",
+      "schema": "context",
+      "fixture": "fixtures/contracts/context.valid.json",
+      "expected_valid": true,
+      "layer": "schema-and-semantic",
+      "note": "Synthetic payload. Digests/signatures are shapes, not real verification evidence."
+    },
+    {
+      "id": "context-unknown-field",
+      "schema": "context",
+      "fixture": "fixtures/contracts/context.unknown-field.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "context-wrong-version",
+      "schema": "context",
+      "fixture": "fixtures/contracts/context.wrong-version.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "context-required-missing",
+      "schema": "context",
+      "fixture": "fixtures/contracts/context.required-missing.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "native-result-valid",
+      "schema": "native-result",
+      "fixture": "fixtures/contracts/native-result.valid.json",
+      "expected_valid": true,
+      "layer": "schema-and-semantic",
+      "note": "Synthetic payload. Digests/signatures are shapes, not real verification evidence."
+    },
+    {
+      "id": "native-result-unknown-field",
+      "schema": "native-result",
+      "fixture": "fixtures/contracts/native-result.unknown-field.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "native-result-wrong-version",
+      "schema": "native-result",
+      "fixture": "fixtures/contracts/native-result.wrong-version.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "native-result-required-missing",
+      "schema": "native-result",
+      "fixture": "fixtures/contracts/native-result.required-missing.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "publication-valid",
+      "schema": "publication",
+      "fixture": "fixtures/contracts/publication.valid.json",
+      "expected_valid": true,
+      "layer": "schema-and-semantic",
+      "note": "Synthetic payload. Digests/signatures are shapes, not real verification evidence."
+    },
+    {
+      "id": "publication-unknown-field",
+      "schema": "publication",
+      "fixture": "fixtures/contracts/publication.unknown-field.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "publication-wrong-version",
+      "schema": "publication",
+      "fixture": "fixtures/contracts/publication.wrong-version.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "publication-required-missing",
+      "schema": "publication",
+      "fixture": "fixtures/contracts/publication.required-missing.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "annotation-valid",
+      "schema": "annotation",
+      "fixture": "fixtures/contracts/annotation.valid.json",
+      "expected_valid": true,
+      "layer": "schema-and-semantic",
+      "note": "Synthetic payload. Digests/signatures are shapes, not real verification evidence."
+    },
+    {
+      "id": "annotation-unknown-field",
+      "schema": "annotation",
+      "fixture": "fixtures/contracts/annotation.unknown-field.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "annotation-wrong-version",
+      "schema": "annotation",
+      "fixture": "fixtures/contracts/annotation.wrong-version.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "annotation-required-missing",
+      "schema": "annotation",
+      "fixture": "fixtures/contracts/annotation.required-missing.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "review-item-valid",
+      "schema": "review-item",
+      "fixture": "fixtures/contracts/review-item.valid.json",
+      "expected_valid": true,
+      "layer": "schema-and-semantic",
+      "note": "Synthetic payload. Digests/signatures are shapes, not real verification evidence."
+    },
+    {
+      "id": "review-item-unknown-field",
+      "schema": "review-item",
+      "fixture": "fixtures/contracts/review-item.unknown-field.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "review-item-wrong-version",
+      "schema": "review-item",
+      "fixture": "fixtures/contracts/review-item.wrong-version.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "review-item-required-missing",
+      "schema": "review-item",
+      "fixture": "fixtures/contracts/review-item.required-missing.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "review-event-valid",
+      "schema": "review-event",
+      "fixture": "fixtures/contracts/review-event.valid.json",
+      "expected_valid": true,
+      "layer": "schema-and-semantic",
+      "note": "Synthetic payload. Digests/signatures are shapes, not real verification evidence."
+    },
+    {
+      "id": "review-event-unknown-field",
+      "schema": "review-event",
+      "fixture": "fixtures/contracts/review-event.unknown-field.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "review-event-wrong-version",
+      "schema": "review-event",
+      "fixture": "fixtures/contracts/review-event.wrong-version.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "review-event-required-missing",
+      "schema": "review-event",
+      "fixture": "fixtures/contracts/review-event.required-missing.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "resume-valid",
+      "schema": "resume",
+      "fixture": "fixtures/contracts/resume.valid.json",
+      "expected_valid": true,
+      "layer": "schema-and-semantic",
+      "note": "Synthetic payload. Digests/signatures are shapes, not real verification evidence."
+    },
+    {
+      "id": "resume-unknown-field",
+      "schema": "resume",
+      "fixture": "fixtures/contracts/resume.unknown-field.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "resume-wrong-version",
+      "schema": "resume",
+      "fixture": "fixtures/contracts/resume.wrong-version.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "resume-required-missing",
+      "schema": "resume",
+      "fixture": "fixtures/contracts/resume.required-missing.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "view-valid",
+      "schema": "view",
+      "fixture": "fixtures/contracts/view.valid.json",
+      "expected_valid": true,
+      "layer": "schema-and-semantic",
+      "note": "Synthetic payload. Digests/signatures are shapes, not real verification evidence."
+    },
+    {
+      "id": "view-unknown-field",
+      "schema": "view",
+      "fixture": "fixtures/contracts/view.unknown-field.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "view-wrong-version",
+      "schema": "view",
+      "fixture": "fixtures/contracts/view.wrong-version.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "view-required-missing",
+      "schema": "view",
+      "fixture": "fixtures/contracts/view.required-missing.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "request-path-traversal",
+      "schema": "request",
+      "fixture": "fixtures/contracts/request.path-traversal.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "request-timestamp-no-zone",
+      "schema": "request",
+      "fixture": "fixtures/contracts/request.timestamp-no-zone.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "request-expired-before-submit",
+      "schema": "request",
+      "fixture": "fixtures/contracts/request.expired-before-submit.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "bundle-duplicate-path",
+      "schema": "bundle",
+      "fixture": "fixtures/contracts/bundle.duplicate-path.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "bundle-record-not-listed",
+      "schema": "bundle",
+      "fixture": "fixtures/contracts/bundle.record-not-listed.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "bundle-case-collision",
+      "schema": "bundle",
+      "fixture": "fixtures/contracts/bundle.case-collision.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "submission-unknown-time-exact-value",
+      "schema": "submission",
+      "fixture": "fixtures/contracts/submission.unknown-time-exact-value.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "submission-empty-answer",
+      "schema": "submission",
+      "fixture": "fixtures/contracts/submission.empty-answer.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "submission-family-half-reference",
+      "schema": "submission",
+      "fixture": "fixtures/contracts/submission.family-half-reference.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "native-result-unknown-terminal",
+      "schema": "native-result",
+      "fixture": "fixtures/contracts/native-result.unknown-terminal.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "native-result-empty-completed",
+      "schema": "native-result",
+      "fixture": "fixtures/contracts/native-result.empty-completed.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "native-result-false-terminal",
+      "schema": "native-result",
+      "fixture": "fixtures/contracts/native-result.false-terminal.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "publication-saved-without-record",
+      "schema": "publication",
+      "fixture": "fixtures/contracts/publication.saved-without-record.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "publication-blocked-with-canonical",
+      "schema": "publication",
+      "fixture": "fixtures/contracts/publication.blocked-with-canonical.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "annotation-reverse-time",
+      "schema": "annotation",
+      "fixture": "fixtures/contracts/annotation.reverse-time.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "annotation-unreviewed-confirmed",
+      "schema": "annotation",
+      "fixture": "fixtures/contracts/annotation.unreviewed-confirmed.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "annotation-media-to-text",
+      "schema": "annotation",
+      "fixture": "fixtures/contracts/annotation.media-to-text.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "review-item-active-no-rubric",
+      "schema": "review-item",
+      "fixture": "fixtures/contracts/review-item.active-no-rubric.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "review-event-rate-without-evidence",
+      "schema": "review-event",
+      "fixture": "fixtures/contracts/review-event.rate-without-evidence.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "review-event-silently-rate-assisted",
+      "schema": "review-event",
+      "fixture": "fixtures/contracts/review-event.silently-rate-assisted.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "resume-zero-page",
+      "schema": "resume",
+      "fixture": "fixtures/contracts/resume.zero-page.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "resume-out-of-page-box",
+      "schema": "resume",
+      "fixture": "fixtures/contracts/resume.out-of-page-box.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "view-new-assessment-facts",
+      "schema": "view",
+      "fixture": "fixtures/contracts/view.new-assessment-facts.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "control.valid",
+      "schema": "control",
+      "fixture": "fixtures/contracts/control.valid.json",
+      "expected_valid": true
+    },
+    {
+      "id": "control.extra-field.invalid",
+      "schema": "control",
+      "fixture": "fixtures/contracts/control.extra-field.invalid.json",
+      "expected_valid": false
+    },
+    {
+      "id": "control.missing-command.invalid",
+      "schema": "control",
+      "fixture": "fixtures/contracts/control.missing-command.invalid.json",
+      "expected_valid": false
+    },
+    {
+      "id": "control.unrecognized-action.invalid",
+      "schema": "control",
+      "fixture": "fixtures/contracts/control.unrecognized-action.invalid.json",
+      "expected_valid": false
+    },
+    {
+      "id": "control.self-cancel.invalid",
+      "schema": "control",
+      "fixture": "fixtures/contracts/control.self-cancel.invalid.json",
+      "expected_valid": false
+    },
+    {
+      "id": "control.note.valid",
+      "schema": "control",
+      "fixture": "fixtures/contracts/control.note.valid.json",
+      "expected_valid": true
+    },
+    {
+      "id": "control.source-hint.valid",
+      "schema": "control",
+      "fixture": "fixtures/contracts/control.source-hint.valid.json",
+      "expected_valid": true
+    },
+    {
+      "id": "control.url.invalid",
+      "schema": "control",
+      "fixture": "fixtures/contracts/control.url.invalid.json",
+      "expected_valid": false
+    },
+    {
+      "id": "control.dispute.valid",
+      "schema": "control",
+      "fixture": "fixtures/contracts/control.dispute.valid.json",
+      "expected_valid": true
+    }
+  ]
+}

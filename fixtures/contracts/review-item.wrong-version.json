@@ -1,0 +1,33 @@
+{
+  "contract": "ll.review-item/999",
+  "item_id": "item-fixture",
+  "scope": {
+    "course_id": "fixture-course",
+    "term": "fixture-term"
+  },
+  "revision": 1,
+  "question": {
+    "question_id": null,
+    "family_id": null,
+    "family_revision": null,
+    "prompt": "Synthetic: explain why overwriting an existing file is disallowed.",
+    "sources": [
+      {
+        "source_id": "fixture-source",
+        "version_id": "fixture-v1",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "locator": {
+          "kind": "page",
+          "page": 1,
+          "printed_label": null
+        }
+      }
+    ],
+    "attachments": []
+  },
+  "kind": "recall",
+  "selection": "saved_only",
+  "scheduler_config": null,
+  "supersedes": null,
+  "created_at": "2026-10-03T12:00:00Z"
+}

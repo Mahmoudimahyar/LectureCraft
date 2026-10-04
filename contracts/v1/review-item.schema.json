@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.lecture-learning.invalid/v1/review-item.schema.json",
+  "title": "Lecture Learning review-item v1 (new adapter contract; not existing academic schema)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "item_id",
+    "scope",
+    "revision",
+    "question",
+    "kind",
+    "selection",
+    "scheduler_config",
+    "supersedes",
+    "created_at"
+  ],
+  "properties": {
+    "contract": {
+      "const": "ll.review-item/1"
+    },
+    "item_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "scope": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/scope"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "question": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/question"
+    },
+    "kind": {
+      "enum": [
+        "recall",
+        "explanation",
+        "application",
+        "diagram"
+      ]
+    },
+    "selection": {
+      "enum": [
+        "saved_only",
+        "active",
+        "suspended",
+        "retired"
+      ]
+    },
+    "scheduler_config": {
+      "anyOf": [
+        {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/artifact"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "supersedes": {
+      "anyOf": [
+        {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/evidence_ref"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "created_at": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/time"
+    }
+  }
+}

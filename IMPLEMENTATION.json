@@ -1,0 +1,28 @@
+{
+  "package_version": "0.10.0",
+  "specification_baseline": "0.9.0",
+  "kind": "Private full-project Claude implementation starter; not a finished learning app",
+  "app_version": null,
+  "prior_zip_sha256": "0005d60de780f7f7bedd1827f34a1fa50bd4d5d64c7c56bd6f9263cdfcece95f",
+  "scope": "All 38 tasks; preserve 32 UI flows, 64 stories, 12 workflows, 15 memory responsibilities and all-lecture goal",
+  "source_request": "User requested final download plus continuous full-project TDD/SDD implementation by Claude, with no routine clarification stops",
+  "foundation": {
+    "requested_version": "0.5.0-rc.1",
+    "status": "RAW_ARCHIVE_UNAVAILABLE_IN_THIS_EXPORT",
+    "evidence": "Library metadata found seed-repo-0.5.0-rc.1.zip, 405513 bytes; raw materialization returned no authorized byte path. No substituted download, fake source hash, or fabricated Seed tests.",
+    "importer": "tools/import_seed.py",
+    "blocking": "Upstream integration verification remains pending; application implementation and provided offline checks are independently runnable."
+  },
+  "authority": "PROMPTS/IMPLEMENT_ALL.md when submitted by the user; docs/implementation/execution-charter.md narrows allowed local work. Files do not authenticate consent or bypass runtime permissions.",
+  "not_activated": [
+    "course writes",
+    "native-thread dispatch",
+    "Drive OAuth",
+    "device pairing",
+    "OS startup",
+    "public listener",
+    "deployment",
+    "GitHub writes",
+    "extra inference bill"
+  ]
+}

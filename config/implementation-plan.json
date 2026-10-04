@@ -1,0 +1,910 @@
+{
+  "version": 1,
+  "scope": "local implementation facets of all 38 baseline tasks; not a replacement for their live acceptance gates",
+  "tasks": [
+    {
+      "id": "LL001",
+      "title": "Prepare this application workspace and integrate genuine Seed if available",
+      "dependencies": [],
+      "milestone": "R0",
+      "features": [],
+      "local_completion": "Use this ready starter directly. Import only the exact authorized Seed archive if locally available; preserve its provenance/checks. If missing, record upstream-source dependency without blocking app code. Never reconstruct or claim upstream tooling.",
+      "source_task": "LL001",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "Preserve upstream source identity and applicable starter checks",
+        "No files copied from canonical course folders into public Git",
+        "Check instructions, feature mappings and explicit scoped permission"
+      ]
+    },
+    {
+      "id": "LL002",
+      "title": "Resolve selected dependencies and reproducible locks",
+      "dependencies": [
+        "LL001"
+      ],
+      "milestone": "R0",
+      "features": [],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL002",
+      "original_release_gates": [
+        "BUILD_SCOPE",
+        "DEPENDENCY_INSTALL"
+      ],
+      "source_acceptance": [
+        "Review actual package licenses, provenance and supported APIs",
+        "Clean environment install plus import/build tests",
+        "Record all exact versions, checksums and generated-component source revisions"
+      ]
+    },
+    {
+      "id": "LL003",
+      "title": "Implement owner-interface inventory and isolated fixtures",
+      "dependencies": [
+        "LL001"
+      ],
+      "milestone": "R0",
+      "features": [],
+      "local_completion": "Read only the explicitly bound course schema/helper/catalog surface after user and runtime permission. Never import/execute a live helper assuming --root makes it safe. If inaccessible, implement the typed boundary with clearly synthetic fixtures; real compatibility is blocked, not presumed.",
+      "source_task": "LL003",
+      "original_release_gates": [
+        "OWNER_SOURCE_ACCESS"
+      ],
+      "source_acceptance": [
+        "Validate redacted schema fixtures against supplied original schemas",
+        "Identify global ROOT/save paths before any test import",
+        "Record exact interpreter and distinct writer locks"
+      ]
+    },
+    {
+      "id": "LL004",
+      "title": "Implement shared wire validation and generated client types",
+      "dependencies": [
+        "LL001"
+      ],
+      "milestone": "R0",
+      "features": [],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL004",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "All supplied positive/negative examples agree in Python and browser validators",
+        "Duplicate JSON keys, unsupported versions, path limits and cross-record identity fail closed",
+        "No download of schemas from payload URLs"
+      ]
+    },
+    {
+      "id": "LL005",
+      "title": "Build shared source-first shell, tokens and components",
+      "dependencies": [
+        "LL002",
+        "LL004"
+      ],
+      "milestone": "R1",
+      "features": [
+        "workspace-access"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL005",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "Light/Dark/System first paint, focus, reduced-motion and original-color invariants",
+        "Storybook local visual states including errors and empty lists",
+        "No unnecessary animation/UI framework duplication"
+      ]
+    },
+    {
+      "id": "LL006",
+      "title": "Implement local drafts and immutable submission capture",
+      "dependencies": [
+        "LL004",
+        "LL005"
+      ],
+      "milestone": "R1",
+      "features": [
+        "evidence-alignment",
+        "tutoring"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL006",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "Input survives model failure before dispatch",
+        "No later tutor text mutates hashed submission",
+        "Storage unavailable state is not falsely labeled safe"
+      ]
+    },
+    {
+      "id": "LL007",
+      "title": "Implement local job journal and migration lifecycle",
+      "dependencies": [
+        "LL004"
+      ],
+      "milestone": "R1",
+      "features": [
+        "agent-dispatch"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL007",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "Atomic admission, duplicate identity, fencing, restart and compare-and-swap",
+        "SQLite/WAL only on local nonsynced storage",
+        "Idle produces zero model requests"
+      ]
+    },
+    {
+      "id": "LL008",
+      "title": "Isolate and wrap the real course writers",
+      "dependencies": [
+        "LL003",
+        "LL004",
+        "LL006"
+      ],
+      "milestone": "R1",
+      "features": [
+        "tutoring"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL008",
+      "original_release_gates": [
+        "BUILD_SCOPE",
+        "OWNER_SOURCE_ACCESS"
+      ],
+      "source_acceptance": [
+        "Fix global-root defect only in isolated copy and compare two roots",
+        "Same ID same bytes no-op; different bytes conflict; saved-but-view-failed retained",
+        "Tracking source-hash flag repaired/tested separately; no learning writes through tracking publisher"
+      ]
+    },
+    {
+      "id": "LL009",
+      "title": "Normalize read-only catalogs and complete source inventory",
+      "dependencies": [
+        "LL003",
+        "LL004"
+      ],
+      "milestone": "R1",
+      "features": [
+        "progress",
+        "workspace-access"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL009",
+      "original_release_gates": [
+        "BUILD_SCOPE",
+        "OWNER_SOURCE_ACCESS"
+      ],
+      "source_acceptance": [
+        "All five configured course identities and every inventory entry retained",
+        "Question containment not converted to concept prerequisite",
+        "Missing/unindexed/unrecorded/old unavailable bytes remain distinct"
+      ]
+    },
+    {
+      "id": "LL010",
+      "title": "Implement course navigation and bounded search",
+      "dependencies": [
+        "LL005",
+        "LL009"
+      ],
+      "milestone": "R1",
+      "features": [
+        "workspace-access"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL010",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "Search preserves draft/slide/source revision and Back behavior",
+        "Scope defaults current course; cross-course explicit",
+        "No whole-archive model prompt or always-on graph server"
+      ]
+    },
+    {
+      "id": "LL011",
+      "title": "Render slides, figures and scoped source drawers",
+      "dependencies": [
+        "LL005",
+        "LL009"
+      ],
+      "milestone": "R1",
+      "features": [
+        "evidence-alignment"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL011",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "Actual PDF display/text-layer and figure behavior on permitted fixtures",
+        "Versioned rendition never overwrites original PDF/PPTX",
+        "Source script/actions disabled; restricted HTML shown safely"
+      ]
+    },
+    {
+      "id": "LL012",
+      "title": "Implement clip playback and synchronized transcript controls",
+      "dependencies": [
+        "LL011"
+      ],
+      "milestone": "R1",
+      "features": [
+        "evidence-alignment"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL012",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "Bounded interval default stop, repeats, seek tolerance and clock origins",
+        "Untimed transcript has line refs only",
+        "Mic recording pauses lecture audio; panel/theme changes preserve player"
+      ]
+    },
+    {
+      "id": "LL013",
+      "title": "Implement durable owned source annotations and correction UI",
+      "dependencies": [
+        "LL004",
+        "LL008",
+        "LL011",
+        "LL012"
+      ],
+      "milestone": "R2",
+      "features": [
+        "evidence-alignment"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL013",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "Confirmed correction survives regenerating exports",
+        "Two conflicting revisions require reconciliation",
+        "No inferred chapter reference presented as exact page"
+      ]
+    },
+    {
+      "id": "LL014",
+      "title": "Extend the existing updater receipt handoff",
+      "dependencies": [
+        "LL003",
+        "LL007",
+        "LL009"
+      ],
+      "milestone": "R2",
+      "features": [
+        "workspace-access"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL014",
+      "original_release_gates": [
+        "BUILD_SCOPE",
+        "OWNER_SOURCE_ACCESS"
+      ],
+      "source_acceptance": [
+        "Consume actual publication receipts; do not add competing cron",
+        "Preserve safety caps until owner approves continuation policy",
+        "No model rescan loop from generated output Markdown"
+      ]
+    },
+    {
+      "id": "LL015",
+      "title": "Implement complete-archive preparation and alignment pipeline",
+      "dependencies": [
+        "LL012",
+        "LL013",
+        "LL014"
+      ],
+      "milestone": "R2",
+      "features": [
+        "evidence-alignment",
+        "workspace-access"
+      ],
+      "local_completion": "Build file discovery, bounded preparation, versioned matching, correction and all-lecture coverage processing; run on representative synthetic media. Actual processing of all permitted original lectures and quality labels remains a separate live gate.",
+      "source_task": "LL015",
+      "original_release_gates": [
+        "BUILD_SCOPE",
+        "COURSE_READ",
+        "PREPARATION_EXECUTION"
+      ],
+      "source_acceptance": [
+        "Inspect transcript fidelity and actual video content before selecting match basis",
+        "Measure coverage, wrong links and boundary errors on held-out sources",
+        "Entire release inventory processed; absent originals retain honest disposition"
+      ]
+    },
+    {
+      "id": "LL016",
+      "title": "Project typed concept structures from existing owners",
+      "dependencies": [
+        "LL009",
+        "LL013",
+        "LL014"
+      ],
+      "milestone": "R2",
+      "features": [
+        "progress"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL016",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "Bounded traversal with repeated identity and appropriate cycle handling",
+        "No new independent graph/gap database",
+        "Catalog changes staged through owners and source-backed"
+      ]
+    },
+    {
+      "id": "LL017",
+      "title": "Pair devices and implement signed immutable Drive bundles",
+      "dependencies": [
+        "LL002",
+        "LL004",
+        "LL006",
+        "LL007"
+      ],
+      "milestone": "R2",
+      "features": [
+        "workspace-access"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL017",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "Real crypto library cross-language fixture compatibility",
+        "Unpaired/revoked key cannot dispatch; signed bad input still rejected",
+        "Complete manifest/bytes, duplicate Drive names, order and replay handled"
+      ]
+    },
+    {
+      "id": "LL018",
+      "title": "Implement native adapter contract and safe local control",
+      "dependencies": [
+        "LL004",
+        "LL007"
+      ],
+      "milestone": "R2",
+      "features": [
+        "agent-dispatch"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL018",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "Wrong course/thread/config blocks with no fallback",
+        "Subscription authentication not confused with native conversation identity",
+        "Prompt-only restrictions cannot claim OS/tool safety"
+      ]
+    },
+    {
+      "id": "LL019",
+      "title": "Implement the native connection verifier and report generator",
+      "dependencies": [
+        "LL018"
+      ],
+      "milestone": "R2",
+      "features": [
+        "agent-dispatch"
+      ],
+      "local_completion": "Implement supported target/capability/terminal-result probes and tests; do not dispatch into existing course threads. Report actual required settings and unverified parts. User-approved real target roundtrip is still required.",
+      "source_task": "LL019",
+      "original_release_gates": [
+        "NATIVE_PROBE"
+      ],
+      "source_acceptance": [
+        "Disposable explicit target, bounded permission, correlated process-readable terminal result",
+        "Queue success alone insufficient; unknown acceptance never blind retry",
+        "Record actual product/thread/model/tool capabilities and version; stop on unsafe interface"
+      ]
+    },
+    {
+      "id": "LL020",
+      "title": "Implement second-device Drive proof and pairing checks",
+      "dependencies": [
+        "LL017"
+      ],
+      "milestone": "R2",
+      "features": [
+        "agent-dispatch",
+        "workspace-access"
+      ],
+      "local_completion": "Build genuine OAuth/Drive integration code, exact API semantics and a separately labeled fixture transport. Do not authorize accounts, upload course data or claim real delivery until the user completes enrollment.",
+      "source_task": "LL020",
+      "original_release_gates": [
+        "DRIVE_OAUTH",
+        "STATIC_DEPLOYMENT",
+        "DEVICE_PAIRING"
+      ],
+      "source_acceptance": [
+        "User-authenticated scoped OAuth, file bytes, playback and write scope actually work",
+        "Public static shell contains no private data; no inbound PC port",
+        "Result identity/signature and remote completeness checked independently of local save"
+      ]
+    },
+    {
+      "id": "LL021",
+      "title": "Join coordinator, updater and owning writers",
+      "dependencies": [
+        "LL007",
+        "LL008",
+        "LL014",
+        "LL018"
+      ],
+      "milestone": "R3",
+      "features": [
+        "agent-dispatch"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL021",
+      "original_release_gates": [
+        "BUILD_SCOPE",
+        "NATIVE_PROBE",
+        "DRIVE_OAUTH"
+      ],
+      "source_acceptance": [
+        "One thread turn and owner lock at a time; fair bounded work",
+        "Uncertain/cancelled/late outcomes cannot duplicate publications",
+        "Approve process startup separately from tests"
+      ]
+    },
+    {
+      "id": "LL022",
+      "title": "Implement quick answers and deeper sourced conversation",
+      "dependencies": [
+        "LL006",
+        "LL010",
+        "LL018"
+      ],
+      "milestone": "R3",
+      "features": [
+        "tutoring"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL022",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "Quick answer produces no fake not_observed attempt or loss of prior evidence",
+        "Sources and actual loaded context receipts linked",
+        "No forced quiz; next action reflects time preference"
+      ]
+    },
+    {
+      "id": "LL023",
+      "title": "Implement criterion-aware teach-back and practice",
+      "dependencies": [
+        "LL006",
+        "LL008",
+        "LL009",
+        "LL022"
+      ],
+      "milestone": "R3",
+      "features": [
+        "tutoring"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL023",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "Freeze intended family/revision and validate same intended skills",
+        "Alternate correct answers and uncertainty supported",
+        "Capture stays available if family missing or canonical save blocked"
+      ]
+    },
+    {
+      "id": "LL024",
+      "title": "Implement spoken teach-back with corrected text evidence",
+      "dependencies": [
+        "LL006",
+        "LL012",
+        "LL023"
+      ],
+      "milestone": "R3",
+      "features": [
+        "tutoring"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL024",
+      "original_release_gates": [
+        "BUILD_SCOPE",
+        "MICROPHONE",
+        "LOCAL_MODEL_INSTALL"
+      ],
+      "source_acceptance": [
+        "User gesture, pause audio, review/correct transcript before assessment",
+        "No silent hosted audio provider or persistent raw voice",
+        "Text fallback; unsupported recognition clearly blocked"
+      ]
+    },
+    {
+      "id": "LL025",
+      "title": "Implement task evaluation harness and curated-label workflow",
+      "dependencies": [
+        "LL022",
+        "LL023",
+        "LL024",
+        "LL013",
+        "LL014"
+      ],
+      "milestone": "R3",
+      "features": [
+        "tutoring"
+      ],
+      "local_completion": "Build evaluators for alignment/tutoring/diagnosis with independent test examples. Synthetic labels exercise mechanics only; real reviewed labels and authorized model evaluations are still required.",
+      "source_task": "LL025",
+      "original_release_gates": [
+        "COURSE_READ",
+        "NATIVE_PROBE",
+        "EVALUATION_RUNS"
+      ],
+      "source_acceptance": [
+        "Reviewed training/held-out split and counterexamples; no self-judged only promotion",
+        "Separate quote/source accuracy, grade accuracy, useful abstention, cost/latency",
+        "Model/rubric change reruns relevant tests without rewriting history"
+      ]
+    },
+    {
+      "id": "LL026",
+      "title": "Implement diagnostic hypothesis and real WAITING_USER continuation",
+      "dependencies": [
+        "LL023"
+      ],
+      "milestone": "R3",
+      "features": [
+        "tutoring"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL026",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "Normally one or two discriminating prompts then learner chooses depth",
+        "Tutor-caused errors and alternative causes retained",
+        "No generated learner response; no prerequisite weakness inherited from graph",
+        "Fixture diagnosis can proceed before LL025; no live pedagogical quality claim until its reviewed evaluation passes."
+      ]
+    },
+    {
+      "id": "LL027",
+      "title": "Implement disputes, capture corrections and genuine new answers",
+      "dependencies": [
+        "LL008",
+        "LL023"
+      ],
+      "milestone": "R3",
+      "features": [
+        "progress",
+        "tutoring"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL027",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "Nonbranching assessment_revision chain; same original skill set",
+        "Transcript correction/new answer differ from regrade",
+        "Rebuild only affected views; do not delete original evidence"
+      ]
+    },
+    {
+      "id": "LL028",
+      "title": "Implement selected rich questions and review items",
+      "dependencies": [
+        "LL009",
+        "LL016",
+        "LL023"
+      ],
+      "milestone": "R4",
+      "features": [
+        "review"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL028",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "Existing banks first; source/rubric provenance; bounded suggestions",
+        "Saved_only versus active explicit",
+        "Edited item retains previous prompt/rating history"
+      ]
+    },
+    {
+      "id": "LL029",
+      "title": "Implement scheduler adapter and immutable review events",
+      "dependencies": [
+        "LL002",
+        "LL004",
+        "LL023",
+        "LL028"
+      ],
+      "milestone": "R4",
+      "features": [
+        "review"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL029",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "Use py-fsrs; record exact config/library version and rating basis",
+        "One real event per review; no rating from skip/uncertain assessment",
+        "Assisted tasks retained as practice with explicit rescheduling choice, no automatic pass"
+      ]
+    },
+    {
+      "id": "LL030",
+      "title": "Implement evidence-linked progress and current gap views",
+      "dependencies": [
+        "LL016",
+        "LL027",
+        "LL029"
+      ],
+      "milestone": "R4",
+      "features": [
+        "progress"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL030",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "Effective corrections and counterevidence; no mastery/exam probability invention",
+        "Study choices distinct from competence",
+        "Zero attempts=unassessed; finish session adds no calendar tasks"
+      ]
+    },
+    {
+      "id": "LL031",
+      "title": "Implement versioned resume and multi-device conflicts",
+      "dependencies": [
+        "LL006",
+        "LL017"
+      ],
+      "milestone": "R4",
+      "features": [
+        "progress",
+        "workspace-access"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL031",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "Preserve both concurrent drafts; explicit lineage and active source version",
+        "Never autoplay on device switch",
+        "Signout does not falsely cancel committed work or erase remote history",
+        "Conflict logic is tested on synthetic device histories first; LL020 and LL034 still gate actual multi-device claims."
+      ]
+    },
+    {
+      "id": "LL032",
+      "title": "Implement scoped export, retention and reference-safe cleanup",
+      "dependencies": [
+        "LL008",
+        "LL027",
+        "LL030",
+        "LL031"
+      ],
+      "milestone": "R4",
+      "features": [
+        "workspace-access"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL032",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "Referenced full-response sidecars are durable, not temporary scratch",
+        "Original recordings never deleted by teach-back retention policy",
+        "Preview deletion scope, preserve unresolved operations, log actual copies affected"
+      ]
+    },
+    {
+      "id": "LL033",
+      "title": "Implement activity, quota, lifecycle and bounded maintenance",
+      "dependencies": [
+        "LL021",
+        "LL031",
+        "LL032"
+      ],
+      "milestone": "R4",
+      "features": [
+        "agent-dispatch"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL033",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "Pause on auth/version change; no credential inspection or bypass",
+        "Test lock-screen/disconnect/restart with receipts; no automatic lock theft",
+        "No unapproved spending; task failure does not starve independent jobs"
+      ]
+    },
+    {
+      "id": "LL034",
+      "title": "Run real local-browser tests for all implemented UI flows",
+      "dependencies": [
+        "LL010",
+        "LL011",
+        "LL012",
+        "LL013",
+        "LL016",
+        "LL022",
+        "LL023",
+        "LL024",
+        "LL026",
+        "LL027",
+        "LL028",
+        "LL029",
+        "LL030",
+        "LL031",
+        "LL032",
+        "LL033"
+      ],
+      "milestone": "R5",
+      "features": [
+        "agent-dispatch",
+        "evidence-alignment",
+        "progress",
+        "review",
+        "tutoring",
+        "workspace-access"
+      ],
+      "local_completion": "Install authorized dev browser in the code workspace; exercise rendered UI including negative, both-theme and focus states. Record screenshots/results. Emulation is not physical-phone acceptance; live adapter tests remain distinct.",
+      "source_task": "LL034",
+      "original_release_gates": [
+        "BUILD_SCOPE",
+        "DEVICE_ACCEPTANCE"
+      ],
+      "source_acceptance": [
+        "All 32 flows, 24 shared cases and paired-theme states mapped to actual tests",
+        "Keyboard, reflow, focus and real mobile/touch sessions; emulation labeled separately",
+        "No leaked answers/data in URLs, HTML or hidden drawers"
+      ]
+    },
+    {
+      "id": "LL035",
+      "title": "Implement whole-product live-acceptance runner and readiness report",
+      "dependencies": [
+        "LL015",
+        "LL021",
+        "LL026",
+        "LL027",
+        "LL029",
+        "LL030"
+      ],
+      "milestone": "R5",
+      "features": [
+        "agent-dispatch",
+        "evidence-alignment",
+        "progress",
+        "review",
+        "tutoring",
+        "workspace-access"
+      ],
+      "local_completion": "Implement a real fail-closed acceptance runner and all-lecture inventory denominator. Exercise failure cases locally. If native/Drive/writer prerequisites are absent, report NOT_RUN/BLOCKED instead of mocked success.",
+      "source_task": "LL035",
+      "original_release_gates": [
+        "COURSE_READ",
+        "LIVE_WRITE",
+        "PREPARATION_EXECUTION",
+        "EVALUATION_RUNS"
+      ],
+      "source_acceptance": [
+        "All release-time lecture/source denominator accounted for and no recoverable unprocessed backlog",
+        "Actual native/Drive/writer path, assessment quality and source linking pass independently",
+        "No fixture output can satisfy a live check"
+      ]
+    },
+    {
+      "id": "LL036",
+      "title": "Exercise backups, updates and rollback on copies",
+      "dependencies": [
+        "LL008",
+        "LL032",
+        "LL033"
+      ],
+      "milestone": "R5",
+      "features": [
+        "agent-dispatch",
+        "workspace-access"
+      ],
+      "local_completion": "Implement the task fully in code with real local tests on safe inputs. Required live acceptance stays separate; fixtures cannot satisfy live evidence.",
+      "source_task": "LL036",
+      "original_release_gates": [
+        "BUILD_SCOPE"
+      ],
+      "source_acceptance": [
+        "Restore verified compatible copy without replacing newer valid canonical records",
+        "Backward reader contract and local DB migration/backup tested",
+        "Raw audio and sensitive artifacts adhere to configured consent and lifetime"
+      ]
+    },
+    {
+      "id": "LL037",
+      "title": "Implement CI workflows and release evidence locally",
+      "dependencies": [
+        "LL001",
+        "LL002",
+        "LL004"
+      ],
+      "milestone": "R5",
+      "features": [],
+      "local_completion": "Write real app test/build/browser/coverage checks and retained Seed checks if genuine source was imported. No remote repo, secret, branch rule or push without explicit approval.",
+      "source_task": "LL037",
+      "original_release_gates": [
+        "BUILD_SCOPE",
+        "GITHUB_SETTINGS"
+      ],
+      "source_acceptance": [
+        "Retain real Seed checks; application checks cannot be echo/mock success",
+        "Required checks include contracts, types, tests, browser and relevant live release evidence",
+        "Review actual remote rules and secrets; no hidden standalone deploy"
+      ]
+    },
+    {
+      "id": "LL038",
+      "title": "Package the implemented candidate with exact residual blockers",
+      "dependencies": [
+        "LL034",
+        "LL036",
+        "LL037"
+      ],
+      "milestone": "R5",
+      "features": [
+        "agent-dispatch",
+        "evidence-alignment",
+        "progress",
+        "review",
+        "tutoring",
+        "workspace-access"
+      ],
+      "local_completion": "Build a reproducible private candidate if the implemented local checks pass. Label an integration-blocked candidate accordingly; do not publish, tag as stable, or call the whole product complete until all original release gates pass.",
+      "source_task": "LL038",
+      "original_release_gates": [
+        "RELEASE_APPROVAL",
+        "STATIC_DEPLOYMENT"
+      ],
+      "source_acceptance": [
+        "Verify clean artifact hashes and install/extract smoke before signing/tag",
+        "Review real evidence for every active requirement and critical failure",
+        "Stage versioned static assets, deliberate deploy, never move published tag"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "source_archive": "lecture-learning-discovery-v0.8.0.zip",
+  "files": {
+    "docs/project/experience-spec.json": "b6232f5796151fb366ad65400ce036ec350ed5f8bf870681de043c0d06952f87",
+    "docs/project/ui-global-acceptance.json": "b482a56262a8d815cbcd3fdbf121411002976bafe1adc88d792c3efe66859272",
+    "docs/project/workflow-acceptance.json": "04149522f58d868fc32503823667d8c7943be629d4aa5df04109d16806dbf7d1",
+    "docs/project/workflow-catalog.json": "2f500f4662869056823f397992f43796fdf1b6647619cfa97f50339b4d1f7203",
+    "docs/project/memory-workflow-fit.json": "fd6b8a7bd28d4e05122903f84030b29ad08b7f5344b5b3eaf91dc30266c8fcfb"
+  },
+  "meaning": "Prior documented contracts retained unchanged; not proof of real execution or approval."
+}

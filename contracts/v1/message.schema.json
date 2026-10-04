@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.lecture-learning.invalid/v1/message.schema.json",
+  "title": "Lecture Learning message v1 (new adapter contract; not existing academic schema)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "message_id",
+    "request_id",
+    "scope",
+    "thread_key",
+    "reply_to_turn",
+    "role",
+    "text",
+    "sources",
+    "attachments",
+    "created_at",
+    "assessment_disposition"
+  ],
+  "properties": {
+    "contract": {
+      "const": "ll.message/1"
+    },
+    "message_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "request_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "scope": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/scope"
+    },
+    "thread_key": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "reply_to_turn": {
+      "anyOf": [
+        {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "role": {
+      "enum": [
+        "learner_question",
+        "tutor"
+      ]
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300000
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/source"
+      },
+      "minItems": 0,
+      "maxItems": 64
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/artifact"
+      },
+      "minItems": 0,
+      "maxItems": 16
+    },
+    "created_at": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/time"
+    },
+    "assessment_disposition": {
+      "enum": [
+        "not_assessed",
+        "provisional",
+        "canonical_saved",
+        "unavailable"
+      ]
+    }
+  }
+}

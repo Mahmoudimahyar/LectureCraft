@@ -1,0 +1,44 @@
+{
+  "package_version": "0.10.0",
+  "specification_baseline": "0.9.0",
+  "phase": "Pre-export local implementation-kit checks",
+  "status": "PASS_WITH_EXPLICIT_EXTERNAL_LIMITS",
+  "environment": {
+    "os": "Linux",
+    "python": "3.13.5"
+  },
+  "tests": {
+    "retained": 48,
+    "new_handoff": 59,
+    "total": 107,
+    "status": "PASS"
+  },
+  "baseline_check": {
+    "status": "PASS",
+    "checks_without_manifest": 44,
+    "schemas": 15,
+    "synthetic_contract_examples": 84
+  },
+  "handoff_consistency": {
+    "status": "PASS",
+    "checks": 16
+  },
+  "local_cli_smoke": {
+    "status": "PASS",
+    "checks": 29,
+    "boundary": "Expected positive and negative states on disposable source copies, not native or app execution"
+  },
+  "not_run": [
+    "Claude native /goal session",
+    "ChatGPT/Codex connection",
+    "Actual upstream Seed import/test suite",
+    "Windows/macOS execution",
+    "Drive/auth/pairing",
+    "Existing academic writers",
+    "Actual app/browser UI",
+    "Model/learning evaluation",
+    "Hosted deployment"
+  ],
+  "foundation_status": "RAW_ARCHIVE_UNAVAILABLE_IN_THIS_EXPORT",
+  "source": "Exact original 0.9.0 baseline and published user-supplied operational evidence, no new live-system inspection."
+}

@@ -1,0 +1,79 @@
+{
+  "version": "1.0.0",
+  "scope": "New app wrapper protocols only; no clone or replacement of course-learning-v1",
+  "schemas": [
+    {
+      "name": "request",
+      "path": "contracts/v1/request.schema.json"
+    },
+    {
+      "name": "bundle",
+      "path": "contracts/v1/bundle.schema.json"
+    },
+    {
+      "name": "signature",
+      "path": "contracts/v1/signature.schema.json"
+    },
+    {
+      "name": "submission",
+      "path": "contracts/v1/submission.schema.json"
+    },
+    {
+      "name": "message",
+      "path": "contracts/v1/message.schema.json"
+    },
+    {
+      "name": "context",
+      "path": "contracts/v1/context.schema.json"
+    },
+    {
+      "name": "native-result",
+      "path": "contracts/v1/native-result.schema.json"
+    },
+    {
+      "name": "publication",
+      "path": "contracts/v1/publication.schema.json"
+    },
+    {
+      "name": "annotation",
+      "path": "contracts/v1/annotation.schema.json"
+    },
+    {
+      "name": "review-item",
+      "path": "contracts/v1/review-item.schema.json"
+    },
+    {
+      "name": "review-event",
+      "path": "contracts/v1/review-event.schema.json"
+    },
+    {
+      "name": "resume",
+      "path": "contracts/v1/resume.schema.json"
+    },
+    {
+      "name": "view",
+      "path": "contracts/v1/view.schema.json"
+    },
+    {
+      "name": "control",
+      "path": "contracts/v1/control.schema.json"
+    }
+  ],
+  "shared": "contracts/v1/common.schema.json",
+  "compatibility": "Reject unknown major/type/required semantics; field additions require an explicitly advertised reader version. Preserve raw bytes; no best-effort reinterpretation.",
+  "action_payloads": {
+    "ask": "message",
+    "explain": "submission",
+    "practice": "submission",
+    "diagnose": "submission",
+    "review_answer": "submission",
+    "select_review": "review-item",
+    "edit_review": "review-item",
+    "correct_source": "annotation",
+    "resume": "resume",
+    "cancel": "control",
+    "source_hint": "control",
+    "save_note": "control",
+    "correct_assessment": "control"
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "contract": "ll.submission/1",
+  "turn_id": "turn-fixture",
+  "logical_input_id": "input-fixture",
+  "scope": {
+    "course_id": "fixture-course",
+    "term": "fixture-term"
+  },
+  "session_id": "session-fixture",
+  "question": {
+    "question_id": null,
+    "family_id": null,
+    "family_revision": null,
+    "prompt": "Synthetic: explain why overwriting an existing file is disallowed.",
+    "sources": [
+      {
+        "source_id": "fixture-source",
+        "version_id": "fixture-v1",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "locator": {
+          "kind": "page",
+          "page": 1,
+          "printed_label": null
+        }
+      }
+    ],
+    "attachments": []
+  },
+  "response": {
+    "kind": "text",
+    "text": null,
+    "attachments": [],
+    "transcription_revision": null
+  },
+  "interaction": "explain_back",
+  "occurred_at": null,
+  "time_basis": "unknown",
+  "captured_at": "2026-10-03T12:00:00Z",
+  "conditions": {
+    "assistance_before_answer": "unknown",
+    "reference_access": "unknown",
+    "prior_exposure": "unknown"
+  },
+  "supersedes_capture": null
+}

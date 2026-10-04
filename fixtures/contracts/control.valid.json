@@ -1,0 +1,15 @@
+{
+  "contract": "ll.control/1",
+  "event_id": "control-fixture",
+  "request_id": "req-fixture",
+  "scope": {
+    "course_id": "fixture-course",
+    "term": "fixture-term"
+  },
+  "created_at": "2026-10-03T12:00:00Z",
+  "command": {
+    "kind": "cancel",
+    "target_request_id": "req-other",
+    "reason": "Synthetic cancellation request only."
+  }
+}

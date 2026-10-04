@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "profile": "fixture",
+  "planner_config_candidate": "G:\\My Drive\\University\\Boston University\\Fall 2026 Brain\\planner-config.yaml",
+  "binding_authority": "existing planner-config.yaml after verified read; not this candidate string",
+  "term": "2026-fall",
+  "allowed_course_ids": [
+    "be505",
+    "be562",
+    "be572",
+    "cs542",
+    "ds551"
+  ],
+  "course_access_default": "read_only_when_permitted",
+  "source_runtime": "discover_during_local_preflight",
+  "course_writes_enabled": false,
+  "native_dispatch_enabled": false,
+  "cloud_oauth_configured": false,
+  "extra_inference_budget_usd": 0
+}

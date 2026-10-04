@@ -1,0 +1,28 @@
+{
+  "contract": "ll.message/999",
+  "message_id": "msg-fixture",
+  "request_id": "req-fixture",
+  "scope": {
+    "course_id": "fixture-course",
+    "term": "fixture-term"
+  },
+  "thread_key": "thread-fixture",
+  "reply_to_turn": null,
+  "role": "tutor",
+  "text": "Synthetic feedback, not a real learner evaluation.",
+  "sources": [
+    {
+      "source_id": "fixture-source",
+      "version_id": "fixture-v1",
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "locator": {
+        "kind": "page",
+        "page": 1,
+        "printed_label": null
+      }
+    }
+  ],
+  "attachments": [],
+  "created_at": "2026-10-03T12:00:00Z",
+  "assessment_disposition": "not_assessed"
+}

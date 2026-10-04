@@ -1,0 +1,32 @@
+{
+  "view_id": "view-fixture",
+  "scope": {
+    "course_id": "fixture-course",
+    "term": "fixture-term"
+  },
+  "kind": "gaps",
+  "inputs": [
+    {
+      "path": "records/fixture.json",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bytes": 12,
+      "media_type": "application/json"
+    }
+  ],
+  "outputs": [
+    {
+      "path": "exports/gaps.json",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bytes": 12,
+      "media_type": "application/json"
+    }
+  ],
+  "generator": {
+    "name": "gap-projector",
+    "revision": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "policy": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  },
+  "generation": 1,
+  "created_at": "2026-10-03T12:00:00Z",
+  "contains_new_assessment_facts": false
+}

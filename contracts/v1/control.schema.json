@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.lecture-learning.invalid/v1/control.schema.json",
+  "title": "Bounded control requests: proposals, not permissions",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "event_id",
+    "request_id",
+    "scope",
+    "created_at",
+    "command"
+  ],
+  "properties": {
+    "contract": {
+      "const": "ll.control/1"
+    },
+    "event_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "request_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "scope": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/scope"
+    },
+    "created_at": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/time"
+    },
+    "command": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "target_request_id",
+            "reason"
+          ],
+          "properties": {
+            "kind": {
+              "const": "cancel"
+            },
+            "target_request_id": {
+              "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "text",
+            "sources",
+            "attachments"
+          ],
+          "properties": {
+            "kind": {
+              "const": "save_note"
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            "sources": {
+              "type": "array",
+              "items": {
+                "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/source"
+              },
+              "maxItems": 32
+            },
+            "attachments": {
+              "type": "array",
+              "items": {
+                "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/artifact"
+              },
+              "maxItems": 16
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "attempt",
+            "reason",
+            "support"
+          ],
+          "properties": {
+            "kind": {
+              "const": "correct_assessment"
+            },
+            "attempt": {
+              "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/evidence_ref"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 10000
+            },
+            "support": {
+              "type": "array",
+              "items": {
+                "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/artifact"
+              },
+              "maxItems": 16
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "drive_file_ids",
+            "reason"
+          ],
+          "properties": {
+            "kind": {
+              "const": "source_hint"
+            },
+            "drive_file_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,256}$"
+              },
+              "uniqueItems": true,
+              "minItems": 1,
+              "maxItems": 64
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            }
+          }
+        }
+      ]
+    }
+  }
+}

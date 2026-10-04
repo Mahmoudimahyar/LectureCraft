@@ -1,0 +1,954 @@
+{
+  "version": "0.7.0",
+  "date": "2026-10-03",
+  "purpose": "Evidence-grounded current-system fit and implementation recommendation; not live acceptance or code",
+  "evidence_basis": {
+    "P05": {
+      "name": "October 2 managing-agent audit",
+      "local_file": "Pasted text(1).txt",
+      "sha256": "dd5a649674155af213714013744ffc093419a5ba271a0a0349ea7648f9f8a557",
+      "source_locations": "Q references and original 715-line audit positions",
+      "independently_rerun": false
+    },
+    "P06": {
+      "name": "User-pasted focused Brain PC report",
+      "coverage": "A plus B1-B5 and partial B6",
+      "index": "docs/research/brain-pc-capability-report-index.json",
+      "independently_rerun": false
+    },
+    "S06": {
+      "name": "v0.6 documentation archive",
+      "sha256": "a2bf60671e72227237e9c7961cd45cf4e7c4a6d369ea5075161652c916fe95aa",
+      "kind": "proposal, not installed system"
+    }
+  },
+  "status_interpretation": "An existing schema/prompt is not a deployed end-to-end workflow. NOT_FOUND means not found in the inspected report scope, not proved absent from every device.",
+  "memory_count": 15,
+  "memories": [
+    {
+      "id": "M01",
+      "name": "Source material, identity and version memory",
+      "current_status": "EXISTS_PARTIAL_COVERAGE",
+      "current_finding": "Originals and stable source/version records exist. Registration/coverage differs by course. No complete source-ID to Drive-file-ID mapping or immutable historical blob archive was established.",
+      "decision": "KEEP_AND_EXTEND",
+      "authority": "Existing course source owner and protected tracking publisher",
+      "locations": [
+        "materials/",
+        ".agent/source-index.json",
+        "existing source updater receipts"
+      ],
+      "implementation": [
+        "Preserve IDs, path aliases, roles and source versions. Add a narrowly reviewed storage resolver mapping to Drive IDs without replacing academic identities.",
+        "Use source/version/locator to resolve current permitted bytes and a rendition. Verify bytes separately from metadata and remote-delivery claims.",
+        "Retain all-lecture inventory including empty, unavailable, unrecorded and unindexed material. Where old bytes are needed, retain authorized snapshots or report unavailability honestly."
+      ],
+      "rationale": "Navigation and historical evidence require stable identity; filename equality, a Drive folder listing and a checksum alone are insufficient.",
+      "acceptance": [
+        "Reordered/renamed/re-exported source does not attach old notes to a new slide silently.",
+        "All inventoried lectures remain accounted for; no old source is regenerated and presented as original."
+      ],
+      "evidence": [
+        "P05 Q025-Q036; lines 100-128, 232-243",
+        "P06 A6/B6 (partial)"
+      ],
+      "consumer_workflows": [
+        "WF01",
+        "WF02",
+        "WF03",
+        "WF04",
+        "WF05",
+        "WF07",
+        "WF09",
+        "WF10",
+        "WF11"
+      ],
+      "application_validation": "NOT_RUN",
+      "updated_via_workflows": [
+        "WF01",
+        "WF09"
+      ],
+      "producer_qualification": "A workflow stages/publishes only through the listed existing owner; projection writers do not own the underlying fact."
+    },
+    {
+      "id": "M02",
+      "name": "Precise source links and media/rendition memory",
+      "current_status": "PARTIAL_PROSE_LINKS",
+      "current_finding": "BE 505 reviewed source maps link slide/page ranges to transcript lines; some renders/views exist. Verified recording intervals and universal typed anchors/renditions were not established.",
+      "decision": "EXTEND_EXISTING_SOURCE_LINK_OWNER",
+      "authority": "Existing source-map/catalog owner; new timing annotations need an explicit approved owned record",
+      "locations": [
+        "work/lecture-review/*-source-map.md",
+        "existing source/catalog references",
+        ".agent/course-learning/runs/<run-id>/proposals/ (proposed candidates)",
+        "exports/learning/alignment.json (proposed derived view)",
+        ".cache/ and exports/ for versioned allowed renditions"
+      ],
+      "implementation": [
+        "Inspect originals, timing basis, transcript fidelity and visible video before selecting processing. Keep displayed-slide links distinct from concept-discussion links.",
+        "Derive normalized anchors from existing reviewed maps where possible. New reviewed timestamps are genuinely new annotations: adopt a minimal versioned representation under the SAME source-link owner, and declare which record is authoritative before publishing.",
+        "Do not pretend an export alone preserves a manual correction. Persist the accepted original assertion, predecessor, source versions, support and review status; regenerate exports from it.",
+        "Use many-to-many ranges, media time origin, page/printed-page distinctions, evidence and unresolved states. Never strengthen a paragraph/chapter reference into an exact page."
+      ],
+      "rationale": "A gap summary is derived evidence, but a newly reviewed audio interval is new information and must have a durable owner. Treating both as disposable exports loses corrections.",
+      "acceptance": [
+        "An accepted correction survives deletion/rebuilding of derived alignment output.",
+        "Old prose and normalized records cannot become two independently editable authorities for the same assertion.",
+        "Unrecorded audio cannot yield a confirmed original recording interval."
+      ],
+      "evidence": [
+        "P05 Q031-Q042; lines 238-254, 446-454",
+        "P06 A5/B5 and v0.6 WF02"
+      ],
+      "consumer_workflows": [
+        "WF02",
+        "WF03",
+        "WF04",
+        "WF05",
+        "WF09",
+        "WF10"
+      ],
+      "application_validation": "NOT_RUN",
+      "updated_via_workflows": [
+        "WF02",
+        "WF09"
+      ],
+      "producer_qualification": "A workflow stages/publishes only through the listed existing owner; projection writers do not own the underlying fact."
+    },
+    {
+      "id": "M03",
+      "name": "Course policy, learning goals and preferences",
+      "current_status": "EXISTS_PROMPTED_AND_CONFIGURED",
+      "current_finding": "Course instructions, context, learning strategies, mode and study-choice vocabulary exist. An automated receipt of what each native turn actually loaded is not universal.",
+      "decision": "KEEP_AND_WRAP",
+      "authority": "Course policy/strategy owner; user intent and permissions",
+      "locations": [
+        "AGENTS.md",
+        "course-context.md",
+        "learning-strategy.md",
+        "learning/skills.yaml",
+        "central protocols/"
+      ],
+      "implementation": [
+        "Load trusted course/mode instructions explicitly and log selected versions in a bounded context receipt.",
+        "Keep develop/maintain/reference_only/defer/undecided choices distinct from performance. Preserve course-specific assistance boundaries.",
+        "No request, retrieved document, or generated summary can modify its own permissions, spending or trusted strategy."
+      ],
+      "rationale": "A file existing is not evidence it entered the model context, and study priority is not competence.",
+      "acceptance": [
+        "Course A cannot inherit course B answer-reveal policy accidentally.",
+        "A hostile source instruction cannot expand a tool or canonical write permission."
+      ],
+      "evidence": [
+        "P05 Q067-Q070, Q074/Q078, Q091-Q096",
+        "P06 B2"
+      ],
+      "consumer_workflows": [
+        "WF00",
+        "WF02",
+        "WF03",
+        "WF04",
+        "WF05",
+        "WF06",
+        "WF07",
+        "WF08"
+      ],
+      "application_validation": "NOT_RUN",
+      "updated_via_workflows": [],
+      "producer_qualification": "Trusted user/course-policy owner only; ordinary task/worker input cannot self-modify policy."
+    },
+    {
+      "id": "M04",
+      "name": "Concept, topic, skill and relationship memory",
+      "current_status": "EXISTS_UNEVEN_STRUCTURAL_COVERAGE",
+      "current_finding": "Skills/topics and families exist in each course; BE 505 has a richer concept/question/criterion index. No uniform independent concept graph is installed or needed as duplicate authority.",
+      "decision": "KEEP_CANONICAL_DEFINITIONS_BUILD_PROJECTIONS",
+      "authority": "Owning course catalogs and reviewed shared mappings",
+      "locations": [
+        "learning/skills.yaml",
+        "learning/question-families.yaml",
+        "BE 505 learning/question-index.json",
+        "exports/learning/concept-tree.json (proposed view)"
+      ],
+      "implementation": [
+        "Normalize read models over existing typed IDs. A display node references its true concept/topic/skill/question kind.",
+        "Keep strict_containment, partial_overlap and diagnostic_prerequisite on their actual question endpoints; do not relabel them as universal concept-part or curriculum prerequisites.",
+        "Create multilayer views with bounded traversal, visited-node guards and multiple references to one ID. Apply acyclicity only to a relation whose contract requires it; related/concept discussions can have cycles.",
+        "For an unmapped course concept, propose the smallest source-backed extension to that course owner; do not silently install the full BE 505 schema everywhere."
+      ],
+      "rationale": "The useful graph already starts in the catalogs. A second definition store would split identities, misstate relationships and fragment learning history.",
+      "acceptance": [
+        "One concept in several tree branches produces one logical identity and no extra performances.",
+        "Question containment is not converted into a false concept hierarchy; missing mapping is a system-coverage gap."
+      ],
+      "evidence": [
+        "P05 Q043-Q048; lines 255-260, 400-444",
+        "P06 B5"
+      ],
+      "consumer_workflows": [
+        "WF03",
+        "WF04",
+        "WF05",
+        "WF06",
+        "WF07",
+        "WF09",
+        "WF10"
+      ],
+      "application_validation": "NOT_RUN",
+      "updated_via_workflows": [
+        "WF03",
+        "WF09"
+      ],
+      "producer_qualification": "A workflow stages/publishes only through the listed existing owner; projection writers do not own the underlying fact."
+    },
+    {
+      "id": "M05",
+      "name": "Question, rubric and answer-exposure memory",
+      "current_status": "EXISTS_WITH_COURSE_DIFFERENCES",
+      "current_finding": "All courses have family/rubric records; BE 505 has exact questions and criteria. Tutor-authored guides and original prompts have different authority; solution separation is not fully access-enforced.",
+      "decision": "KEEP_AND_EXTEND_CONTENT_BOUNDARIES",
+      "authority": "Existing family/question catalog owner",
+      "locations": [
+        "learning/question-families.yaml",
+        "BE 505 learning/question-index.json",
+        "original instructor prompts/figures",
+        "separate assessor guides"
+      ],
+      "implementation": [
+        "Prefer existing questions and rubric versions, including diagrams and givens. Keep source prompts authoritative where catalog prompt is intentionally null.",
+        "Pin the intended family/skills before assessment and record whether the rubric is instructor-supplied or tutor-authored. A model answer is not automatically a key.",
+        "Prevent unintended answer material from entering question-only context. UI collapse is not permission control. Stage unsupported alternative answers/rubric changes for appropriate review."
+      ],
+      "rationale": "A valid rubric reference can still be pedagogically incorrect; disclosure changes the meaning of a later attempt.",
+      "acceptance": [
+        "Question-only mode cannot obtain solution text through another supplied field.",
+        "New question versions do not rewrite prompts/rubrics used by older attempts."
+      ],
+      "evidence": [
+        "P05 Q049-Q054; lines 261-266, 400-426",
+        "P06 B4/B5"
+      ],
+      "consumer_workflows": [
+        "WF03",
+        "WF04",
+        "WF05",
+        "WF06",
+        "WF07",
+        "WF08",
+        "WF09",
+        "WF10"
+      ],
+      "application_validation": "NOT_RUN",
+      "updated_via_workflows": [
+        "WF03",
+        "WF07",
+        "WF09"
+      ],
+      "producer_qualification": "A workflow stages/publishes only through the listed existing owner; projection writers do not own the underlying fact."
+    },
+    {
+      "id": "M06",
+      "name": "Complete submitted interaction and attachments",
+      "current_status": "PARTIAL_HISTORY_NO_VERIFIED_FULL_CAPTURE",
+      "current_finding": "Native history and excerpts/locators exist. Guaranteed immutable capture of every submitted prompt/response plus full delivered reply and attachments is not implemented. Existing locators are not hash validators.",
+      "decision": "BUILD_COMPATIBLE_IMMUTABLE_SIDECARS",
+      "authority": "New operational evidence capture owner around the existing learning writer",
+      "locations": [
+        ".agent/course-learning/runs/<run-id>/turns/<turn-id>.json (proposed)",
+        ".agent/course-learning/runs/<run-id>/messages/<message-id>.json (proposed)",
+        ".agent/course-learning/runs/<run-id>/attachments/ and receipts/ (proposed)"
+      ],
+      "implementation": [
+        "Capture full shown question, actual learner answer, modalities, required figures, assistance and time basis before inference. Preserve input even if grading fails or is unavailable.",
+        "Freeze and read back the learner snapshot; store later tutor messages separately. Transport retries keep one logical learner response even when dispatch/run IDs change.",
+        "Verify relative path, bytes, source and item identity, attachment digests and exact excerpt around publication. Unicode/transcript normalization must be explicit rather than silently changing original text.",
+        "Raw voice retention remains a separate choice. If only text is permitted, preserve the exact transcript as text evidence and mark the raw audio unavailable.",
+        "Do not put snapshots or new record kinds in learning/attempts, and do not backfill missing historical content with AI."
+      ],
+      "rationale": "The user requested complete future interaction evidence; the existing compact record format can point to it without becoming a competing attempt schema.",
+      "acceptance": [
+        "Question/learner snapshot survives a model failure; later reply does not change its digest.",
+        "An altered attachment, wrong course/turn or missing excerpt blocks a verified save/reuse claim.",
+        "Identical native-result retry does not become a second learner message."
+      ],
+      "evidence": [
+        "P05 Q055-Q059; lines 272-276, 494-510",
+        "P06 B4 exact schema/locator limitations"
+      ],
+      "consumer_workflows": [
+        "WF00",
+        "WF04",
+        "WF05",
+        "WF06",
+        "WF08",
+        "WF09",
+        "WF10",
+        "WF11"
+      ],
+      "application_validation": "NOT_RUN",
+      "updated_via_workflows": [
+        "WF00",
+        "WF04",
+        "WF05",
+        "WF06",
+        "WF09"
+      ],
+      "producer_qualification": "A workflow stages/publishes only through the listed existing owner; projection writers do not own the underlying fact."
+    },
+    {
+      "id": "M07",
+      "name": "Assessed attempts, assistance and correction history",
+      "current_status": "EXISTS_WITH_REAL_ATTEMPTS_AND_SCHEMA_CORRECTIONS",
+      "current_finding": "Immutable attempts and per-skill judgments are real. Assessment_revision is supported by contract/code; P05 found zero real revisions, so production correction behavior is not demonstrated merely by the schema.",
+      "decision": "KEEP_SCHEMA_REPAIR_AND_WRAP_WRITERS",
+      "authority": "Existing course-learning-v1 owner; BE 505 helper and other coordinated writers",
+      "locations": [
+        "learning/attempts/YYYY-MM/<id>.json",
+        "course_learning.py validation/rendering",
+        "BE 505 study_index.py save-attempt"
+      ],
+      "implementation": [
+        "Keep exact required fields, outcome enums, time semantics and one intended family/skill set. New responses create new attempts; regrades create one connected nonbranching same-skill assessment-revision chain.",
+        "Use the full-turn verifier before and around the real save. Retain saved/already_saved/view-stale distinctions.",
+        "For other courses, build a tested common facade for the prescribed no-clobber procedure; do not claim an existing universal save executable.",
+        "Isolate/fix BE 505 global ROOT/path dependencies before any fixture save. Do not send learning attempts through the separate tracking publisher."
+      ],
+      "rationale": "Replacing an established learner-history format creates risk without adding learning value. The missing work is reliable capture, actual integration and safer writer portability.",
+      "acceptance": [
+        "Same ID/same bytes reuses evidence; same ID/different bytes conflicts.",
+        "No error diagnosis on not_observed; corrections preserve original question, response, occurrence time and skill set.",
+        "View failure after saved attempt never causes a new attempt."
+      ],
+      "evidence": [
+        "P05 lines 164-171, 268-289, 498-510, 590-596",
+        "P06 B3/B4"
+      ],
+      "consumer_workflows": [
+        "WF05",
+        "WF06",
+        "WF08",
+        "WF09",
+        "WF10",
+        "WF11"
+      ],
+      "application_validation": "NOT_RUN",
+      "updated_via_workflows": [
+        "WF05",
+        "WF09"
+      ],
+      "producer_qualification": "A workflow stages/publishes only through the listed existing owner; projection writers do not own the underlying fact."
+    },
+    {
+      "id": "M08",
+      "name": "Learning gaps, possible causes and remediation state",
+      "current_status": "EVIDENCE_EXISTS_PROJECTIONS_AND_DIAGNOSIS_CONTROL_MISSING",
+      "current_finding": "Missing/incorrect content, error categories and analysis already belong in observations. Narrative roadmaps and prompted diagnostics exist; no automated persistent hypothesis workflow or dedicated derived gap view was found.",
+      "decision": "DERIVE_GAP_VIEWS_BUILD_NONASSESSMENT_PROPOSALS",
+      "authority": "Effective canonical attempts/revisions for performance; operational proposals for unresolved explanations",
+      "locations": [
+        "existing observation fields and study roadmaps",
+        ".agent/course-learning/runs/<run-id>/proposals/<proposal-id>.json (proposed diagnostic work)",
+        "exports/learning/learning-gaps.json and learning-gaps.md (proposed views)"
+      ],
+      "implementation": [
+        "Compute current evidence from effective correction chains and comparable skills/conditions, keeping supporting and contradicting attempts visible.",
+        "Separate observed error, possible cause, question that discriminates between causes, and chosen next action. Operational candidate causes must never count as diagnosed learner failures.",
+        "Use only actual criterion IDs where available; otherwise stay at validated skill/family granularity instead of inventing fine-grained measurements.",
+        "For each real next answer use WF05, then update or close the hypothesis under explicit policy. Assisted correction is not independent retention; passage of time is not forgetting evidence.",
+        "If a required diagnosis cannot be represented without ambiguity in current analysis, propose a reviewed extension to the existing observation owner, not a second canonical gap ledger."
+      ],
+      "rationale": "The user needs a useful gap dashboard, not another database competing with the original evidence. Root causes are hypotheses until demonstrated.",
+      "acceptance": [
+        "Correcting a mistaken grader retracts the derived finding without deleting the original response.",
+        "A failed advanced task cannot mark all graph ancestors weak.",
+        "New conflicting/comparable evidence is visible; neither latest answer nor highest confidence blindly erases history."
+      ],
+      "evidence": [
+        "P05 Q047/Q055-Q060/Q075; lines 259, 272-277, 297-301",
+        "P06 B4/B5"
+      ],
+      "consumer_workflows": [
+        "WF05",
+        "WF06",
+        "WF07",
+        "WF08",
+        "WF09",
+        "WF10"
+      ],
+      "application_validation": "NOT_RUN",
+      "updated_via_workflows": [
+        "WF05",
+        "WF06",
+        "WF09",
+        "WF10"
+      ],
+      "producer_qualification": "A workflow stages/publishes only through the listed existing owner; projection writers do not own the underlying fact."
+    },
+    {
+      "id": "M09",
+      "name": "Progress summaries and learning-state displays",
+      "current_status": "EXISTS_WITH_STALE_VIEWS",
+      "current_finding": "learning-state.md and helpers derive learning evidence; some saved views are stale. Counts and priorities are not calibrated mastery, retention or transfer probabilities.",
+      "decision": "KEEP_RENDERERS_ADD_FRESHNESS_AND_RECEIPTS",
+      "authority": "Existing course/shared rendering owners; outputs are derived",
+      "locations": [
+        "learning-state.md",
+        "existing study-map/learning exports",
+        "exports/learning/ derived additions"
+      ],
+      "implementation": [
+        "Verify originals and effective revisions before deriving/displaying facts; show staleness when current regeneration is unavailable.",
+        "Build source-linked observations, assistance, timestamps and counterevidence into the UI; do not present unobserved as failure.",
+        "Define complete new projection input manifests including relevant schema/helper/policy versions. Do not retroactively call an old valid attempt false simply because a model/tool version later changed."
+      ],
+      "rationale": "The existing summaries are useful. Unchecked freshness and overinterpreted percentages, not the Markdown format, are the weaknesses.",
+      "acceptance": [
+        "Deleting an export loses no canonical attempt; rebuilding reflects current effective revisions.",
+        "Zero recorded attempts displays unassessed; stale view is not reported as lost history."
+      ],
+      "evidence": [
+        "P05 Q060/Q077/Q088/Q098; lines 277, 301, 312, 343-349",
+        "P06 B4/B5"
+      ],
+      "consumer_workflows": [
+        "WF09",
+        "WF10",
+        "WF11"
+      ],
+      "application_validation": "NOT_RUN",
+      "updated_via_workflows": [
+        "WF10"
+      ],
+      "producer_qualification": "A workflow stages/publishes only through the listed existing owner; projection writers do not own the underlying fact."
+    },
+    {
+      "id": "M10",
+      "name": "Cross-course reference memory",
+      "current_status": "EXISTS_LIMITED_REVIEWED_MAPPING",
+      "current_finding": "Reviewed shared mappings link limited course skills and reference original attempts. Broader staged work is not established as active.",
+      "decision": "KEEP_OWNER_EXTEND_ONLY_BY_REVIEW",
+      "authority": "Existing main shared-learning owner",
+      "locations": [
+        "shared-learning/concepts.yaml",
+        "shared_learning.py",
+        "existing shared generated views"
+      ],
+      "implementation": [
+        "Read approved equivalence/related distinctions and original attempt IDs; stage new connections for the shared owner.",
+        "Show potential transfer as a question to test under the new conditions, never grant it from a connection alone.",
+        "Do not let an ordinary course tutor publish shared mappings or copy source attempts as new performances."
+      ],
+      "rationale": "Cross-course browsing is valuable, but equivalence of labels/content is not evidence of the learner performing the new skill.",
+      "acceptance": [
+        "The same original attempt referenced by two courses is counted once in the shared view.",
+        "Staged or related mappings cannot award equivalent performance."
+      ],
+      "evidence": [
+        "P05 Q048; lines 260, 353-362",
+        "P06 B5"
+      ],
+      "consumer_workflows": [
+        "WF03",
+        "WF09",
+        "WF10"
+      ],
+      "application_validation": "NOT_RUN",
+      "updated_via_workflows": [
+        "WF03",
+        "WF09",
+        "WF10"
+      ],
+      "producer_qualification": "A workflow stages/publishes only through the listed existing owner; projection writers do not own the underlying fact."
+    },
+    {
+      "id": "M11",
+      "name": "Review selection, scheduling and review-event memory",
+      "current_status": "SUGGESTIONS_EXIST_EXECUTING_SCHEDULER_ABSENT",
+      "current_finding": "review_suggestion and study choices exist; no working adaptive scheduler, due queue or active two-way Anki integration was found.",
+      "decision": "BUILD_OPERATIONAL_REVIEW_CONTRACT_REUSE_QUESTION_IDS",
+      "authority": "One approved scheduling owner; canonical learning evidence remains in attempts",
+      "locations": [
+        "existing review_suggestion",
+        "proposed selected item/configuration and immutable review events under existing operational run role",
+        "exports/learning/review-queue.json and due.md (proposed derived schedule)"
+      ],
+      "implementation": [
+        "Adopt an established scheduling implementation only after checking its required inputs and actual task fit; no fixed tool/version is selected by this source review.",
+        "Persist user selection/suspension, item/question revision, scheduler configuration/version, actual review time, attempt reference and supported rating basis.",
+        "Append one event per actual review; uncertain judgments require abstention/manual policy, not automatic failure. A changed item or corrected grading recomputes versioned due state without inserting a new learner review.",
+        "Scheduling metadata is authoritative for scheduling only. Do not create Calendar/Tasks events or reminders without separate permission."
+      ],
+      "rationale": "The application genuinely lacks a scheduling process; implementing it does not require replacing the established learning history.",
+      "acceptance": [
+        "A question created but not selected never becomes automatically due.",
+        "Identical review retry updates the schedule once, and no learner reply creates no review.",
+        "A scheduler change preserves observed review history and identifies the policy used."
+      ],
+      "evidence": [
+        "P05 Q054/Q073-Q078; lines 266, 297-302",
+        "P06 A5/B5"
+      ],
+      "consumer_workflows": [
+        "WF07",
+        "WF08",
+        "WF09",
+        "WF10",
+        "WF11"
+      ],
+      "application_validation": "NOT_RUN",
+      "updated_via_workflows": [
+        "WF07",
+        "WF08",
+        "WF09",
+        "WF10"
+      ],
+      "producer_qualification": "A workflow stages/publishes only through the listed existing owner; projection writers do not own the underlying fact."
+    },
+    {
+      "id": "M12",
+      "name": "Session resume, drafts and device continuity",
+      "current_status": "PARTIAL_NATIVE_HISTORY_NO_UNIFIED_STATE",
+      "current_finding": "Session/thread IDs and roadmaps preserve some context. No unified cross-device last-slide/playback/draft/selected-question state was found.",
+      "decision": "BUILD_SMALL_OPERATIONAL_RESUME_STATE",
+      "authority": "User/device session events reconciled by the PC coordinator",
+      "locations": [
+        "existing native thread/session references and work roadmaps",
+        "proposed operational session checkpoints and per-device input revisions",
+        "exports/learning-app/ resume projection"
+      ],
+      "implementation": [
+        "Keep app session, native thread, learner turn, request and dispatch attempt identities separate.",
+        "Persist slide/source revision, playback position, selected pane/question and saved draft under device revision/parent lineage. Clock time alone does not select the winner.",
+        "An edited submitted answer is new explicitly linked input; ordinary draft autosave is not assessment evidence. Capture and show wait/cancel/blocked states."
+      ],
+      "rationale": "Cross-device continuity is new UX state, not new competence memory. It should survive restarts without grading activity the learner did not submit.",
+      "acceptance": [
+        "Two devices editing the same draft surface a conflict or preserved branches rather than silent last-write-wins.",
+        "A stale slide position cannot resume on a different slide after deck revision."
+      ],
+      "evidence": [
+        "P05 Q016/Q022/Q076; lines 218, 229, 300",
+        "P06 B2/B5"
+      ],
+      "consumer_workflows": [
+        "WF00",
+        "WF04",
+        "WF06",
+        "WF08",
+        "WF09",
+        "WF10",
+        "WF11"
+      ],
+      "application_validation": "NOT_RUN",
+      "updated_via_workflows": [
+        "WF00",
+        "WF10"
+      ],
+      "producer_qualification": "A workflow stages/publishes only through the listed existing owner; projection writers do not own the underlying fact."
+    },
+    {
+      "id": "M13",
+      "name": "Retrieved working context and compact summaries",
+      "current_status": "PROMPTED_SELECTIVE_RETRIEVAL_PARTLY_IMPLEMENTED",
+      "current_finding": "Instructions and maintained helpers support selective retrieval, but no universally enforced startup/context-budget service or full native-thread handoff was established.",
+      "decision": "REUSE_READERS_BUILD_CONTEXT_SELECTOR_AND_RECEIPT",
+      "authority": "Original source/catalog/attempt owners; context is derived ephemeral work evidence",
+      "locations": [
+        "existing source/catalog/shared lookup interfaces",
+        ".agent/course-learning/runs/<run-id>/receipts/ (proposed actual-context receipt)",
+        "operational compact summaries referencing original turns"
+      ],
+      "implementation": [
+        "Retrieve trusted mode/course policy, exact presented material/rubric, relevant typed graph neighborhood and original effective attempts with counterevidence.",
+        "Frame the current attempt against the rubric before using prior judgments to hypothesize a cause. Do not let repeated negative summaries predetermine a grade.",
+        "Record what content and tool outputs were actually supplied, not only intended filenames; missing or uncertain native context remains explicit.",
+        "Pin inputs and generation policy for optional prose summaries, but do not claim that LLM wording is deterministically reproducible. Structured gap/tree fields should rebuild deterministically.",
+        "When a tree is absent, fall back to available original source; block only the claim that requires missing evidence."
+      ],
+      "rationale": "Durable records are not useful unless the worker receives the right small subset. Summaries must not amplify stale or mistaken assessments.",
+      "acceptance": [
+        "A retracted assessment cannot survive as an unqualified weakness in a newer working summary.",
+        "Hidden answer keys and unrelated private history are excluded from question-only requests.",
+        "A referenced file is not recorded as loaded unless actual access is established."
+      ],
+      "evidence": [
+        "P05 Q016/Q052/Q069-Q070/Q088; lines 218, 264, 286-287, 312",
+        "P06 B2"
+      ],
+      "consumer_workflows": [
+        "WF03",
+        "WF04",
+        "WF05",
+        "WF06",
+        "WF10"
+      ],
+      "application_validation": "NOT_RUN",
+      "updated_via_workflows": [
+        "WF03",
+        "WF04",
+        "WF05",
+        "WF06",
+        "WF07",
+        "WF10"
+      ],
+      "producer_qualification": "A workflow stages/publishes only through the listed existing owner; projection writers do not own the underlying fact."
+    },
+    {
+      "id": "M14",
+      "name": "Operational queue, native runs, receipts and recovery memory",
+      "current_status": "EXISTING_JOB_LOGS_BUT_LEARNING_QUEUE_ABSENT",
+      "current_finding": "Scheduled native jobs and publication receipts exist. Resident learning-app admission, exact dispatch correlation and independent terminal return remain unproven; the default control connection failed in P06.",
+      "decision": "BUILD_THIN_SUPERVISOR_REUSE_EXISTING_JOBS_AND_WRITERS",
+      "authority": "PC supervisor for execution journal; course writers retain canonical authority",
+      "locations": [
+        "existing automation/ receipts and source updater jobs",
+        "local nonsynced PC job journal (proposed)",
+        "Drive immutable request/result bundles and exported task.md dashboards (proposed)"
+      ],
+      "implementation": [
+        "Observe committed manifests, validate the authorized namespace and payload hashes, deduplicate, claim bounded ready work, then dispatch only through a verified native route.",
+        "Separate request/learner turn/dispatch attempt/native run/publication IDs; version-scoped leases only control accepted app publication, not arbitrary native side effects.",
+        "Persist before/after receipts and recognize uncertain completion. Continue other ready tasks while a blocked item awaits source, user, quota or approval.",
+        "Per-thread turns and canonical writes are serialized. Reuse the existing source updater instead of installing another polling LLM or source publisher."
+      ],
+      "rationale": "The always-on PC provides the execution location, not a working trigger/return or universal lock by itself.",
+      "acceptance": [
+        "Duplicate event never duplicates a learner attempt; same ID with different bytes conflicts.",
+        "Unknown prior execution is reconciled before retry; idle state issues zero reasoning calls.",
+        "A native tool seeing a response is not enough unless the resident process can obtain its terminal result."
+      ],
+      "evidence": [
+        "P05 Q019-Q024/Q061-Q066; lines 226-231, 278-283",
+        "P06 A1-A3/B1-B3/B6"
+      ],
+      "consumer_workflows": [
+        "WF00",
+        "WF01",
+        "WF04",
+        "WF05",
+        "WF08",
+        "WF10",
+        "WF11"
+      ],
+      "application_validation": "NOT_RUN",
+      "updated_via_workflows": [
+        "WF00",
+        "WF11"
+      ],
+      "producer_qualification": "A workflow stages/publishes only through the listed existing owner; projection writers do not own the underlying fact."
+    },
+    {
+      "id": "M15",
+      "name": "Retention, historical evidence and backup/recovery lifecycle",
+      "current_status": "PARTIAL_PROTOCOLS_NO_COMPLETE_LIFECYCLE_PROOF",
+      "current_finding": "Immutable records and tracking recovery artifacts exist; no general full-turn retention/deletion or cross-device restore guarantee was established. Some historical bytes may no longer exist.",
+      "decision": "KEEP_EXISTING_RECOVERY_ADD_REFERENTIAL_RETENTION",
+      "authority": "Existing course/record owners and an approved backup/retention operator",
+      "locations": [
+        "existing attempt and publication recovery artifacts",
+        ".agent/course-learning/runs/ durable referenced sidecars",
+        "authorized backup location and inventory (not selected here)"
+      ],
+      "implementation": [
+        "Referenced full-turn snapshots must not be deleted as generic run scratch. Distinguish durable evidence, pending proposals and disposable render caches.",
+        "Record retention choices for voice, images, messages, native/provider history and backup copies separately. A local delete is not provider-wide erasure.",
+        "Use dependency-aware export/deletion and explicit unavailable/redacted states without silently rewriting historical answers.",
+        "Exercise backups/restoration on a controlled copy and preserve newer records during recovery. No broad production cleanup is authorized."
+      ],
+      "rationale": "An immutable attempt is not reproducible when its only full response/figure was cleaned from an operational directory. Retention is a real data contract.",
+      "acceptance": [
+        "Cleanup cannot remove a referenced snapshot while reporting the attempt fully verifiable.",
+        "Restoration never overwrites newer valid state; local and provider deletion outcomes remain distinct."
+      ],
+      "evidence": [
+        "P05 Q034/Q095/Q099; lines 241, 324, 328",
+        "P06 B3/B4"
+      ],
+      "consumer_workflows": [
+        "WF09",
+        "WF11"
+      ],
+      "application_validation": "NOT_RUN",
+      "updated_via_workflows": [
+        "WF09",
+        "WF11"
+      ],
+      "producer_qualification": "A workflow stages/publishes only through the listed existing owner; projection writers do not own the underlying fact."
+    }
+  ],
+  "workflow_count": 12,
+  "workflow_fit": [
+    {
+      "id": "WF00",
+      "status": "MISSING_RESIDENT_LEARNING_DISPATCH; CANDIDATE_INTERFACE_UNVERIFIED",
+      "current": "Existing scheduled jobs are real, but immediate submitted-task admission, independent native-thread roundtrip and app correlation are not operationally established.",
+      "action": "BUILD_SUPERVISOR_ADAPTER_NOT_ANOTHER_TUTOR",
+      "why": "Monitoring and queue control are ordinary software; native reasoning must be called only through a tested target/return boundary.",
+      "writes": "Local journal/claims first; then correlated acknowledgment, staged result and Drive-visible receipts. Never route by the globally last chat.",
+      "proof": "A synthetic independent-process roundtrip must verify target, permissions and terminal return; duplicates, cancelled generations and zero idle model calls are separate cases.",
+      "evidence": [
+        "P05 Q019-Q024",
+        "P06 A1-A3/B1-B3/B6"
+      ],
+      "memories": [
+        "M03",
+        "M06",
+        "M12",
+        "M14"
+      ]
+    },
+    {
+      "id": "WF01",
+      "status": "EXISTS_SCHEDULED_UPDATER; DOWNSTREAM_HANDOFF_PARTIAL",
+      "current": "The installed source refresh and protected publication have historical receipts; current processing is bounded (reported at most three sources per course/run).",
+      "action": "KEEP_EXISTING_UPDATER_EXTEND_RECEIPTS_AND_BACKLOG",
+      "why": "A second source scheduler/publisher creates conflicting identity/review decisions. A bounded batch is fine; forgetting the remaining backlog is not.",
+      "writes": "Existing source publication only via its owner; a small receipt extension identifies changed source versions, actual checks, processed frontier and remaining work for downstream preparation.",
+      "proof": "Several batches account for every inventoried source without a new competing updater; repeated receipt is a no-op; empty/unrecorded items never become aligned.",
+      "evidence": [
+        "P05 Q019/Q025-Q036",
+        "P06 A7"
+      ],
+      "memories": [
+        "M01",
+        "M14"
+      ]
+    },
+    {
+      "id": "WF02",
+      "status": "PARTIAL_SOURCE_MAPS_AND_RENDERS; TIMED_PIPELINE_MISSING",
+      "current": "Reviewed slide-to-transcript-line maps and selected render assets exist; complete timing, typed anchors and browser media delivery do not.",
+      "action": "BUILD_MISSING_PREPARATION_AND_TYPED_LINK_HANDOFF",
+      "why": "Reuse existing reviewed work but do not call transcript line numbers recording seconds. Preserve new manual timing assertions durably.",
+      "writes": "Versioned cache/renditions; candidate anchors; reviewed owner-compatible alignment record; derived source-linked export with coverage and uncertainty.",
+      "proof": "Repeated/off-slide/partial-transcript cases and manual correction replay are checked against real media; confirmed quality is separate from syntax-valid export.",
+      "evidence": [
+        "P05 Q037-Q042",
+        "P06 A5/B5"
+      ],
+      "memories": [
+        "M01",
+        "M02",
+        "M03"
+      ]
+    },
+    {
+      "id": "WF03",
+      "status": "EXISTS_AS_TUTOR_CATALOG_WORK; CONTINUOUS_PIPELINE_AND_TREES_MISSING",
+      "current": "Agents curate skills/families and the richer BE 505 question structure; no automatic all-lecture semantic extractor/tree publisher is established.",
+      "action": "WRAP_EXISTING_CATALOG_OWNERS_ADD_BOUNDED_PROPOSALS_AND_VIEWS",
+      "why": "New material should extend the owned catalog, not spawn a duplicate graph authority or prerequisite forest.",
+      "writes": "Scoped catalog deltas through owner; source-backed proposal/evidence receipts; concept-tree export with typed nodes and original relation semantics.",
+      "proof": "Stable IDs reused, incompatible relation directions rejected, duplicate visual branches yield one logical node, and no student assessment is created.",
+      "evidence": [
+        "P05 Q043-Q048",
+        "P06 B5"
+      ],
+      "memories": [
+        "M01",
+        "M02",
+        "M03",
+        "M04",
+        "M05",
+        "M10",
+        "M13"
+      ]
+    },
+    {
+      "id": "WF04",
+      "status": "EXISTS_NATIVE_TUTORING; APP_TRIGGER_FULL_CAPTURE_NOT_IMPLEMENTED",
+      "current": "There are real native explanations and reusable lookup helpers; their externally triggered app path, complete record capture and process-readable return remain missing.",
+      "action": "KEEP_TUTOR_RETRIEVAL_BUILD_CORRELATED_FRONTEND_WRAPPER",
+      "why": "The teaching behavior exists. The app needs exact context, request identity and visible history without treating help as failure.",
+      "writes": "Full committed question sidecar, actual-context receipt, separate delivered answer, verified result manifest and later resume projection.",
+      "proof": "Correct source/figure/question version reaches the correct thread and user; no attempt is fabricated merely because an explanation was requested.",
+      "evidence": [
+        "P05 Q014/Q016/Q017/Q052/Q067-Q072",
+        "P06 B1/B2/B4"
+      ],
+      "memories": [
+        "M01",
+        "M02",
+        "M03",
+        "M04",
+        "M05",
+        "M06",
+        "M12",
+        "M13",
+        "M14"
+      ]
+    },
+    {
+      "id": "WF05",
+      "status": "EXISTS_REAL_ASSESSMENTS; FULL_CAPTURE_AND_COMMON_WRITER_FACADE_MISSING",
+      "current": "Actual attempts preserve outcome/assistance; BE 505 has a helper and other courses coordinated procedures. No general sidecar-integrity verifier or uniform safe save service exists.",
+      "action": "KEEP_ASSESSMENT_SCHEMA_BUILD_CAPTURE_VALIDATE_SAVE_ADAPTER",
+      "why": "The correct improvement is a reliable interface to existing history, not a replacement gradebook or every-answer-is-new-performance rule.",
+      "writes": "Frozen learner turn before inference; pinned rubric/conditions receipt; validated existing-format attempt or explicit pending state; separate tutor reply; writer/readback receipt; view-update request.",
+      "proof": "Unknown timing stays unknown; unsupported family/skill set blocks the candidate but not original capture; retries/regrading do not duplicate the response; saved evidence survives renderer failure.",
+      "evidence": [
+        "P05 Q055-Q066/Q072",
+        "P06 B4"
+      ],
+      "memories": [
+        "M01",
+        "M02",
+        "M03",
+        "M04",
+        "M05",
+        "M06",
+        "M07",
+        "M08",
+        "M13",
+        "M14"
+      ]
+    },
+    {
+      "id": "WF06",
+      "status": "EXISTS_PROMPTED_DIAGNOSIS; PERSISTENT_WAITING_WORKFLOW_MISSING",
+      "current": "Optional follow-up, help labeling and tutor-error acknowledgment exist in behavior/notes; no formal bounded multi-hypothesis workflow or waiting lifecycle is installed.",
+      "action": "STRUCTURE_EXISTING_BEHAVIOR_WITH_OPERATIONAL_PROPOSALS",
+      "why": "Mistakes have alternative explanations. Persistent proposals help continuity without falsely creating canonical root-cause diagnoses.",
+      "writes": "Candidate cause/question/proposal; immutable delivered diagnostic prompt and actual subsequent answer; WF05 assessment; derived gap view after valid canonical changes.",
+      "proof": "Two or three bounded diagnostic steps are a proposed default, not a forced minimum; WAITING_USER releases the worker; no new evidence is imagined to finish the queue.",
+      "evidence": [
+        "P05 Q047/Q071/Q075",
+        "P06 B5"
+      ],
+      "memories": [
+        "M03",
+        "M04",
+        "M05",
+        "M06",
+        "M07",
+        "M08",
+        "M12",
+        "M13"
+      ]
+    },
+    {
+      "id": "WF07",
+      "status": "EXISTS_QUESTION_AUTHORING; RICH_CARD_SELECTION_LIFECYCLE_PARTIAL",
+      "current": "Question/family authoring and a substantial BE 505 bank exist; a uniform versioned selectable rich-card workflow does not.",
+      "action": "REUSE_BANKS_EXTEND_REVIEW_PRESENTATION_AND_SELECTION",
+      "why": "The goal is useful coverage, not many generated cards. A new prompt may reuse a family without duplicating its definition.",
+      "writes": "Catalog-owned question/family revision only when needed; separate selected review-item/configuration and source-linked derived view; no learner attempt.",
+      "proof": "Source-supported solvability, valid alternatives, disclosure boundaries and intentional selection are checked; item edits do not rewrite old reviewed content.",
+      "evidence": [
+        "P05 Q049-Q054",
+        "P06 B5"
+      ],
+      "memories": [
+        "M01",
+        "M03",
+        "M04",
+        "M05",
+        "M08",
+        "M11"
+      ]
+    },
+    {
+      "id": "WF08",
+      "status": "NOT_FOUND_EXECUTING_REVIEW_SCHEDULER",
+      "current": "Suggestions and reminders are not a functioning spaced-review system; no active adaptive review event engine or two-way card synchronization was found.",
+      "action": "BUILD_ONE_OPERATIONAL_SCHEDULER_WITH_ESTABLISHED_ALGORITHM",
+      "why": "Scheduling is a genuinely missing conventional service. Misconception diagnosis remains WF06 and competence remains canonical attempts.",
+      "writes": "Versioned item selection/configuration; one review event per submitted response tied to WF05 attempt; deterministic due queue; explicit suspended/uncertain state.",
+      "proof": "The same review is applied once; no answer gives WAITING_USER; assisted/uncertain results are not silently independent success or failure; regrade changes projections, not historical event count.",
+      "evidence": [
+        "P05 Q073-Q078",
+        "P06 A5/B5"
+      ],
+      "memories": [
+        "M03",
+        "M05",
+        "M06",
+        "M07",
+        "M08",
+        "M11",
+        "M12",
+        "M14"
+      ]
+    },
+    {
+      "id": "WF09",
+      "status": "CORRECTION_CONTRACT_EXISTS; GENERAL_CHANGE_ORCHESTRATION_MISSING",
+      "current": "assessment_revision and controlled tracking recovery are implemented contracts; P05 had no actual production assessment revisions and no universal dependency invalidation graph.",
+      "action": "KEEP_REVISION_RULES_ADD_REVIEW_ROUTING_AND_DEPENDENCY_MANIFESTS",
+      "why": "Different errors require different owners. A changed graph label or tool version must not silently rewrite learner history.",
+      "writes": "Existing-format assessment revision or source/catalog annotation through owner; expected-predecessor checks; supersession receipts; scoped regeneration tasks.",
+      "proof": "Same intended skills, original prompt/response/time, single nonbranching correction chain; competing branches stop; view-only edit does not regrade an attempt.",
+      "evidence": [
+        "P05 Q036/Q059/Q088; lines 498-510",
+        "P06 B4/B5"
+      ],
+      "memories": [
+        "M01",
+        "M02",
+        "M04",
+        "M05",
+        "M06",
+        "M07",
+        "M08",
+        "M09",
+        "M10",
+        "M11",
+        "M12",
+        "M15"
+      ]
+    },
+    {
+      "id": "WF10",
+      "status": "EXISTS_LEARNING_RENDERERS; NEW_PROJECTIONS_AND_RESUME_MISSING",
+      "current": "Learning/shared renderers and some study exports exist, with reported stale views. No universal concept-tree/gap/review/resume view producer exists.",
+      "action": "REUSE_RENDERERS_ADD_DERIVED_VIEWS_AND_EXACT_INPUT_MANIFESTS",
+      "why": "Rebuilding trusted views is safer than asking an LLM to overwrite one cumulative memory file. Current facts must come from original effective evidence.",
+      "writes": "Existing views through owners; proposed tree/gap/review exports; actual-source-linked session summary; complete export manifest and app task dashboards.",
+      "proof": "Deterministic structured facts rebuild from owned inputs. Model-written prose summaries are identified as replaceable generated wording, not guaranteed byte-identical regeneration or new observations.",
+      "evidence": [
+        "P05 Q060/Q076-Q088/Q098",
+        "P06 B4/B5"
+      ],
+      "memories": [
+        "M01",
+        "M02",
+        "M04",
+        "M05",
+        "M06",
+        "M07",
+        "M08",
+        "M09",
+        "M10",
+        "M11",
+        "M12",
+        "M13",
+        "M14"
+      ]
+    },
+    {
+      "id": "WF11",
+      "status": "PARTIAL_EXISTING_RECOVERY; RESIDENT_LIFECYCLE_UNVERIFIED",
+      "current": "Some guarded publisher recovery and historical fixtures exist; no current companion or verified lock-screen/reboot/native-update/Drive-reconnect lifecycle was established.",
+      "action": "KEEP_PUBLISHER_RECOVERY_BUILD_SUPERVISOR_RECONCILIATION",
+      "why": "Always-on hardware does not make authentication, synchronization or native execution outcomes infallible. Recovery must preserve exact prior effects.",
+      "writes": "Minimal local health/incident/backup receipts and Drive-visible status; verified repair/recovery results; no unapproved model/tool/permission change.",
+      "proof": "Reconcile uncertain native and canonical receipts before retry; preserve referenced sidecars in backup/cleanup; old lock is not deleted blindly; no autonomous expensive self-repair loop.",
+      "evidence": [
+        "P05 Q064-Q066/Q095-Q101",
+        "P06 A3/B3/B4"
+      ],
+      "memories": [
+        "M01",
+        "M06",
+        "M07",
+        "M09",
+        "M11",
+        "M12",
+        "M14",
+        "M15"
+      ]
+    }
+  ],
+  "new_live_tests": "NOT_RUN",
+  "runtime_or_live_changes": false,
+  "new_execution_approval": false
+}

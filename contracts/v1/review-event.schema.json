@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.lecture-learning.invalid/v1/review-event.schema.json",
+  "title": "Lecture Learning review-event v1 (new adapter contract; not existing academic schema)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "event_id",
+    "scope",
+    "item_id",
+    "item_revision",
+    "submission",
+    "attempt",
+    "occurred_at",
+    "rating",
+    "rating_basis",
+    "assistance_before_answer",
+    "apply_schedule",
+    "scheduler_config",
+    "previous_schedule_revision"
+  ],
+  "properties": {
+    "contract": {
+      "const": "ll.review-event/1"
+    },
+    "event_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "scope": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/scope"
+    },
+    "item_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "item_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "submission": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/artifact"
+    },
+    "attempt": {
+      "anyOf": [
+        {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/evidence_ref"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "occurred_at": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/time"
+    },
+    "rating": {
+      "anyOf": [
+        {
+          "enum": [
+            "again",
+            "hard",
+            "good",
+            "easy"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "rating_basis": {
+      "enum": [
+        "learner_recall_report",
+        "reviewed_observation",
+        "unresolved"
+      ]
+    },
+    "assistance_before_answer": {
+      "enum": [
+        "none_reported",
+        "assisted",
+        "unknown"
+      ]
+    },
+    "apply_schedule": {
+      "type": "boolean"
+    },
+    "scheduler_config": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/artifact"
+    },
+    "previous_schedule_revision": {
+      "anyOf": [
+        {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/hash"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

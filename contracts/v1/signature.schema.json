@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.lecture-learning.invalid/v1/signature.schema.json",
+  "title": "Lecture Learning signature v1 (new adapter contract; not existing academic schema)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "signature"
+  ],
+  "properties": {
+    "contract": {
+      "const": "ll.signature/1"
+    },
+    "signature": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/signature"
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "contract": "ll.publication/1",
+  "receipt_id": "receipt-fixture",
+  "request_id": "req-fixture",
+  "scope": {
+    "course_id": "fixture-course",
+    "term": "fixture-term"
+  },
+  "writer_id": "fixture-writer",
+  "kind": "attempt",
+  "status": "saved",
+  "canonical_record": {
+    "record_id": "fixture-record",
+    "artifact": {
+      "path": "records/fixture.json",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bytes": 12,
+      "media_type": "application/json"
+    }
+  },
+  "view_status": "stale",
+  "captured_submission": {
+    "path": "turns/turn.json",
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "bytes": 12,
+    "media_type": "application/json"
+  },
+  "observed_at": "2026-10-03T12:00:00Z",
+  "reason": null
+}

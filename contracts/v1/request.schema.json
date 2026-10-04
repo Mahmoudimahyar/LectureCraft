@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.lecture-learning.invalid/v1/request.schema.json",
+  "title": "Lecture Learning request v1 (new adapter contract; not existing academic schema)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "request_id",
+    "logical_input_id",
+    "device_id",
+    "sequence",
+    "scope",
+    "thread_key",
+    "binding_revision",
+    "parent_request_id",
+    "action",
+    "depth",
+    "submitted_at",
+    "payload",
+    "expires_at"
+  ],
+  "properties": {
+    "contract": {
+      "const": "ll.request/1"
+    },
+    "request_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "logical_input_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "device_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "scope": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/scope"
+    },
+    "thread_key": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "binding_revision": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/hash"
+    },
+    "parent_request_id": {
+      "anyOf": [
+        {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "action": {
+      "enum": [
+        "ask",
+        "explain",
+        "practice",
+        "diagnose",
+        "select_review",
+        "edit_review",
+        "review_answer",
+        "correct_assessment",
+        "correct_source",
+        "save_note",
+        "resume",
+        "cancel",
+        "source_hint"
+      ]
+    },
+    "depth": {
+      "enum": [
+        "quick",
+        "standard",
+        "deep"
+      ]
+    },
+    "submitted_at": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/time"
+    },
+    "payload": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/artifact"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

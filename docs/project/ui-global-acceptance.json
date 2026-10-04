@@ -1,0 +1,223 @@
+{
+  "version": "0.8.0",
+  "status": "PLANNED_NOT_RUN",
+  "applies_to": "All relevant UI01–UI32 states; evaluate applicability explicitly, never silently skip",
+  "cases": [
+    {
+      "id": "UXG01",
+      "title": "Light/dark parity",
+      "given": "each screen and modal in both themes",
+      "when": "all primary and failure states are exercised",
+      "then": "the same actions, information and focus behavior work in both; charts/status use text alternatives",
+      "reference": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG02",
+      "title": "No first-paint theme flash",
+      "given": "a saved explicit theme or System preference",
+      "when": "the private app opens",
+      "then": "the resolved theme is applied before content paint; unavailable persistence does not prevent a current-session choice",
+      "reference": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG03",
+      "title": "Original-source color fidelity",
+      "given": "a slide, microscopy image or color-coded graph",
+      "when": "the app theme changes",
+      "then": "the underlying source colors/content are unchanged; a separate readable rendition is clearly labeled",
+      "reference": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG04",
+      "title": "Accessible names and controls",
+      "given": "the screen is used with keyboard and assistive technology",
+      "when": "controls, tabs and dialogs are navigated",
+      "then": "names/roles/state are exposed, native semantics are preferred, and active tabs/panels have clear relationships",
+      "reference": "WAI-TABS",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG05",
+      "title": "Focus and modal recovery",
+      "given": "a source/correction dialog was opened from a control",
+      "when": "it closes or errors",
+      "then": "focus returns predictably; no focus trap, hidden focused control or unsolicited focus transfer occurs",
+      "reference": "WAI-DIALOG",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG06",
+      "title": "Reflow and enlargement",
+      "given": "app UI text is enlarged to 200% or constrained to a narrow viewport",
+      "when": "the user navigates study/settings/review",
+      "then": "app text and controls remain usable; intrinsically two-dimensional slides use contained zoom/pan plus alternatives rather than shrinking all UI",
+      "reference": "WCAG22",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG07",
+      "title": "Contrast and non-color status",
+      "given": "normal/large text and essential controls in each theme",
+      "when": "contrast and status are reviewed",
+      "then": "normal text target is at least 4.5:1, large text 3:1, essential nontext control indicators 3:1 where applicable; state is not color-only",
+      "reference": "WCAG22",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG08",
+      "title": "Targets and non-drag alternatives",
+      "given": "phone, keyboard or limited pointer precision",
+      "when": "a timeline, range editor, tree or card control is used",
+      "then": "primary touch controls target 44 CSS px as a product preference, WCAG 2.2 AA 24px-or-spacing exceptions are assessed, and dragging is not the sole action",
+      "reference": "WCAG22",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG09",
+      "title": "Reduced motion",
+      "given": "OS or app requests reduced motion",
+      "when": "panels, cards or themes change",
+      "then": "nonessential transforms, smooth scrolling and decorative motion are removed while essential meaning remains; no autoplay animations claim progress",
+      "reference": "WAI-MOTION",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG10",
+      "title": "Media access and truthful alternatives",
+      "given": "audio/video and slides are available",
+      "when": "the user accesses captions/transcript/figure context",
+      "then": "provided alternatives are actually usable and their verification gaps explicit; a text field or generated description alone is not accessibility certification",
+      "reference": "WCAG22",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG11",
+      "title": "Input before inference",
+      "given": "an explicit learner answer with attachments",
+      "when": "provider execution fails",
+      "then": "verified input is retained with its known durability and no unsupported assessment is claimed",
+      "reference": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG12",
+      "title": "No assessment by attendance",
+      "given": "a learner views a slide, watches a recording or receives a quick answer",
+      "when": "derived progress refreshes",
+      "then": "no new performance event is inferred; existing evidence is neither erased nor downgraded",
+      "reference": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG13",
+      "title": "No answer leakage",
+      "given": "a practice condition excludes solution content",
+      "when": "search, previews, downloadable payloads or related cards are opened",
+      "then": "the app-provided context does not leak solutions; unrelated native history cannot be certified as absent",
+      "reference": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG14",
+      "title": "Safe content rendering",
+      "given": "untrusted source/AI text includes HTML, links or instructions",
+      "when": "the app renders it",
+      "then": "text is safely rendered, links remain explicit, and content cannot change grants, execute commands or invoke writes",
+      "reference": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG15",
+      "title": "Separate durability stages",
+      "given": "a draft is local, a bundle in transit, or a response committed",
+      "when": "status is displayed",
+      "then": "labels reflect local persistence, PC acknowledgement, native completion and canonical publication separately; no blanket Saved tick",
+      "reference": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG16",
+      "title": "Duplicate admission/publication",
+      "given": "same request or review event arrives repeatedly",
+      "when": "supervisor reconciles events",
+      "then": "one accepted logical response/event exists; same ID with different bytes becomes a visible conflict",
+      "reference": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG17",
+      "title": "Cancellation races",
+      "given": "cancel or supersession occurs near completion",
+      "when": "a late native output returns",
+      "then": "current accepted generation is not replaced and an already committed record is not silently erased",
+      "reference": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG18",
+      "title": "Current-versus-historical evidence",
+      "given": "source/rubric changes after an attempt",
+      "when": "history and current views are opened",
+      "then": "old evidence retains its original references; affected derived outputs are stale/rebuilt without automatic regrading",
+      "reference": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG19",
+      "title": "Time semantics",
+      "given": "device clocks differ or occurrence time is unknown",
+      "when": "a response/summary is displayed",
+      "then": "received/recorded/occurred times and timezone basis remain distinguishable; chronology is not fabricated from sync arrival",
+      "reference": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG20",
+      "title": "No evidence in addresses or analytics",
+      "given": "private navigation and errors",
+      "when": "links/logs/telemetry are produced",
+      "then": "routes avoid full answers, tokens and expiring signed URLs; optional telemetry is not enabled by this design",
+      "reference": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG21",
+      "title": "Cross-device state integrity",
+      "given": "two authorized devices update view or drafts",
+      "when": "state syncs",
+      "then": "explicit source/lineage and per-device preferences govern; no blind last-write-wins over submitted evidence",
+      "reference": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG22",
+      "title": "No duplicate ownership",
+      "given": "new material, canonical save or gap display",
+      "when": "the app acts",
+      "then": "source registration uses the existing updater, learning uses its own writer, and gap/tree exports remain projections",
+      "reference": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG23",
+      "title": "Consumer-visible completion",
+      "given": "a result manifest arrives before payloads",
+      "when": "a client opens the response",
+      "then": "it waits for complete matching bytes or shows the last verified snapshot; local PC publication is not remote delivery proof",
+      "reference": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "UXG24",
+      "title": "Reuse without plugin proliferation",
+      "given": "implementation selects UI dependencies",
+      "when": "a behavior is built",
+      "then": "maintained primitives/native capabilities are evaluated before custom code; no library installs, proprietary services or auto agent APIs are implied by the spec",
+      "reference": null,
+      "status": "NOT_RUN"
+    }
+  ]
+}

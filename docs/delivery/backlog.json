@@ -1,0 +1,2073 @@
+{
+  "version": "0.9.0",
+  "authority": "Task-ready planning records, not automatically executable shell plans or proof of permission. Compile only approved tasks into the actual Seed task schema.",
+  "tasks": [
+    {
+      "id": "LL001",
+      "milestone": "R0",
+      "title": "Create a separate Seed-based application workspace",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [],
+      "features": [],
+      "flows": [],
+      "stories": [],
+      "workflows": [],
+      "planned_edit_roots": [
+        "AGENTS.md",
+        "docs/",
+        "quality/",
+        "scripts/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "Preserve upstream source identity and applicable starter checks",
+        "No files copied from canonical course folders into public Git",
+        "Check instructions, feature mappings and explicit scoped permission"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL002",
+      "milestone": "R0",
+      "title": "Resolve selected dependencies and reproducible locks",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL001"
+      ],
+      "features": [],
+      "flows": [],
+      "stories": [],
+      "workflows": [],
+      "planned_edit_roots": [
+        "apps/web/package.json",
+        "package-lock.json",
+        "requirements/",
+        "docs/engineering/dependency-receipts.json"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE",
+        "DEPENDENCY_INSTALL"
+      ],
+      "acceptance": [
+        "Review actual package licenses, provenance and supported APIs",
+        "Clean environment install plus import/build tests",
+        "Record all exact versions, checksums and generated-component source revisions"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL003",
+      "milestone": "R0",
+      "title": "Capture real academic interfaces without invoking unsafe writers",
+      "owner_role": "operator + integration engineer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL001"
+      ],
+      "features": [],
+      "flows": [],
+      "stories": [],
+      "workflows": [
+        "WF01",
+        "WF05",
+        "WF09"
+      ],
+      "planned_edit_roots": [
+        "fixtures/academic/",
+        "docs/engineering/owner-contracts.json"
+      ],
+      "required_gates": [
+        "OWNER_SOURCE_ACCESS"
+      ],
+      "acceptance": [
+        "Validate redacted schema fixtures against supplied original schemas",
+        "Identify global ROOT/save paths before any test import",
+        "Record exact interpreter and distinct writer locks"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL004",
+      "milestone": "R0",
+      "title": "Implement shared wire validation and generated client types",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL001"
+      ],
+      "features": [],
+      "flows": [],
+      "stories": [],
+      "workflows": [
+        "WF00",
+        "WF05",
+        "WF09"
+      ],
+      "planned_edit_roots": [
+        "packages/contracts/",
+        "apps/brain/contracts/",
+        "tests/contracts/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "All supplied positive/negative examples agree in Python and browser validators",
+        "Duplicate JSON keys, unsupported versions, path limits and cross-record identity fail closed",
+        "No download of schemas from payload URLs"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL005",
+      "milestone": "R1",
+      "title": "Build shared source-first shell, tokens and components",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL002",
+        "LL004"
+      ],
+      "features": [
+        "workspace-access"
+      ],
+      "flows": [
+        "UI28"
+      ],
+      "stories": [
+        "US055",
+        "US056"
+      ],
+      "workflows": [
+        "WF10"
+      ],
+      "planned_edit_roots": [
+        "apps/web/src/components/",
+        "apps/web/src/styles/",
+        "apps/web/src/theme/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "Light/Dark/System first paint, focus, reduced-motion and original-color invariants",
+        "Storybook local visual states including errors and empty lists",
+        "No unnecessary animation/UI framework duplication"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL006",
+      "milestone": "R1",
+      "title": "Implement local drafts and immutable submission capture",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL004",
+        "LL005"
+      ],
+      "features": [
+        "evidence-alignment",
+        "tutoring"
+      ],
+      "flows": [
+        "UI13",
+        "UI18"
+      ],
+      "stories": [
+        "US025",
+        "US026",
+        "US035",
+        "US036"
+      ],
+      "workflows": [
+        "WF05",
+        "WF10"
+      ],
+      "planned_edit_roots": [
+        "apps/web/src/capture/",
+        "apps/brain/capture/",
+        "tests/capture/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "Input survives model failure before dispatch",
+        "No later tutor text mutates hashed submission",
+        "Storage unavailable state is not falsely labeled safe"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL007",
+      "milestone": "R1",
+      "title": "Implement local job journal and migration lifecycle",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL004"
+      ],
+      "features": [
+        "agent-dispatch"
+      ],
+      "flows": [
+        "UI25"
+      ],
+      "stories": [
+        "US049",
+        "US050"
+      ],
+      "workflows": [
+        "WF00",
+        "WF11"
+      ],
+      "planned_edit_roots": [
+        "apps/brain/journal/",
+        "apps/brain/migrations/",
+        "tests/journal/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "Atomic admission, duplicate identity, fencing, restart and compare-and-swap",
+        "SQLite/WAL only on local nonsynced storage",
+        "Idle produces zero model requests"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL008",
+      "milestone": "R1",
+      "title": "Isolate and wrap the real course writers",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL003",
+        "LL004",
+        "LL006"
+      ],
+      "features": [
+        "tutoring"
+      ],
+      "flows": [
+        "UI17"
+      ],
+      "stories": [
+        "US033",
+        "US034"
+      ],
+      "workflows": [
+        "WF05",
+        "WF09",
+        "WF11"
+      ],
+      "planned_edit_roots": [
+        "apps/brain/writers/",
+        "tests/writers/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE",
+        "OWNER_SOURCE_ACCESS"
+      ],
+      "acceptance": [
+        "Fix global-root defect only in isolated copy and compare two roots",
+        "Same ID same bytes no-op; different bytes conflict; saved-but-view-failed retained",
+        "Tracking source-hash flag repaired/tested separately; no learning writes through tracking publisher"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL009",
+      "milestone": "R1",
+      "title": "Normalize read-only catalogs and complete source inventory",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL003",
+        "LL004"
+      ],
+      "features": [
+        "progress",
+        "workspace-access"
+      ],
+      "flows": [
+        "UI03",
+        "UI19"
+      ],
+      "stories": [
+        "US005",
+        "US006",
+        "US037",
+        "US038"
+      ],
+      "workflows": [
+        "WF01",
+        "WF03",
+        "WF10"
+      ],
+      "planned_edit_roots": [
+        "apps/brain/readers/",
+        "packages/read-models/",
+        "tests/readers/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE",
+        "OWNER_SOURCE_ACCESS"
+      ],
+      "acceptance": [
+        "All five configured course identities and every inventory entry retained",
+        "Question containment not converted to concept prerequisite",
+        "Missing/unindexed/unrecorded/old unavailable bytes remain distinct"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL010",
+      "milestone": "R1",
+      "title": "Implement course navigation and bounded search",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL005",
+        "LL009"
+      ],
+      "features": [
+        "workspace-access"
+      ],
+      "flows": [
+        "UI03",
+        "UI04"
+      ],
+      "stories": [
+        "US005",
+        "US006",
+        "US007",
+        "US008"
+      ],
+      "workflows": [
+        "WF04",
+        "WF10"
+      ],
+      "planned_edit_roots": [
+        "apps/web/src/features/workspace/",
+        "apps/brain/retrieval/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "Search preserves draft/slide/source revision and Back behavior",
+        "Scope defaults current course; cross-course explicit",
+        "No whole-archive model prompt or always-on graph server"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL011",
+      "milestone": "R1",
+      "title": "Render slides, figures and scoped source drawers",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL005",
+        "LL009"
+      ],
+      "features": [
+        "evidence-alignment"
+      ],
+      "flows": [
+        "UI06",
+        "UI09"
+      ],
+      "stories": [
+        "US011",
+        "US012",
+        "US017",
+        "US018"
+      ],
+      "workflows": [
+        "WF02",
+        "WF10"
+      ],
+      "planned_edit_roots": [
+        "apps/web/src/features/sources/",
+        "apps/brain/renditions/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "Actual PDF display/text-layer and figure behavior on permitted fixtures",
+        "Versioned rendition never overwrites original PDF/PPTX",
+        "Source script/actions disabled; restricted HTML shown safely"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL012",
+      "milestone": "R1",
+      "title": "Implement clip playback and synchronized transcript controls",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL011"
+      ],
+      "features": [
+        "evidence-alignment"
+      ],
+      "flows": [
+        "UI07",
+        "UI08"
+      ],
+      "stories": [
+        "US013",
+        "US014",
+        "US015",
+        "US016"
+      ],
+      "workflows": [
+        "WF02",
+        "WF10"
+      ],
+      "planned_edit_roots": [
+        "apps/web/src/features/media/",
+        "tests/media/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "Bounded interval default stop, repeats, seek tolerance and clock origins",
+        "Untimed transcript has line refs only",
+        "Mic recording pauses lecture audio; panel/theme changes preserve player"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL013",
+      "milestone": "R2",
+      "title": "Implement durable owned source annotations and correction UI",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL004",
+        "LL008",
+        "LL011",
+        "LL012"
+      ],
+      "features": [
+        "evidence-alignment"
+      ],
+      "flows": [
+        "UI10"
+      ],
+      "stories": [
+        "US019",
+        "US020"
+      ],
+      "workflows": [
+        "WF02",
+        "WF09",
+        "WF10"
+      ],
+      "planned_edit_roots": [
+        "apps/brain/annotations/",
+        "apps/web/src/features/alignment/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "Confirmed correction survives regenerating exports",
+        "Two conflicting revisions require reconciliation",
+        "No inferred chapter reference presented as exact page"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL014",
+      "milestone": "R2",
+      "title": "Extend the existing updater receipt handoff",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL003",
+        "LL007",
+        "LL009"
+      ],
+      "features": [
+        "workspace-access"
+      ],
+      "flows": [
+        "UI05"
+      ],
+      "stories": [
+        "US009",
+        "US010"
+      ],
+      "workflows": [
+        "WF01",
+        "WF02",
+        "WF03"
+      ],
+      "planned_edit_roots": [
+        "apps/brain/updater_adapter/",
+        "tests/updater/",
+        "docs/operations/updater-extension.md"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE",
+        "OWNER_SOURCE_ACCESS"
+      ],
+      "acceptance": [
+        "Consume actual publication receipts; do not add competing cron",
+        "Preserve safety caps until owner approves continuation policy",
+        "No model rescan loop from generated output Markdown"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL015",
+      "milestone": "R2",
+      "title": "Prepare and align all available lecture material",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL012",
+        "LL013",
+        "LL014"
+      ],
+      "features": [
+        "evidence-alignment",
+        "workspace-access"
+      ],
+      "flows": [
+        "UI05",
+        "UI07",
+        "UI08",
+        "UI10"
+      ],
+      "stories": [
+        "US009",
+        "US010",
+        "US013",
+        "US014",
+        "US015",
+        "US016",
+        "US019",
+        "US020"
+      ],
+      "workflows": [
+        "WF02",
+        "WF03"
+      ],
+      "planned_edit_roots": [
+        "apps/brain/preparation/",
+        "evals/alignment/",
+        "tests/preparation/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE",
+        "COURSE_READ",
+        "PREPARATION_EXECUTION"
+      ],
+      "acceptance": [
+        "Inspect transcript fidelity and actual video content before selecting match basis",
+        "Measure coverage, wrong links and boundary errors on held-out sources",
+        "Entire release inventory processed; absent originals retain honest disposition"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL016",
+      "milestone": "R2",
+      "title": "Project typed concept structures from existing owners",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL009",
+        "LL013",
+        "LL014"
+      ],
+      "features": [
+        "progress"
+      ],
+      "flows": [
+        "UI19"
+      ],
+      "stories": [
+        "US037",
+        "US038"
+      ],
+      "workflows": [
+        "WF03",
+        "WF10"
+      ],
+      "planned_edit_roots": [
+        "apps/brain/projections/concepts/",
+        "apps/web/src/features/concepts/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "Bounded traversal with repeated identity and appropriate cycle handling",
+        "No new independent graph/gap database",
+        "Catalog changes staged through owners and source-backed"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL017",
+      "milestone": "R2",
+      "title": "Pair devices and implement signed immutable Drive bundles",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL002",
+        "LL004",
+        "LL006",
+        "LL007"
+      ],
+      "features": [
+        "workspace-access"
+      ],
+      "flows": [
+        "UI01",
+        "UI02"
+      ],
+      "stories": [
+        "US001",
+        "US002",
+        "US003",
+        "US004"
+      ],
+      "workflows": [
+        "WF00",
+        "WF11"
+      ],
+      "planned_edit_roots": [
+        "apps/web/src/transport/",
+        "apps/brain/transport/",
+        "tests/transport/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "Real crypto library cross-language fixture compatibility",
+        "Unpaired/revoked key cannot dispatch; signed bad input still rejected",
+        "Complete manifest/bytes, duplicate Drive names, order and replay handled"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL018",
+      "milestone": "R2",
+      "title": "Implement native adapter contract and safe local control",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL004",
+        "LL007"
+      ],
+      "features": [
+        "agent-dispatch"
+      ],
+      "flows": [
+        "UI25",
+        "UI29"
+      ],
+      "stories": [
+        "US049",
+        "US050",
+        "US057",
+        "US058"
+      ],
+      "workflows": [
+        "WF00",
+        "WF11"
+      ],
+      "planned_edit_roots": [
+        "apps/brain/native/",
+        "tests/native_protocol/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "Wrong course/thread/config blocks with no fallback",
+        "Subscription authentication not confused with native conversation identity",
+        "Prompt-only restrictions cannot claim OS/tool safety"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL019",
+      "milestone": "R2",
+      "title": "Prove one actual native desktop request and return",
+      "owner_role": "operator + integration engineer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL018"
+      ],
+      "features": [
+        "agent-dispatch"
+      ],
+      "flows": [
+        "UI25",
+        "UI29"
+      ],
+      "stories": [
+        "US049",
+        "US050",
+        "US057",
+        "US058"
+      ],
+      "workflows": [
+        "WF00",
+        "WF11"
+      ],
+      "planned_edit_roots": [
+        "evidence/native/",
+        "config/local-bindings/"
+      ],
+      "required_gates": [
+        "NATIVE_PROBE"
+      ],
+      "acceptance": [
+        "Disposable explicit target, bounded permission, correlated process-readable terminal result",
+        "Queue success alone insufficient; unknown acceptance never blind retry",
+        "Record actual product/thread/model/tool capabilities and version; stop on unsafe interface"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL020",
+      "milestone": "R2",
+      "title": "Prove second-device Drive read, paired input and output",
+      "owner_role": "operator + integration engineer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL017"
+      ],
+      "features": [
+        "agent-dispatch",
+        "workspace-access"
+      ],
+      "flows": [
+        "UI01",
+        "UI02",
+        "UI27"
+      ],
+      "stories": [
+        "US001",
+        "US002",
+        "US003",
+        "US004",
+        "US053",
+        "US054"
+      ],
+      "workflows": [
+        "WF00",
+        "WF11"
+      ],
+      "planned_edit_roots": [
+        "evidence/drive/",
+        "config/local-bindings/"
+      ],
+      "required_gates": [
+        "DRIVE_OAUTH",
+        "STATIC_DEPLOYMENT",
+        "DEVICE_PAIRING"
+      ],
+      "acceptance": [
+        "User-authenticated scoped OAuth, file bytes, playback and write scope actually work",
+        "Public static shell contains no private data; no inbound PC port",
+        "Result identity/signature and remote completeness checked independently of local save"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL021",
+      "milestone": "R3",
+      "title": "Join coordinator, updater and owning writers",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL007",
+        "LL008",
+        "LL014",
+        "LL018",
+        "LL019",
+        "LL020"
+      ],
+      "features": [
+        "agent-dispatch"
+      ],
+      "flows": [
+        "UI25",
+        "UI27",
+        "UI32"
+      ],
+      "stories": [
+        "US049",
+        "US050",
+        "US053",
+        "US054",
+        "US063",
+        "US064"
+      ],
+      "workflows": [
+        "WF00",
+        "WF01",
+        "WF11"
+      ],
+      "planned_edit_roots": [
+        "apps/brain/supervisor/",
+        "tests/integration/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE",
+        "NATIVE_PROBE",
+        "DRIVE_OAUTH"
+      ],
+      "acceptance": [
+        "One thread turn and owner lock at a time; fair bounded work",
+        "Uncertain/cancelled/late outcomes cannot duplicate publications",
+        "Approve process startup separately from tests"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL022",
+      "milestone": "R3",
+      "title": "Implement quick answers and deeper sourced conversation",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL006",
+        "LL010",
+        "LL018"
+      ],
+      "features": [
+        "tutoring"
+      ],
+      "flows": [
+        "UI11",
+        "UI12"
+      ],
+      "stories": [
+        "US021",
+        "US022",
+        "US023",
+        "US024"
+      ],
+      "workflows": [
+        "WF04",
+        "WF10"
+      ],
+      "planned_edit_roots": [
+        "apps/web/src/features/tutor/",
+        "apps/brain/tutor/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "Quick answer produces no fake not_observed attempt or loss of prior evidence",
+        "Sources and actual loaded context receipts linked",
+        "No forced quiz; next action reflects time preference"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL023",
+      "milestone": "R3",
+      "title": "Implement criterion-aware teach-back and practice",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL006",
+        "LL008",
+        "LL009",
+        "LL022"
+      ],
+      "features": [
+        "tutoring"
+      ],
+      "flows": [
+        "UI13",
+        "UI15"
+      ],
+      "stories": [
+        "US025",
+        "US026",
+        "US029",
+        "US030"
+      ],
+      "workflows": [
+        "WF05",
+        "WF10"
+      ],
+      "planned_edit_roots": [
+        "apps/brain/assessment/",
+        "apps/web/src/features/practice/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "Freeze intended family/revision and validate same intended skills",
+        "Alternate correct answers and uncertainty supported",
+        "Capture stays available if family missing or canonical save blocked"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL024",
+      "milestone": "R3",
+      "title": "Implement spoken teach-back with corrected text evidence",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL006",
+        "LL012",
+        "LL023"
+      ],
+      "features": [
+        "tutoring"
+      ],
+      "flows": [
+        "UI14"
+      ],
+      "stories": [
+        "US027",
+        "US028"
+      ],
+      "workflows": [
+        "WF05",
+        "WF09"
+      ],
+      "planned_edit_roots": [
+        "apps/web/src/voice/",
+        "apps/brain/transcription/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE",
+        "MICROPHONE",
+        "LOCAL_MODEL_INSTALL"
+      ],
+      "acceptance": [
+        "User gesture, pause audio, review/correct transcript before assessment",
+        "No silent hosted audio provider or persistent raw voice",
+        "Text fallback; unsupported recognition clearly blocked"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL025",
+      "milestone": "R3",
+      "title": "Calibrate alignment, tutor and assessment task evaluations",
+      "owner_role": "operator + integration engineer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL015",
+        "LL022",
+        "LL023",
+        "LL024"
+      ],
+      "features": [
+        "tutoring"
+      ],
+      "flows": [
+        "UI11",
+        "UI12",
+        "UI13",
+        "UI14",
+        "UI15"
+      ],
+      "stories": [
+        "US021",
+        "US022",
+        "US023",
+        "US024",
+        "US025",
+        "US026",
+        "US027",
+        "US028",
+        "US029",
+        "US030"
+      ],
+      "workflows": [
+        "WF02",
+        "WF04",
+        "WF05"
+      ],
+      "planned_edit_roots": [
+        "evals/",
+        "evidence/evaluations/"
+      ],
+      "required_gates": [
+        "COURSE_READ",
+        "NATIVE_PROBE",
+        "EVALUATION_RUNS"
+      ],
+      "acceptance": [
+        "Reviewed training/held-out split and counterexamples; no self-judged only promotion",
+        "Separate quote/source accuracy, grade accuracy, useful abstention, cost/latency",
+        "Model/rubric change reruns relevant tests without rewriting history"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL026",
+      "milestone": "R3",
+      "title": "Implement diagnostic hypothesis and real WAITING_USER continuation",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL023"
+      ],
+      "features": [
+        "tutoring"
+      ],
+      "flows": [
+        "UI16"
+      ],
+      "stories": [
+        "US031",
+        "US032"
+      ],
+      "workflows": [
+        "WF06"
+      ],
+      "planned_edit_roots": [
+        "apps/brain/diagnosis/",
+        "apps/web/src/features/diagnosis/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "Normally one or two discriminating prompts then learner chooses depth",
+        "Tutor-caused errors and alternative causes retained",
+        "No generated learner response; no prerequisite weakness inherited from graph",
+        "Fixture diagnosis can proceed before LL025; no live pedagogical quality claim until its reviewed evaluation passes."
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL027",
+      "milestone": "R3",
+      "title": "Implement disputes, capture corrections and genuine new answers",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL008",
+        "LL023"
+      ],
+      "features": [
+        "progress",
+        "tutoring"
+      ],
+      "flows": [
+        "UI17",
+        "UI21"
+      ],
+      "stories": [
+        "US033",
+        "US034",
+        "US041",
+        "US042"
+      ],
+      "workflows": [
+        "WF09",
+        "WF10"
+      ],
+      "planned_edit_roots": [
+        "apps/brain/corrections/",
+        "apps/web/src/features/history/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "Nonbranching assessment_revision chain; same original skill set",
+        "Transcript correction/new answer differ from regrade",
+        "Rebuild only affected views; do not delete original evidence"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL028",
+      "milestone": "R4",
+      "title": "Implement selected rich questions and review items",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL009",
+        "LL016",
+        "LL023"
+      ],
+      "features": [
+        "review"
+      ],
+      "flows": [
+        "UI22",
+        "UI23"
+      ],
+      "stories": [
+        "US043",
+        "US044",
+        "US045",
+        "US046"
+      ],
+      "workflows": [
+        "WF07"
+      ],
+      "planned_edit_roots": [
+        "apps/brain/review_items/",
+        "apps/web/src/features/questions/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "Existing banks first; source/rubric provenance; bounded suggestions",
+        "Saved_only versus active explicit",
+        "Edited item retains previous prompt/rating history"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL029",
+      "milestone": "R4",
+      "title": "Implement scheduler adapter and immutable review events",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL002",
+        "LL004",
+        "LL023",
+        "LL028"
+      ],
+      "features": [
+        "review"
+      ],
+      "flows": [
+        "UI24"
+      ],
+      "stories": [
+        "US047",
+        "US048"
+      ],
+      "workflows": [
+        "WF08"
+      ],
+      "planned_edit_roots": [
+        "apps/brain/review/",
+        "tests/review/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "Use py-fsrs; record exact config/library version and rating basis",
+        "One real event per review; no rating from skip/uncertain assessment",
+        "Assisted tasks retained as practice with explicit rescheduling choice, no automatic pass"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL030",
+      "milestone": "R4",
+      "title": "Implement evidence-linked progress and current gap views",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL016",
+        "LL027",
+        "LL029"
+      ],
+      "features": [
+        "progress"
+      ],
+      "flows": [
+        "UI20",
+        "UI21",
+        "UI31"
+      ],
+      "stories": [
+        "US039",
+        "US040",
+        "US041",
+        "US042",
+        "US061",
+        "US062"
+      ],
+      "workflows": [
+        "WF09",
+        "WF10"
+      ],
+      "planned_edit_roots": [
+        "apps/brain/projections/",
+        "apps/web/src/features/progress/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "Effective corrections and counterevidence; no mastery/exam probability invention",
+        "Study choices distinct from competence",
+        "Zero attempts=unassessed; finish session adds no calendar tasks"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL031",
+      "milestone": "R4",
+      "title": "Implement versioned resume and multi-device conflicts",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL006",
+        "LL017"
+      ],
+      "features": [
+        "progress",
+        "workspace-access"
+      ],
+      "flows": [
+        "UI26",
+        "UI31"
+      ],
+      "stories": [
+        "US051",
+        "US052",
+        "US061",
+        "US062"
+      ],
+      "workflows": [
+        "WF10"
+      ],
+      "planned_edit_roots": [
+        "apps/web/src/resume/",
+        "apps/brain/resume/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "Preserve both concurrent drafts; explicit lineage and active source version",
+        "Never autoplay on device switch",
+        "Signout does not falsely cancel committed work or erase remote history",
+        "Conflict logic is tested on synthetic device histories first; LL020 and LL034 still gate actual multi-device claims."
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL032",
+      "milestone": "R4",
+      "title": "Implement scoped export, retention and reference-safe cleanup",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL008",
+        "LL027",
+        "LL030",
+        "LL031"
+      ],
+      "features": [
+        "workspace-access"
+      ],
+      "flows": [
+        "UI30"
+      ],
+      "stories": [
+        "US059",
+        "US060"
+      ],
+      "workflows": [
+        "WF10",
+        "WF11"
+      ],
+      "planned_edit_roots": [
+        "apps/brain/retention/",
+        "apps/web/src/settings/",
+        "tests/retention/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "Referenced full-response sidecars are durable, not temporary scratch",
+        "Original recordings never deleted by teach-back retention policy",
+        "Preview deletion scope, preserve unresolved operations, log actual copies affected"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL033",
+      "milestone": "R4",
+      "title": "Implement activity, quota, lifecycle and bounded maintenance",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL021",
+        "LL031",
+        "LL032"
+      ],
+      "features": [
+        "agent-dispatch"
+      ],
+      "flows": [
+        "UI25",
+        "UI27",
+        "UI29",
+        "UI32"
+      ],
+      "stories": [
+        "US049",
+        "US050",
+        "US053",
+        "US054",
+        "US057",
+        "US058",
+        "US063",
+        "US064"
+      ],
+      "workflows": [
+        "WF00",
+        "WF11"
+      ],
+      "planned_edit_roots": [
+        "apps/brain/lifecycle/",
+        "apps/web/src/features/activity/",
+        "docs/operations/runbook.md"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "Pause on auth/version change; no credential inspection or bypass",
+        "Test lock-screen/disconnect/restart with receipts; no automatic lock theft",
+        "No unapproved spending; task failure does not starve independent jobs"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL034",
+      "milestone": "R5",
+      "title": "Execute real-browser interaction, accessibility and theme suite",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL010",
+        "LL011",
+        "LL012",
+        "LL013",
+        "LL016",
+        "LL022",
+        "LL023",
+        "LL024",
+        "LL026",
+        "LL027",
+        "LL028",
+        "LL029",
+        "LL030",
+        "LL031",
+        "LL032",
+        "LL033"
+      ],
+      "features": [
+        "agent-dispatch",
+        "evidence-alignment",
+        "progress",
+        "review",
+        "tutoring",
+        "workspace-access"
+      ],
+      "flows": [
+        "UI01",
+        "UI02",
+        "UI03",
+        "UI04",
+        "UI05",
+        "UI06",
+        "UI07",
+        "UI08",
+        "UI09",
+        "UI10",
+        "UI11",
+        "UI12",
+        "UI13",
+        "UI14",
+        "UI15",
+        "UI16",
+        "UI17",
+        "UI18",
+        "UI19",
+        "UI20",
+        "UI21",
+        "UI22",
+        "UI23",
+        "UI24",
+        "UI25",
+        "UI26",
+        "UI27",
+        "UI28",
+        "UI29",
+        "UI30",
+        "UI31",
+        "UI32"
+      ],
+      "stories": [
+        "US001",
+        "US002",
+        "US003",
+        "US004",
+        "US005",
+        "US006",
+        "US007",
+        "US008",
+        "US009",
+        "US010",
+        "US011",
+        "US012",
+        "US013",
+        "US014",
+        "US015",
+        "US016",
+        "US017",
+        "US018",
+        "US019",
+        "US020",
+        "US021",
+        "US022",
+        "US023",
+        "US024",
+        "US025",
+        "US026",
+        "US027",
+        "US028",
+        "US029",
+        "US030",
+        "US031",
+        "US032",
+        "US033",
+        "US034",
+        "US035",
+        "US036",
+        "US037",
+        "US038",
+        "US039",
+        "US040",
+        "US041",
+        "US042",
+        "US043",
+        "US044",
+        "US045",
+        "US046",
+        "US047",
+        "US048",
+        "US049",
+        "US050",
+        "US051",
+        "US052",
+        "US053",
+        "US054",
+        "US055",
+        "US056",
+        "US057",
+        "US058",
+        "US059",
+        "US060",
+        "US061",
+        "US062",
+        "US063",
+        "US064"
+      ],
+      "workflows": [],
+      "planned_edit_roots": [
+        "tests/e2e/",
+        "evidence/browser/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE",
+        "DEVICE_ACCEPTANCE"
+      ],
+      "acceptance": [
+        "All 32 flows, 24 shared cases and paired-theme states mapped to actual tests",
+        "Keyboard, reflow, focus and real mobile/touch sessions; emulation labeled separately",
+        "No leaked answers/data in URLs, HTML or hidden drawers"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL035",
+      "milestone": "R5",
+      "title": "Exercise real tutoring-to-save and all-lecture readiness",
+      "owner_role": "operator + integration engineer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL015",
+        "LL019",
+        "LL020",
+        "LL021",
+        "LL025",
+        "LL026",
+        "LL027",
+        "LL029",
+        "LL030"
+      ],
+      "features": [
+        "agent-dispatch",
+        "evidence-alignment",
+        "progress",
+        "review",
+        "tutoring",
+        "workspace-access"
+      ],
+      "flows": [
+        "UI01",
+        "UI02",
+        "UI03",
+        "UI04",
+        "UI05",
+        "UI06",
+        "UI07",
+        "UI08",
+        "UI09",
+        "UI10",
+        "UI11",
+        "UI12",
+        "UI13",
+        "UI14",
+        "UI15",
+        "UI16",
+        "UI17",
+        "UI18",
+        "UI19",
+        "UI20",
+        "UI21",
+        "UI22",
+        "UI23",
+        "UI24",
+        "UI25",
+        "UI26",
+        "UI27",
+        "UI28",
+        "UI29",
+        "UI30",
+        "UI31",
+        "UI32"
+      ],
+      "stories": [
+        "US001",
+        "US002",
+        "US003",
+        "US004",
+        "US005",
+        "US006",
+        "US007",
+        "US008",
+        "US009",
+        "US010",
+        "US011",
+        "US012",
+        "US013",
+        "US014",
+        "US015",
+        "US016",
+        "US017",
+        "US018",
+        "US019",
+        "US020",
+        "US021",
+        "US022",
+        "US023",
+        "US024",
+        "US025",
+        "US026",
+        "US027",
+        "US028",
+        "US029",
+        "US030",
+        "US031",
+        "US032",
+        "US033",
+        "US034",
+        "US035",
+        "US036",
+        "US037",
+        "US038",
+        "US039",
+        "US040",
+        "US041",
+        "US042",
+        "US043",
+        "US044",
+        "US045",
+        "US046",
+        "US047",
+        "US048",
+        "US049",
+        "US050",
+        "US051",
+        "US052",
+        "US053",
+        "US054",
+        "US055",
+        "US056",
+        "US057",
+        "US058",
+        "US059",
+        "US060",
+        "US061",
+        "US062",
+        "US063",
+        "US064"
+      ],
+      "workflows": [
+        "WF00",
+        "WF01",
+        "WF02",
+        "WF03",
+        "WF04",
+        "WF05",
+        "WF06",
+        "WF07",
+        "WF08",
+        "WF09",
+        "WF10",
+        "WF11"
+      ],
+      "planned_edit_roots": [
+        "evidence/release/",
+        "tests/acceptance/"
+      ],
+      "required_gates": [
+        "COURSE_READ",
+        "LIVE_WRITE",
+        "PREPARATION_EXECUTION",
+        "EVALUATION_RUNS"
+      ],
+      "acceptance": [
+        "All release-time lecture/source denominator accounted for and no recoverable unprocessed backlog",
+        "Actual native/Drive/writer path, assessment quality and source linking pass independently",
+        "No fixture output can satisfy a live check"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL036",
+      "milestone": "R5",
+      "title": "Exercise backups, updates and rollback on copies",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL008",
+        "LL032",
+        "LL033"
+      ],
+      "features": [
+        "agent-dispatch",
+        "workspace-access"
+      ],
+      "flows": [
+        "UI27",
+        "UI30",
+        "UI32"
+      ],
+      "stories": [
+        "US053",
+        "US054",
+        "US059",
+        "US060",
+        "US063",
+        "US064"
+      ],
+      "workflows": [
+        "WF11"
+      ],
+      "planned_edit_roots": [
+        "tests/recovery/",
+        "evidence/recovery/"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE"
+      ],
+      "acceptance": [
+        "Restore verified compatible copy without replacing newer valid canonical records",
+        "Backward reader contract and local DB migration/backup tested",
+        "Raw audio and sensitive artifacts adhere to configured consent and lifetime"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL037",
+      "milestone": "R5",
+      "title": "Configure protected delivery checks and release evidence",
+      "owner_role": "implementation agent + reviewer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL001",
+        "LL002",
+        "LL004"
+      ],
+      "features": [],
+      "flows": [],
+      "stories": [],
+      "workflows": [],
+      "planned_edit_roots": [
+        ".github/",
+        "quality/",
+        "docs/engineering/release-policy.md"
+      ],
+      "required_gates": [
+        "BUILD_SCOPE",
+        "GITHUB_SETTINGS"
+      ],
+      "acceptance": [
+        "Retain real Seed checks; application checks cannot be echo/mock success",
+        "Required checks include contracts, types, tests, browser and relevant live release evidence",
+        "Review actual remote rules and secrets; no hidden standalone deploy"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    },
+    {
+      "id": "LL038",
+      "milestone": "R5",
+      "title": "Package and approve the private whole-product release",
+      "owner_role": "operator + integration engineer",
+      "state": "PLANNED_NOT_EXECUTED",
+      "dependencies": [
+        "LL034",
+        "LL035",
+        "LL036",
+        "LL037"
+      ],
+      "features": [
+        "agent-dispatch",
+        "evidence-alignment",
+        "progress",
+        "review",
+        "tutoring",
+        "workspace-access"
+      ],
+      "flows": [
+        "UI01",
+        "UI02",
+        "UI03",
+        "UI04",
+        "UI05",
+        "UI06",
+        "UI07",
+        "UI08",
+        "UI09",
+        "UI10",
+        "UI11",
+        "UI12",
+        "UI13",
+        "UI14",
+        "UI15",
+        "UI16",
+        "UI17",
+        "UI18",
+        "UI19",
+        "UI20",
+        "UI21",
+        "UI22",
+        "UI23",
+        "UI24",
+        "UI25",
+        "UI26",
+        "UI27",
+        "UI28",
+        "UI29",
+        "UI30",
+        "UI31",
+        "UI32"
+      ],
+      "stories": [
+        "US001",
+        "US002",
+        "US003",
+        "US004",
+        "US005",
+        "US006",
+        "US007",
+        "US008",
+        "US009",
+        "US010",
+        "US011",
+        "US012",
+        "US013",
+        "US014",
+        "US015",
+        "US016",
+        "US017",
+        "US018",
+        "US019",
+        "US020",
+        "US021",
+        "US022",
+        "US023",
+        "US024",
+        "US025",
+        "US026",
+        "US027",
+        "US028",
+        "US029",
+        "US030",
+        "US031",
+        "US032",
+        "US033",
+        "US034",
+        "US035",
+        "US036",
+        "US037",
+        "US038",
+        "US039",
+        "US040",
+        "US041",
+        "US042",
+        "US043",
+        "US044",
+        "US045",
+        "US046",
+        "US047",
+        "US048",
+        "US049",
+        "US050",
+        "US051",
+        "US052",
+        "US053",
+        "US054",
+        "US055",
+        "US056",
+        "US057",
+        "US058",
+        "US059",
+        "US060",
+        "US061",
+        "US062",
+        "US063",
+        "US064"
+      ],
+      "workflows": [],
+      "planned_edit_roots": [
+        "release/",
+        "evidence/release/",
+        "docs/operations/"
+      ],
+      "required_gates": [
+        "RELEASE_APPROVAL",
+        "STATIC_DEPLOYMENT"
+      ],
+      "acceptance": [
+        "Verify clean artifact hashes and install/extract smoke before signing/tag",
+        "Review real evidence for every active requirement and critical failure",
+        "Stage versioned static assets, deliberate deploy, never move published tag"
+      ],
+      "completion_requires": [
+        "actual change diff",
+        "applicable executed tests and limitations",
+        "reviewed spec deviations"
+      ],
+      "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
+    }
+  ]
+}

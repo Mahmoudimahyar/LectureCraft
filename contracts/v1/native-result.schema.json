@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.lecture-learning.invalid/v1/native-result.schema.json",
+  "title": "Lecture Learning native-result v1 (new adapter contract; not existing academic schema)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "request_id",
+    "dispatch_id",
+    "scope",
+    "binding_id",
+    "binding_revision",
+    "native_thread_id",
+    "native_turn_id",
+    "state",
+    "terminal",
+    "output_files",
+    "context_receipt",
+    "observed_at",
+    "failure_code"
+  ],
+  "properties": {
+    "contract": {
+      "const": "ll.native-result/1"
+    },
+    "request_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "dispatch_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "scope": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/scope"
+    },
+    "binding_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "binding_revision": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/hash"
+    },
+    "native_thread_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "native_turn_id": {
+      "anyOf": [
+        {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "state": {
+      "enum": [
+        "completed",
+        "failed",
+        "interrupted",
+        "completion_unknown"
+      ]
+    },
+    "terminal": {
+      "type": "boolean"
+    },
+    "output_files": {
+      "type": "array",
+      "items": {
+        "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/artifact"
+      },
+      "minItems": 0,
+      "maxItems": 16
+    },
+    "context_receipt": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/artifact"
+    },
+    "observed_at": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/time"
+    },
+    "failure_code": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

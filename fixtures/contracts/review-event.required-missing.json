@@ -1,0 +1,28 @@
+{
+  "event_id": "review-fixture",
+  "scope": {
+    "course_id": "fixture-course",
+    "term": "fixture-term"
+  },
+  "item_id": "item-fixture",
+  "item_revision": 1,
+  "submission": {
+    "path": "turns/turn.json",
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "bytes": 12,
+    "media_type": "application/json"
+  },
+  "attempt": null,
+  "occurred_at": "2026-10-03T12:00:00Z",
+  "rating": null,
+  "rating_basis": "unresolved",
+  "assistance_before_answer": "unknown",
+  "apply_schedule": false,
+  "scheduler_config": {
+    "path": "policy/scheduler.json",
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "bytes": 12,
+    "media_type": "application/json"
+  },
+  "previous_schedule_revision": null
+}

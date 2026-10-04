@@ -1,0 +1,60 @@
+{
+  "checked_on": "2026-10-04",
+  "scope": "Official documentation consulted; no installed client acceptance was performed.",
+  "sources": [
+    {
+      "id": "CLAUDE-GOAL",
+      "url": "https://code.claude.com/docs/en/goal",
+      "applies_to": "Preferred native continuation instead of another periodic model loop",
+      "observations": [
+        "One active goal; condition max 4000 characters",
+        "Works in desktop and print mode",
+        "Separate goal evaluator sees conversation outputs, does not independently run checks",
+        "Can stop, pause or clear on error/no progress/limits; permissions and hooks/trust still apply"
+      ],
+      "local_execution": "NOT_RUN"
+    },
+    {
+      "id": "CLAUDE-PERMISSIONS",
+      "url": "https://code.claude.com/docs/en/permissions",
+      "applies_to": "Auto versus acceptEdits versus bypass",
+      "observations": [
+        "Auto reviews tool use instead of routine prompts; prompt text does not change runtime permissions",
+        "Do not bypass protection on a real account-bearing computer"
+      ],
+      "local_execution": "NOT_RUN"
+    },
+    {
+      "id": "CLAUDE-CLI",
+      "url": "https://code.claude.com/docs/en/cli-reference",
+      "applies_to": "Optional single-process launcher, auth category, settings and MCP configuration",
+      "observations": [
+        "Use managed sign-in; never copy tokens",
+        "Launcher requires documented no-permission-prompts interface from 2.1.259 and checks current native help/version separately"
+      ],
+      "local_execution": "NOT_RUN"
+    },
+    {
+      "id": "CLAUDE-DESKTOP",
+      "url": "https://code.claude.com/docs/en/desktop",
+      "applies_to": "Use local Code session rather than ordinary Chat/Cowork/cloud",
+      "local_execution": "NOT_RUN"
+    },
+    {
+      "id": "OPENAI-APP-SERVER",
+      "url": "https://developers.openai.com/codex/app-server",
+      "applies_to": "Target-native report, independently verified submit/result/permission boundary",
+      "observations": [
+        "Public current docs distinguish stable methods and experimental capability; old installed alpha evidence is not overwritten by that",
+        "No universal file-change-to-any-chat setting is assumed"
+      ],
+      "local_execution": "NOT_RUN"
+    }
+  ],
+  "not_claimed": [
+    "A successful native Claude goal run",
+    "A verified Codex/ChatGPT thread bridge",
+    "Private source credentials",
+    "A guaranteed overnight completion or runtime sandbox"
+  ]
+}

@@ -1,0 +1,23 @@
+__pycache__/
+.pytest_cache/
+.venv/
+node_modules/
+.env
+.env.*
+!.env.example
+.seed-local/
+.local/
+*.sqlite*
+*.db
+*.log
+config/local-bindings/
+evidence/runtime/
+
+# Application/runtime outputs and private setup
+dist/
+coverage/
+test-results/
+playwright-report/
+*.tsbuildinfo
+.claude/settings.local.json
+.mcp.json

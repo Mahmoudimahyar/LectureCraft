@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.lecture-learning.invalid/v1/bundle.schema.json",
+  "title": "Lecture Learning bundle v1 (new adapter contract; not existing academic schema)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "bundle_id",
+    "kind",
+    "scope",
+    "created_at",
+    "signer_key_id",
+    "record_path",
+    "files",
+    "predecessor_manifest"
+  ],
+  "properties": {
+    "contract": {
+      "const": "ll.bundle/1"
+    },
+    "bundle_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "kind": {
+      "enum": [
+        "request",
+        "result"
+      ]
+    },
+    "scope": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/scope"
+    },
+    "created_at": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/time"
+    },
+    "signer_key_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "record_path": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/path"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/artifact"
+      },
+      "minItems": 1,
+      "maxItems": 64
+    },
+    "predecessor_manifest": {
+      "anyOf": [
+        {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/hash"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

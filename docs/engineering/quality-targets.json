@@ -1,0 +1,110 @@
+{
+  "version": "0.9.0",
+  "origin": "Explicit engineering defaults selected for the delegated baseline; NOT measured results. Changes require a reviewed requirement delta, never automatic loosening after failure.",
+  "targets": [
+    {
+      "id": "QT01",
+      "area": "Integrity",
+      "kind": "hard",
+      "criterion": "Zero wrong-course writes, conflicting overwrite acceptance, duplicate accepted learner attempts, or fabricated completion in the complete adversarial test set.",
+      "measurement": "Fixture/property tests + real owner integration. Zero observed failures is not a universal proof.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "QT02",
+      "area": "All-lecture preparation",
+      "kind": "hard",
+      "criterion": "100% of the frozen release inventory has a valid source disposition; no recoverable present material left unprocessed at full release. Every applicable slide link is reviewed or explicitly unresolved with evidence; nonrecoverable missing originals remain visible.",
+      "measurement": "Freeze current inventory at acceptance; retain 37 reported units as history not a permanent hard-coded denominator. Report counts for each status. Unresolved recoverable linking prevents full completion without explicit scope decision.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "QT03",
+      "area": "Source fidelity",
+      "kind": "hard",
+      "criterion": "No known incorrect reviewed link. Manual correction must persist across every regeneration and source revision scenario.",
+      "measurement": "Reviewed held-out cases from every configured course plus replay checks; correctness evaluated separately from volume.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "QT04",
+      "area": "Alignment suggestion quality",
+      "kind": "engineering_target",
+      "criterion": "At least 95% precision among proposed high-confidence links on at least 100 adjudicated cases spanning all five courses, including skips/repeats; report coverage and a binomial confidence interval. Suggestions remain suggestions.",
+      "measurement": "Held-out sources; unseen repeated/partial transcript cases; failures do not lower the target automatically or justify marking suggested links confirmed.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "QT05",
+      "area": "Timing and playback",
+      "kind": "engineering_target",
+      "criterion": "On unambiguous labeled spans, p95 absolute boundary error <= 2 seconds; player seek lands within 0.5 seconds after seeked on supported media, tested separately from link accuracy.",
+      "measurement": "Real source labels/codec/device tests; compressed media timing exceptions are documented, not relabeled exact.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "QT06",
+      "area": "UI responsiveness",
+      "kind": "engineering_target",
+      "criterion": "Local loaded-state interactions p95 <= 150 ms; local durable-submit acknowledgment p95 <= 500 ms after storage commit; source warm navigation p95 <= 1 s.",
+      "measurement": "100 repetitions on documented reference PC/browser. Network upload, Drive sync and AI completion measured separately, no fabricated end-to-end SLA.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "QT07",
+      "area": "Dispatch delay",
+      "kind": "engineering_target",
+      "criterion": "Once full valid bytes are readable locally, admission within two configured scan periods when not resource-blocked. Queued native wait, provider time and output sync are separately visible.",
+      "measurement": "Deterministic clock fixtures then actual Drive/PC observations; scans default 5 s active/15 s idle.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "QT08",
+      "area": "Tutor/assessment",
+      "kind": "hard-plus-target",
+      "criterion": "No known critical false grading, answer leakage or unsupported diagnosis in the release set. Target >=95% reviewer agreement on observable criteria, <=5% false rejection of valid alternatives, and explicit uncertainty on ambiguous/recognition cases.",
+      "measurement": "At least 100 held-out judgments spanning all courses and task types; report denominators/CI, assistance and reviewed-label disagreements. Human/model consensus alone is not ground truth.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "QT09",
+      "area": "Learning claims",
+      "kind": "hard",
+      "criterion": "Quick-answer exchanges create no new performance record; unobserved is never failure. No learned/retention/transfer percentage claim without its own evaluated evidence.",
+      "measurement": "Record/output tests and representative real tutoring; later unaided performance is observed separately, not required to prove a fake guaranteed improvement.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "QT10",
+      "area": "Accessibility/themes",
+      "kind": "hard",
+      "criterion": "All relevant 24 global UI cases pass in both themes, with keyboard, focus, 200% text, narrow reflow, reduced motion and actual chosen devices. Original scientific colors unchanged.",
+      "measurement": "Playwright and axe-core plus manual keyboard/screen-reader checks; automated zero findings is not WCAG certification.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "QT11",
+      "area": "Recovery",
+      "kind": "hard",
+      "criterion": "Every submitted input acknowledged by Brain remains recoverable after injected interruption; uncertain native completion reconciles before retry; no loss from failed view generation.",
+      "measurement": "Fault injection and actual same-user restart/reconnect/backup tests. Device-only draft is labeled with browser-storage limits.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "QT12",
+      "area": "Costs and resources",
+      "kind": "hard",
+      "criterion": "No unapproved separately billed calls or public PC endpoint. One native turn and one background processing unit by default; no model calls while idle.",
+      "measurement": "Admission/config tests plus usage/log review. Existing subscription allowance and current measured cost remain external facts, not inferred from local counters.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "QT13",
+      "area": "Device support",
+      "kind": "engineering_target",
+      "criterion": "Support current stable Windows Edge/Chrome plus mobile Safari and Chrome UI; exact versions recorded at acceptance. Tablet/narrow layouts share actions.",
+      "measurement": "Run actual available target hardware sessions; mark missing platform evidence BLOCKED for that platform, not globally verified via viewport emulation.",
+      "status": "NOT_RUN"
+    }
+  ]
+}

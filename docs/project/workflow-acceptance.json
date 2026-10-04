@@ -1,0 +1,539 @@
+{
+  "version": "0.7.0",
+  "status": "PROPOSED_TEST_PLAN",
+  "application_tests_executed": false,
+  "cases": [
+    {
+      "id": "AC01",
+      "workflow": "WF00",
+      "scenario": "Committed payload arrives after its manifest",
+      "expected": "Wait; do not run on incomplete bytes.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC02",
+      "workflow": "WF00",
+      "scenario": "Same request/event delivered repeatedly",
+      "expected": "One admitted identity and one accepted publication; no duplicate learner attempt.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC03",
+      "workflow": "WF00",
+      "scenario": "Same request ID with different payload",
+      "expected": "Explicit conflict, never last-write-wins.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC04",
+      "workflow": "WF00",
+      "scenario": "Unrelated output Markdown changes",
+      "expected": "No ingestion/tutor feedback loop.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC05",
+      "workflow": "WF00",
+      "scenario": "Exact native course/thread wrong or inaccessible",
+      "expected": "Block dispatch; never use latest or another project silently.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC06",
+      "workflow": "WF00",
+      "scenario": "Authenticated native roundtrip from external PC process",
+      "expected": "Observed request/result IDs, selected context, exit/turn status and receipt; not just tool discovery.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC07",
+      "workflow": "WF00",
+      "scenario": "Provider/session dies after possible result/save",
+      "expected": "Reconcile actual receipt before retry; uncertain is not failure-safe replay.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC08",
+      "workflow": "WF00",
+      "scenario": "Cancelled/superseded worker returns late",
+      "expected": "Fence publication; preserve staged obsolete result without overwriting.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC09",
+      "workflow": "WF01",
+      "scenario": "All configured lecture/session inventory",
+      "expected": "Every item included with indexed/pending/empty/absent/unrecorded distinctions.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC10",
+      "workflow": "WF01",
+      "scenario": "Source updater already exists",
+      "expected": "One owner; no competing publication job or new unauthorized cron.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC11",
+      "workflow": "WF02",
+      "scenario": "Existing transcript is edited/partial",
+      "expected": "Time mapping shows limitations; no invented verbatim alignment.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC12",
+      "workflow": "WF02",
+      "scenario": "Repeated slides, overlap and off-slide explanation",
+      "expected": "Multiple typed intervals and reviewed timing, not one-to-one assumption.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC13",
+      "workflow": "WF02",
+      "scenario": "Missing recording/empty file",
+      "expected": "Explicit unavailable downstream state; all-lecture scope retained.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC14",
+      "workflow": "WF02",
+      "scenario": "Manual alignment correction then rebuild",
+      "expected": "Preserve correction/lineage; stale source correction requires review.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC15",
+      "workflow": "WF03",
+      "scenario": "Existing concept with several parents",
+      "expected": "Reuse canonical typed IDs; build a bounded tree projection without duplicate definitions or prohibited cycles. Related edges need not make the entire graph a DAG.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC16",
+      "workflow": "WF03",
+      "scenario": "Same label across courses or proposed prerequisite",
+      "expected": "No automatic equivalence, mandated requirement or transferred learner credit.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC17",
+      "workflow": "WF03",
+      "scenario": "Content link unsupported or contradictory",
+      "expected": "Keep proposed/review state; schema validity is not factual acceptance.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC18",
+      "workflow": "WF04",
+      "scenario": "Ask requests explanation with notes/figure",
+      "expected": "Correct source/version and permitted output; no false competence attempt.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC19",
+      "workflow": "WF05",
+      "scenario": "Full typed/spoken answer submitted then provider fails",
+      "expected": "Complete available input preserved once; assessment pending, not lost/failed learner.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC20",
+      "workflow": "WF05",
+      "scenario": "Question includes diagram/numerical givens",
+      "expected": "Capture correct visible snapshot and reference; no missing-figure claim of completeness.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC21",
+      "workflow": "WF05",
+      "scenario": "Valid alternate solution, unasked criterion or bad transcript",
+      "expected": "Avoid false negative; use uncertainty/not_observed and correction path.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC22",
+      "workflow": "WF05",
+      "scenario": "Tutor answer/rubric is incorrect",
+      "expected": "Source-reviewed assessment can be disputed/revised; generated reference not ground truth.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC23",
+      "workflow": "WF05",
+      "scenario": "Existing schema rejects added full-answer fields",
+      "expected": "Use compatible evidence locator/sidecar; no unvalidated schema mutation.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC24",
+      "workflow": "WF06",
+      "scenario": "Learner does not answer diagnostic question",
+      "expected": "WAITING_USER, release model; no autonomous invented response.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC25",
+      "workflow": "WF06",
+      "scenario": "One wrong application with several prerequisites",
+      "expected": "Hypotheses bounded; no blanket failure labels for descendants.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC26",
+      "workflow": "WF07",
+      "scenario": "Generated question overlaps existing family/source",
+      "expected": "Deduplicate/version appropriately; no attempt or schedule from generation alone.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC27",
+      "workflow": "WF08",
+      "scenario": "Assisted correct response and unknown/uncertain grading",
+      "expected": "Preserve conditions; no automatic independent mastery or false fail scheduling.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC28",
+      "workflow": "WF08",
+      "scenario": "Review becomes due at idle",
+      "expected": "Due state/task only, no phantom learner answer or automatic calendar modification.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC29",
+      "workflow": "WF09",
+      "scenario": "Regrade same response vs genuine new response",
+      "expected": "Assessment revision vs new attempt distinguished; original content/time preserved.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC30",
+      "workflow": "WF09",
+      "scenario": "Concurrent conflicting assessment corrections",
+      "expected": "Expected-version conflict exposed, not latest-clock winner.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC31",
+      "workflow": "WF10",
+      "scenario": "Canonical attempt saved but renderer fails",
+      "expected": "Saved record receipt survives; projection clearly stale and independently recoverable.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC32",
+      "workflow": "WF10",
+      "scenario": "New output manifest reaches phone before referenced files",
+      "expected": "Keep old verified snapshot/pending state until complete bytes.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC33",
+      "workflow": "WF10",
+      "scenario": "Two devices submit different edits at the same time",
+      "expected": "Host/parent ordering and conflict handling, not blindly trust client clocks.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC34",
+      "workflow": "WF11",
+      "scenario": "Brain app/supervisor/auth/Drive restart",
+      "expected": "Recover queue/jobs and current identity; no false always-on availability claim.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC35",
+      "workflow": "WF11",
+      "scenario": "Empty eligible queues",
+      "expected": "No LLM polling; bounded deterministic health work only.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC36",
+      "workflow": "WF11",
+      "scenario": "Quota or repeated deterministic failure",
+      "expected": "Pause/escalate with budget and no provider/billing switch.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC37",
+      "workflow": "WF11",
+      "scenario": "Writer lock namespace / runtime changes",
+      "expected": "Block unsafe canonical write; never substitute interpreter or delete lock.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC38",
+      "workflow": "WF11",
+      "scenario": "Database backup/restore and staged inputs",
+      "expected": "Consistent state restored on disposable copy; no duplicate commits after recovery.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC39",
+      "workflow": "WF00",
+      "scenario": "Hostile task/source includes commands, tokens or traversal",
+      "expected": "Treat as data, validate scope; cannot grant permissions or execute arbitrary commands.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC40",
+      "workflow": "WF10",
+      "scenario": "Gap marked resolved after hinted fix then time passes",
+      "expected": "Keep assistance and criterion limits; time changes review_due, not observed performance.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC41",
+      "workflow": "WF00",
+      "scenario": "Queue visible in help; default control command fails",
+      "expected": "Mark capability unverified; no claim queue was attempted, missing server or root cause diagnosed.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC42",
+      "workflow": "WF00",
+      "scenario": "Native tool sees final reply but resident process has no readback",
+      "expected": "Report partial native observation, not end-to-end process bridge PASS.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC43",
+      "workflow": "WF00",
+      "scenario": "Global config allows broad tools while target settings are unknown",
+      "expected": "Block dispatch until exact effective disposable-target restrictions and human approval channel are established.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC44",
+      "workflow": "WF00",
+      "scenario": "CLI/session UUID resolves to a new worker, not intended desktop target",
+      "expected": "Mark separate-worker result; no silent substitution of product or context.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC45",
+      "workflow": "WF11",
+      "scenario": "Update/restart occurs after uncertain accepted turn",
+      "expected": "Fence old generation and reconcile original run before resend; no speculative socket/daemon/firewall repair.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC46",
+      "workflow": "WF01",
+      "scenario": "Existing updater already processes changed sources",
+      "expected": "Consume verified receipts; no additional canonical updater or schedule, and no physical-source proof from ignored flag.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC47",
+      "workflow": "WF00",
+      "scenario": "Drive upload tool exposed only inside native agent",
+      "expected": "Independent client remains unauthorized/unverified; no credential copying or automatic API access claim.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC48",
+      "workflow": "WF00",
+      "scenario": "Two Drive files share name; commit manifest arrives before payload",
+      "expected": "Use logical request and content identity; wait for complete matching local bytes and keep remote-currentness unknown.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC49",
+      "workflow": "WF05",
+      "scenario": "Nonempty locator points at missing or modified full snapshot",
+      "expected": "Wrapper blocks canonical assessment publication with explicit evidence issue; do not accept old validator string check alone.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC50",
+      "workflow": "WF05",
+      "scenario": "Tutor answer arrives after input snapshot was hashed",
+      "expected": "Save as separate immutable message; original learner bytes/hash remain unchanged.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC51",
+      "workflow": "WF05",
+      "scenario": "Attempt saved but view generation fails; retry repeats same input",
+      "expected": "Reconcile actual saved/already_saved receipt and exact bytes; one original attempt, separate stale-view outcome.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC52",
+      "workflow": "WF09",
+      "scenario": "Correction changes intended skills or branches chronology",
+      "expected": "Existing correction validator rejects; do not silently create a second interpretation chain.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC53",
+      "workflow": "WF03",
+      "scenario": "One concept appears beneath multiple tree branches",
+      "expected": "Reference one canonical ID; no duplicate definition, implied prerequisite failure or automatic learning credit.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC54",
+      "workflow": "WF10",
+      "scenario": "Corrected assessment retracts a reported misunderstanding",
+      "expected": "Derived gap view follows effective revision; no stale parallel gap ledger or diagnosis attached to not_observed.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC55",
+      "workflow": "WF05",
+      "scenario": "Fixture command supplies --root to installed global-root BE 505 writer",
+      "expected": "Do not invoke; require demonstrated path isolation/refactor of a controlled copy before mutation testing.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC56",
+      "workflow": "WF11",
+      "scenario": "Received report ends halfway through Drive admission paragraph",
+      "expected": "Mark input incomplete; preserve only supplied evidence and do not fabricate remaining procedures/test results.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC57",
+      "workflow": "WF02",
+      "scenario": "Deleting derived alignment export after a reviewed timing correction",
+      "expected": "Rebuild the same accepted correction from the source-link owner record; export was not its only copy.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC58",
+      "workflow": "WF02",
+      "scenario": "Legacy prose and normalized annotation disagree",
+      "expected": "Expose exact revision/owner conflict; never silently treat both as independent current truth.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC59",
+      "workflow": "WF03",
+      "scenario": "Question strict_containment is displayed as concept prerequisite",
+      "expected": "Reject stronger interpretation; preserve actual question endpoints and relation semantics.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC60",
+      "workflow": "WF03",
+      "scenario": "Association graph contains legitimate cycles",
+      "expected": "Bound traversal and preserve related links; enforce acyclicity only where the actual relation contract requires it.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC61",
+      "workflow": "WF05",
+      "scenario": "Complete learner response has no valid mapped family yet",
+      "expected": "Persist full input and mark assessment pending; stage legitimate family mapping rather than save invalid/guessed canonical evidence.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC62",
+      "workflow": "WF05",
+      "scenario": "Same logical response retried with another native run ID",
+      "expected": "Preserve one learner turn/attempt identity; additional run IDs remain dispatch metadata.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC63",
+      "workflow": "WF05",
+      "scenario": "Normalized transcript excerpt does not exactly match original capture",
+      "expected": "Preserve original and any explicit recognition revision; do not silently change snapshot text to satisfy verifier.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC64",
+      "workflow": "WF05",
+      "scenario": "User permits transcript retention but not raw audio retention",
+      "expected": "Retain exact permitted transcript with modality limitations; never claim a saved original voice file.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC65",
+      "workflow": "WF06",
+      "scenario": "Missing graph node treated as evidence of learner ignorance",
+      "expected": "Report system mapping gap, not a learner error or prerequisite diagnosis.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC66",
+      "workflow": "WF06",
+      "scenario": "Later answer supports a different cause than the first hypothesis",
+      "expected": "Keep counterevidence and update operational hypothesis/real assessment only under proper lineage.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC67",
+      "workflow": "WF08",
+      "scenario": "Two commands deliver the same review event after reconnect",
+      "expected": "One schedule update, one original attempt; duplicate transport is not another review.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC68",
+      "workflow": "WF08",
+      "scenario": "Scheduler policy changes after a past review",
+      "expected": "Preserve actual event/time/attempt history and record the new derived schedule/configuration.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC69",
+      "workflow": "WF09",
+      "scenario": "Model or visualization version changes without new learner evidence",
+      "expected": "Invalidate relevant generated views/context as appropriate; never automatically rewrite original judgments or create a new attempt.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC70",
+      "workflow": "WF10",
+      "scenario": "Gap-view grouping mixes hinted recall with unassisted application",
+      "expected": "Keep distinct performance/conditions and cite original episodes; no aggregate mastery claim.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC71",
+      "workflow": "WF10",
+      "scenario": "A prose summary is regenerated under the same source revision",
+      "expected": "Keep actual generation provenance; deterministic facts remain correct without claiming identical model wording.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC72",
+      "workflow": "WF10",
+      "scenario": "A summary repeats a subsequently retracted weakness",
+      "expected": "Invalidate/rebuild from effective assessments; summary does not resurrect old interpretation as new evidence.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC73",
+      "workflow": "WF11",
+      "scenario": "Generic run cleanup encounters full response referenced by an attempt",
+      "expected": "Treat referenced sidecar as durable evidence; approved retention/deletion must preserve or explicitly qualify dependencies.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC74",
+      "workflow": "WF01",
+      "scenario": "Initial archive exceeds the existing updater per-run batch cap",
+      "expected": "Maintain backlog and all-lecture frontier; continue only through owner-approved policy, without a duplicate publisher or unapproved schedule.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC75",
+      "workflow": "WF04",
+      "scenario": "Missing concept tree but original source/rubric is available",
+      "expected": "Answer from the available permitted original source with mapping limitation; do not force whole-archive completion first.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "AC76",
+      "workflow": "WF00",
+      "scenario": "New memory item exists but no workflow consumes its output",
+      "expected": "Registration/design validation flags the missing producer/consumer or classifies it intentionally inactive; file presence is not integration.",
+      "status": "NOT_RUN"
+    }
+  ]
+}

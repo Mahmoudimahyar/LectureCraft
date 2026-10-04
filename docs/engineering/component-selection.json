@@ -1,0 +1,153 @@
+{
+  "version": "0.9.0",
+  "status": "SELECTED_FOR_IMPLEMENTATION",
+  "installed": false,
+  "selection_is_not_compatibility_verification": true,
+  "packages": [
+    {
+      "role": "web",
+      "selection": "React + TypeScript + Vite",
+      "purpose": "One static SPA; no SSR or hosted inference backend.",
+      "reference": "REF01",
+      "exact_dependency_lock": "LL002 output; NOT_GENERATED in this design package"
+    },
+    {
+      "role": "ui",
+      "selection": "Tailwind semantic CSS tokens + selected shadcn/Radix primitives",
+      "purpose": "Reuse forms/dialogs/tabs; copied components remain our maintained code with upstream identity. Do not import a full template.",
+      "reference": "REF02",
+      "exact_dependency_lock": "LL002 output; NOT_GENERATED in this design package"
+    },
+    {
+      "role": "motion",
+      "selection": "CSS first; Motion for React for purposeful transitions",
+      "purpose": "One animation engine only; reduced motion and stable media state mandatory. No GSAP/Lottie/Rive just for decoration.",
+      "reference": "REF03",
+      "exact_dependency_lock": "LL002 output; NOT_GENERATED in this design package"
+    },
+    {
+      "role": "icons",
+      "selection": "Lucide React",
+      "purpose": "One icon family; textual status and accessible names still required.",
+      "reference": "REF21",
+      "exact_dependency_lock": "LL002 output; NOT_GENERATED in this design package"
+    },
+    {
+      "role": "routing",
+      "selection": "React Router library mode",
+      "purpose": "Stable scoped route IDs; avoid a second routing/meta framework.",
+      "reference": "REF01",
+      "exact_dependency_lock": "LL002 output; NOT_GENERATED in this design package"
+    },
+    {
+      "role": "query",
+      "selection": "TanStack Query",
+      "purpose": "Cache read projections and request receipts; no ownership of academic records.",
+      "reference": "REF05",
+      "exact_dependency_lock": "LL002 output; NOT_GENERATED in this design package"
+    },
+    {
+      "role": "local-web-state",
+      "selection": "IndexedDB via idb + normal React state",
+      "purpose": "Durable draft and key storage in browser; signal storage failure and no promise beyond browser persistence.",
+      "reference": "REF12",
+      "exact_dependency_lock": "LL002 output; NOT_GENERATED in this design package"
+    },
+    {
+      "role": "pdf",
+      "selection": "PDF.js display layer",
+      "purpose": "Virtualized visible pages with original colors, text selection and separate permitted overlays. No private core API.",
+      "reference": "REF04",
+      "exact_dependency_lock": "LL002 output; NOT_GENERATED in this design package"
+    },
+    {
+      "role": "media",
+      "selection": "Native audio/video + Media Chrome",
+      "purpose": "Seek/pause/captions/control surface; our thin adapter enforces selected clip boundaries.",
+      "reference": "REF06",
+      "exact_dependency_lock": "LL002 output; NOT_GENERATED in this design package"
+    },
+    {
+      "role": "math",
+      "selection": "KaTeX + restricted Markdown renderer",
+      "purpose": "Math and text content; raw HTML disabled and code/URL sanitization separately tested.",
+      "reference": "REF22",
+      "exact_dependency_lock": "LL002 output; NOT_GENERATED in this design package"
+    },
+    {
+      "role": "brain",
+      "selection": "Python 3.13 modular service + FastAPI for loopback-only operator/status surface",
+      "purpose": "Resident same-user process; preserve exact existing publisher interpreter separately. No remote canonical-writer endpoint.",
+      "reference": "REF07",
+      "exact_dependency_lock": "LL002 output; NOT_GENERATED in this design package"
+    },
+    {
+      "role": "journal",
+      "selection": "SQLite + SQLAlchemy + Alembic",
+      "purpose": "Local nonsynced work journal; migrations from day one; not another academic database.",
+      "reference": "REF08",
+      "exact_dependency_lock": "LL002 output; NOT_GENERATED in this design package"
+    },
+    {
+      "role": "schemas",
+      "selection": "JSON Schema 2020-12 + Python jsonschema + Ajv 2020",
+      "purpose": "One schema set, generated TypeScript types, explicit cross-field checks; no incompatible duplicate Zod model.",
+      "reference": "REF07",
+      "exact_dependency_lock": "LL002 output; NOT_GENERATED in this design package"
+    },
+    {
+      "role": "drive",
+      "selection": "Google Identity Services token client + Drive v3 REST",
+      "purpose": "Browser direct authorized access; separate DriveFS companion scan with signed paired bundles. No copied native connector credentials.",
+      "reference": "REF11",
+      "exact_dependency_lock": "LL002 output; NOT_GENERATED in this design package"
+    },
+    {
+      "role": "signing",
+      "selection": "WebCrypto P-256 + Python cryptography",
+      "purpose": "Use maintained cryptographic primitives and exact-byte manifest signatures; no handwritten crypto algorithm.",
+      "reference": "REF19",
+      "exact_dependency_lock": "LL002 output; NOT_GENERATED in this design package"
+    },
+    {
+      "role": "schedule",
+      "selection": "py-fsrs",
+      "purpose": "One PC scheduling owner and explicit rating adapter; diagnosis remains distinct.",
+      "reference": "REF18",
+      "exact_dependency_lock": "LL002 output; NOT_GENERATED in this design package"
+    },
+    {
+      "role": "tests",
+      "selection": "pytest + Vitest/Testing Library + Playwright + axe-core",
+      "purpose": "Unit, integration, real-browser and accessibility checks with independent acceptance.",
+      "reference": "REF24",
+      "exact_dependency_lock": "LL002 output; NOT_GENERATED in this design package"
+    },
+    {
+      "role": "component-workbench",
+      "selection": "Storybook, local only",
+      "purpose": "Reusable shared UI states and both themes; never upload private materials into a hosted design service by default.",
+      "reference": "REF02",
+      "exact_dependency_lock": "LL002 output; NOT_GENERATED in this design package"
+    }
+  ],
+  "conditional_processing": [
+    {
+      "use": "Existing local transcription/helpers first; WhisperX adapter if additional alignment needed",
+      "trigger": "Actual existing transcript/media timing missing and local install/model license approved",
+      "not_selected": "Hosted transcription billing or Web Speech routing by guess"
+    },
+    {
+      "use": "Existing PDF/text helpers; pypdf for bounded text reads if missing",
+      "trigger": "Supplied helper lacks a needed supported read"
+    },
+    {
+      "use": "Approved existing LibreOffice conversion in isolated process",
+      "trigger": "PPTX cannot be displayed directly; output is a labeled versioned PDF rendition; never execute macros"
+    },
+    {
+      "use": "Native accessible nested list/disclosure UI for concept tree",
+      "trigger": "Default conceptual relationships; rich graph layout only after usability evidence justifies it"
+    }
+  ]
+}

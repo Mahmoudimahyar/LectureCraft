@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.lecture-learning.invalid/v1/annotation.schema.json",
+  "title": "Lecture Learning annotation v1 (new adapter contract; not existing academic schema)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "annotation_id",
+    "scope",
+    "revision",
+    "supersedes",
+    "relation",
+    "from",
+    "to",
+    "review_state",
+    "basis",
+    "support",
+    "reviewer_ref",
+    "created_at"
+  ],
+  "properties": {
+    "contract": {
+      "const": "ll.annotation/1"
+    },
+    "annotation_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "scope": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/scope"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "supersedes": {
+      "anyOf": [
+        {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/evidence_ref"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "relation": {
+      "enum": [
+        "displayed_during",
+        "discussed_during",
+        "explained_by",
+        "practiced_by"
+      ]
+    },
+    "from": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/source"
+    },
+    "to": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/source"
+    },
+    "review_state": {
+      "enum": [
+        "suggested",
+        "confirmed",
+        "rejected"
+      ]
+    },
+    "basis": {
+      "enum": [
+        "reviewed_source_map",
+        "visual_and_transcript",
+        "transcript_only",
+        "manual_review"
+      ]
+    },
+    "support": {
+      "type": "array",
+      "items": {
+        "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/artifact"
+      },
+      "minItems": 1,
+      "maxItems": 16
+    },
+    "reviewer_ref": {
+      "anyOf": [
+        {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "created_at": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/time"
+    }
+  }
+}

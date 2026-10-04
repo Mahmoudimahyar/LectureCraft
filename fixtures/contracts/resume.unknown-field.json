@@ -1,0 +1,30 @@
+{
+  "contract": "ll.resume/1",
+  "checkpoint_id": "cp-fixture",
+  "device_id": "device-fixture",
+  "scope": {
+    "course_id": "fixture-course",
+    "term": "fixture-term"
+  },
+  "session_id": "session-fixture",
+  "sequence": 1,
+  "parent_checkpoint": null,
+  "cursor": {
+    "lecture_id": "lecture-fixture",
+    "source": {
+      "source_id": "fixture-source",
+      "version_id": "fixture-v1",
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "locator": {
+        "kind": "page",
+        "page": 1,
+        "printed_label": null
+      }
+    },
+    "position_ms": 232000,
+    "panel": "slide",
+    "draft": null
+  },
+  "updated_at": "2026-10-03T12:00:00Z",
+  "approved": true
+}

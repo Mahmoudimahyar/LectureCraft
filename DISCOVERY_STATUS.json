@@ -1,0 +1,104 @@
+{
+  "draft_version": "0.9.0",
+  "date": "2026-10-03",
+  "phase": "ENGINEERING_BUILD_BASELINE_FINALIZED",
+  "build_approved": false,
+  "application_implemented": false,
+  "tests_executed": false,
+  "real_course_bundle_inspected": false,
+  "inputs": [
+    {
+      "source": "user-uploaded note image",
+      "filename": "image.png",
+      "sha256": "c33e39c4441f169ed5ce6aeb334507863c60a31f685c8581361f4cb0f3e0af52"
+    },
+    {
+      "source": "user-uploaded note image",
+      "filename": "image(1).png",
+      "sha256": "11d2b644848220e74f7ccb1526a35d73604eb746014c48328c82cb03025e2467"
+    },
+    {
+      "source": "user-supplied current-operation report, not independently audited",
+      "filename": "Pasted text.txt",
+      "sha256": "cb9df2ef60ac8381892cde8db9959f1a5f51185f9b2aa54351b608ff4799586e"
+    },
+    {
+      "source": "P05 returned managing-agent current-setup audit",
+      "filename": "Pasted text(1).txt",
+      "sha256": "dd5a649674155af213714013744ffc093419a5ba271a0a0349ea7648f9f8a557"
+    }
+  ],
+  "preservation": "Original uploads/prior packets preserved; no application or live workspace/provider operation performed.",
+  "current_operational_report_reviewed": true,
+  "current_course_files_independently_verified": false,
+  "provider_selected": true,
+  "provider_runtime_verified": false,
+  "native_app_or_account_inspected": false,
+  "provider_calls_executed": false,
+  "scheduled_jobs_created": false,
+  "documentation_packaging_checks": "New offline contract and document checks executed; see external verification report. Not app tests.",
+  "open_gates": [
+    "Native exact-thread/process-return proof",
+    "Independent Drive grant/pairing and bidirectional delivery",
+    "Actual owner schemas and isolated correct writer validation",
+    "Scoped build/install/live activation permissions",
+    "Quality/device/native/course release evidence"
+  ],
+  "previous_packet_sha256": "cc1b8d0d765db398dbd302163437bf947b221336aee91ab96fd1725d18faef04",
+  "whole_project_review_completed": true,
+  "decision_register": "docs/project/decision-register.json",
+  "decision_count": 30,
+  "decisions_accepted_in_this_review": 0,
+  "accepted_requirement_ids": [
+    "single-learner",
+    "all-lectures",
+    "chatgpt-first",
+    "drive-backed-cross-device",
+    "always-on-brain-pc",
+    "full-submitted-question-answer-history",
+    "continuous-workflow-backlog-processing",
+    "time-adaptive-quick-or-deep-help",
+    "quick-help-not-performance-evidence",
+    "source-first-visual-direction",
+    "light-and-dark-interface",
+    "reuse-first-ui-implementation"
+  ],
+  "provider_selection_scope": "Native OpenAI/ChatGPT preference; reported Codex desktop queue candidate. Exact execution surface/target and process return path NOT_VERIFIED; no substitution authorized.",
+  "source_inventory_status": "MANAGING_AGENT_REPORT_REVIEWED",
+  "prior_user_answers_incorporated": 4,
+  "next_user_decisions": [
+    "Only concrete prepared implementation/install/native/Drive/live-write/deployment grants; do not repeat accepted product questions."
+  ],
+  "decision_entries_updated_from_user_answers": 1,
+  "workflow_count": 12,
+  "planned_acceptance_scenarios": 76,
+  "design_proposals_not_runtime_approval": true,
+  "always_on_primary_pc": "USER_CONFIRMED",
+  "workflow_implementation_status": "NOT_IMPLEMENTED",
+  "memory_migration_status": "NOT_RUN",
+  "latest_report": {
+    "reference": "P06",
+    "source": "user-pasted managing-agent focused report",
+    "coverage": "PARTIAL_ENDS_DURING_B6",
+    "last_visible_fragment": "This establishes local bundle completene",
+    "inspection_timestamp": "NOT_SUPPLIED",
+    "independently_verified": false
+  },
+  "memory_authority": "EXISTING_CATALOGS_AND_EFFECTIVE_ATTEMPTS; trees/gap summaries are projections, full visible turns are verified operational sidecars",
+  "new_canonical_graph_or_gap_ledger": false,
+  "memory_function_count": 15,
+  "memory_workflow_fit": "docs/project/memory-workflow-fit.json",
+  "design_status": "Selected stack, exact NEW adapter schemas, integrated task DAG, versioning, policy defaults and test targets baselined; live capabilities require evidence.",
+  "ui_flow_count": 32,
+  "user_story_count": 64,
+  "screen_count": 18,
+  "planned_ui_story_acceptance": 192,
+  "planned_global_ui_acceptance": 24,
+  "ui_tests_executed": false,
+  "experience_spec": "docs/project/experience-spec.json",
+  "theme_requirement": "LIGHT_DARK_SYSTEM; app-owned surfaces only, original sources preserved",
+  "prototype_status": "USER_ACCEPTED_GENERATED_DIRECTION; not implemented or behavior tested",
+  "design_defaults_specified": 18,
+  "implementation_backlog": "docs/delivery/backlog.json",
+  "contract_registry": "contracts/index.json"
+}

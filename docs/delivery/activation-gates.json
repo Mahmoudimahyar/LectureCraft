@@ -1,0 +1,101 @@
+{
+  "status": "REQUIREMENTS_DEFINED_GRANTS_NOT_CREATED",
+  "gates": [
+    {
+      "id": "BUILD_SCOPE",
+      "state": "NOT_CLEARED",
+      "required": "Actual Seed-compatible approval of precise files/tasks; no app-code execution follows merely from finalizing these docs.",
+      "evidence": []
+    },
+    {
+      "id": "COURSE_READ",
+      "state": "NOT_CLEARED",
+      "required": "Allowlisted material classes, courses and versions plus permission to process them by the selected actor.",
+      "evidence": []
+    },
+    {
+      "id": "DEPENDENCY_INSTALL",
+      "state": "NOT_CLEARED",
+      "required": "Approved development environment, network install and reviewed exact versions/license/provenance; no global/native app replacement.",
+      "evidence": []
+    },
+    {
+      "id": "DEVICE_ACCEPTANCE",
+      "state": "NOT_CLEARED",
+      "required": "Real intended devices/browsers available for testing; emulation alone is not real-device proof.",
+      "evidence": []
+    },
+    {
+      "id": "DEVICE_PAIRING",
+      "state": "NOT_CLEARED",
+      "required": "User reviews device/Brain key fingerprints and allowed course/actions; Drive files do not self-enroll.",
+      "evidence": []
+    },
+    {
+      "id": "DRIVE_OAUTH",
+      "state": "NOT_CLEARED",
+      "required": "Actual independent browser/companion grant and verified read/write scope; no copied native connector tokens.",
+      "evidence": []
+    },
+    {
+      "id": "EVALUATION_RUNS",
+      "state": "NOT_CLEARED",
+      "required": "Reviewed test labels, allowed provider calls, input disclosure and usage/time budget.",
+      "evidence": []
+    },
+    {
+      "id": "GITHUB_SETTINGS",
+      "state": "NOT_CLEARED",
+      "required": "Actual private repository identity, required checks and permissions approved; configs alone do not activate protections.",
+      "evidence": []
+    },
+    {
+      "id": "LIVE_WRITE",
+      "state": "NOT_CLEARED",
+      "required": "Verified sidecars/owner locks and observed safe writer tests plus explicit canonical publication scope.",
+      "evidence": []
+    },
+    {
+      "id": "LOCAL_MODEL_INSTALL",
+      "state": "NOT_CLEARED",
+      "required": "Explicit model/binary download, license, resource and privacy review; no hidden API billing.",
+      "evidence": []
+    },
+    {
+      "id": "MICROPHONE",
+      "state": "NOT_CLEARED",
+      "required": "Per-device permission and explicit Record action; no passive capture or unapproved raw retention.",
+      "evidence": []
+    },
+    {
+      "id": "NATIVE_PROBE",
+      "state": "NOT_CLEARED",
+      "required": "Explicit disposable native target and safe effective permissions; independent process-readable terminal result under current runtime.",
+      "evidence": []
+    },
+    {
+      "id": "OWNER_SOURCE_ACCESS",
+      "state": "NOT_CLEARED",
+      "required": "Authorized current schema/helper source snapshot and safe isolation review, preserving pinned owner runtime.",
+      "evidence": []
+    },
+    {
+      "id": "PREPARATION_EXECUTION",
+      "state": "NOT_CLEARED",
+      "required": "Reviewed local tools/model identities, hardware limits, input permission and original-preserving outputs.",
+      "evidence": []
+    },
+    {
+      "id": "RELEASE_APPROVAL",
+      "state": "NOT_CLEARED",
+      "required": "Review exact tested commit/artifacts, all active coverage and critical gate evidence before tag/promote.",
+      "evidence": []
+    },
+    {
+      "id": "STATIC_DEPLOYMENT",
+      "state": "NOT_CLEARED",
+      "required": "Chosen hosting account/origin/visibility and any cost approved; deploy only static app code, never academic data.",
+      "evidence": []
+    }
+  ]
+}

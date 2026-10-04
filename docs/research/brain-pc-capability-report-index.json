@@ -1,0 +1,83 @@
+{
+  "source_id": "P06",
+  "kind": "USER_PASTED_FOCUSED_CAPABILITY_REPORT",
+  "received_date": "2026-10-03",
+  "inspection_date": "not explicitly stated in pasted report; do not substitute receipt date",
+  "completeness": "TRUNCATED_IN_SECTION_B6",
+  "last_visible_text": "This establishes local bundle completene",
+  "coverage": "Capability matrix A and B.1–B.5 plus visible B.6. Detailed later sections are not available here; A.7/A.8 summaries are present.",
+  "independently_verified_on_brain_pc": false,
+  "runtime_tests_in_this_documentation_session": "NOT_RUN",
+  "facts_reported": {
+    "desktop": {
+      "product": "Codex desktop (reported local label)",
+      "version": "26.930.21537",
+      "build": "12776",
+      "channel": "production",
+      "updater": "restart_required"
+    },
+    "cli": {
+      "version": "0.159.0-alpha.12.1",
+      "queue_help_surface": "codex queue --thread <UUID> --message <TEXT>",
+      "queue_execution": "NOT_RUN"
+    },
+    "control_probe": {
+      "command": "codex app-server daemon version",
+      "result": "default control socket connection failed; Windows error 10050",
+      "cause": "NOT_ESTABLISHED",
+      "queue_itself_tested": false
+    },
+    "auth": {
+      "login_category": "ChatGPT",
+      "api_key_login": false,
+      "credentials_inspected": false
+    },
+    "config_defaults": {
+      "model": "gpt-6.1-sol",
+      "reasoning": "low",
+      "sandbox_mode": "danger-full-access",
+      "windows_sandbox_configuration": "elevated",
+      "effective_target_thread_settings": "NOT_VERIFIED"
+    },
+    "publisher": {
+      "platform": "same Windows host/user",
+      "interpreter": "Windows Store Python 3.13.14",
+      "tracking_lock": "physical namespace reverified using existing file opened read-only",
+      "learning_lock": "different from tracking; BE 505 helper-specific"
+    },
+    "learning": {
+      "contract": "course-learning-v1",
+      "full_snapshot_reference": "nonempty locator string accepted but target existence/hash NOT verified by existing validator",
+      "be505_writer": "study_index.py save-attempt",
+      "other_courses": "coordinated exclusive-create procedure; no common save executable"
+    },
+    "memory": {
+      "skills": "learning/skills.yaml",
+      "families": "learning/question-families.yaml",
+      "be505_catalog": "existing question index",
+      "gap_evidence": "learning/attempts/ effective records and assessment revisions",
+      "separate_authoritative_graph_gap_review_session_store": "not found in inspected scope"
+    },
+    "drive": {
+      "agent_metadata_read": "observed",
+      "independent_client_oauth": "NOT_ESTABLISHED",
+      "requested_revision_checksum_write_fields": "not returned",
+      "sync_change_detection": "NOT_RUN"
+    },
+    "updater": {
+      "existing_source_refresh": "configured active; historical machine-readable audit/verification records",
+      "subscription_endpoint": "not installed",
+      "new_updater_or_schedule": "not authorized"
+    },
+    "unfixed_caveats": [
+      "BE 505 input hashing and save/refresh global-root use",
+      "verify-published returns before check-source-files processing"
+    ]
+  },
+  "limitations": [
+    "This is a structured paraphrase of supplied text, not the original report byte stream.",
+    "No missing tail was reconstructed from older documentation.",
+    "Reported observations are not rerun observations in this session.",
+    "CLI/runtime versions must be re-read after any restart or update; they are not deployment pins."
+  ]
+}

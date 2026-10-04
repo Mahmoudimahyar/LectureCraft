@@ -1,0 +1,1362 @@
+{
+  "schema_version": 2,
+  "date": "2026-10-03",
+  "status": "BASELINED_DESIGN_WITH_EXPLICIT_ACTIVATION_GATES",
+  "authority": "User confirmed requirements; design recommendations are not installation, permissions, automatic workflow activation or live-write approval.",
+  "baseline": "lecture-learning-discovery-v0.4.0",
+  "records": [
+    {
+      "id": "G01",
+      "group": "Scope and first release",
+      "priority": "P0",
+      "resolution_owner": "USER",
+      "state": "CONFIRMED_REQUIREMENT",
+      "question": "Is the first usable release private to you, shared with a few classmates, or a publicly hosted service?",
+      "recommendation": "Keep first user private; do not add multi-user/public requirements.",
+      "reasoning": "User answers supersede earlier proposals. Runtime implementation remains unapproved and must be verified.",
+      "advantages": "Concentrates effort on study value and protects personal/course evidence; no premature accounts, billing or shared subscription relay.",
+      "costs_or_drawbacks": "Other people cannot use a hosted service immediately; multi-user access and operations require a later designed release.",
+      "alternative_and_when": "Choose a small multi-user pilot now only when access by specific classmates is itself a non-negotiable acceptance need.",
+      "evidence_to_resolve": "Already answered. Later multi-user expansion would be a new scoped decision.",
+      "depends_on": [],
+      "previous_question_ids": [
+        "Q01"
+      ],
+      "accepted_answer": "Private single-learner first release.",
+      "acceptance_evidence": "User accepted the private single-learner recommendation in the voice exchange.",
+      "prior_recommendation": "Begin with a private single-learner pilot, while preserving stable course/user identities so later expansion is possible.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [],
+      "remaining_status": "No need to reconfirm first audience.",
+      "current_design_reference": "docs/project/brain-pc-system.md",
+      "historical_state": "CONFIRMED_BY_USER",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G02",
+      "group": "Scope and first release",
+      "priority": "P0",
+      "resolution_owner": "USER + SOURCE_INSPECTION",
+      "state": "CONFIRMED_REQUIREMENT",
+      "question": "How is all-lecture coverage verified while preserving explicit missing/uncertain source states?",
+      "recommendation": "Inventory and support all lectures; use small examples for verification only.",
+      "reasoning": "User answers supersede earlier proposals. Runtime implementation remains unapproved and must be verified.",
+      "advantages": "Preserves the required full course experience and makes gaps visible across the archive.",
+      "costs_or_drawbacks": "More formats and exceptions must be handled; incremental processing must not masquerade as complete matching.",
+      "alternative_and_when": "Small bounded tests validate the full-scope design; they are not the release limit.",
+      "evidence_to_resolve": "Reported full inventory plus actual source/format/alignment validation. No course reduction to approve.",
+      "depends_on": [
+        "G01"
+      ],
+      "previous_question_ids": [
+        "Q02",
+        "Q04"
+      ],
+      "accepted_answer": "All lectures and available relevant slides, transcripts and recordings; not a one-course/three-lecture product limit.",
+      "acceptance_evidence": "User explicitly rejected the sample-only release and required all lectures.",
+      "prior_recommendation": "Use one course and approximately three representative lectures, with slide/media/transcript navigation, source-grounded Ask, teach-back, correction, selected review items and next-session recovery. Prefer BE 505 if an authorized media/textbook/assignment bundle is readily available.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Matrix 2/Q025-Q042"
+      ],
+      "remaining_status": "All correctable/evidenced matching is desired; missing original media stays explicitly unavailable rather than fabricated.",
+      "current_design_reference": "docs/project/brain-pc-system.md",
+      "historical_state": "CONFIRMED_BY_USER",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G03",
+      "group": "Reasoning runtime and cost",
+      "priority": "P0",
+      "resolution_owner": "USER",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "Must reasoning occur inside the actual native ChatGPT/Claude conversation, or is explicitly authorized use of an existing subscription in an app-managed conversation acceptable?",
+      "recommendation": "Verify the installed supported native route for this PC and exact course/thread. No silent product/context/billing substitution.",
+      "reasoning": "User answers supersede earlier proposals. Runtime implementation remains unapproved and must be verified.",
+      "advantages": "Preserves user intent, honest provider labels and billing control; avoids accidentally substituting a different product experience.",
+      "costs_or_drawbacks": "Native-session dependencies may constrain launch, session uptime, feature access and automation; app-managed inference requires its own context layer.",
+      "alternative_and_when": "Authorize a plan-backed app runtime only after choosing cost/account allowance over actual native-history requirements. No separately billed fallback by default.",
+      "evidence_to_resolve": "User chooses the requirement and identifies whether existing history, voice, research tools, attachments or merely model quality is essential.",
+      "depends_on": [],
+      "previous_question_ids": [
+        "Q07"
+      ],
+      "accepted_answer": "Native ChatGPT preference is preserved; replacing it with app-managed billed inference has not been approved.",
+      "acceptance_evidence": "Earlier native-brain request plus selection of ChatGPT first.",
+      "prior_recommendation": "Preserve native-session execution as the requested primary path. Make any subscription-backed app runtime an explicitly selected alternative, not an invisible replacement.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q001/Q013/Q018"
+      ],
+      "remaining_status": "Native OpenAI priority preserved; user explicitly identifies Codex on Brain PC. Exact desktop/CLI/native-thread relationship is a capability question, not assumed equivalence.",
+      "history": [
+        {
+          "version": "0.4.0",
+          "state": "PARTIALLY_CONFIRMED",
+          "recommendation": "Do not substitute Codex, Claude or a separately billed API. Bind exact ChatGPT surface and portability via P1.",
+          "remaining_status": "Native project/session history, UI placement and permitted fallback still need interface evidence/choice."
+        }
+      ],
+      "current_design_reference": "docs/project/brain-pc-system.md",
+      "historical_state": "PARTIALLY_CONFIRMED",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G04",
+      "group": "Reasoning runtime and cost",
+      "priority": "P0",
+      "resolution_owner": "USER + NATIVE_CAPABILITY_CHECK",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "Which exact installed provider surface should the first roundtrip use, and must both ChatGPT and Claude be automated on day one?",
+      "recommendation": "Prepare one exact disposable native queue/return-path proof; do not silently substitute exec or a separately launched server.",
+      "reasoning": "User answers supersede earlier proposals. Runtime implementation remains unapproved and must be verified.",
+      "advantages": "Finds an architectural blocker before building the whole app and reduces simultaneous integration debugging.",
+      "costs_or_drawbacks": "The second fully automatic provider may follow the first working slice; any manual handoff must be visibly labeled and user-accepted.",
+      "alternative_and_when": "Require both in the first slice if switching between them is essential to testing the concept; accept greater integration scope. Do not scrape the desktop or extract session cookies.",
+      "evidence_to_resolve": "Actual app/mode/version, authentication path, feature eligibility, required input/tools, and synthetic request-to-answer roundtrip including a denied permission and closed session.",
+      "depends_on": [
+        "G03",
+        "G05",
+        "G06"
+      ],
+      "previous_question_ids": [
+        "Q08"
+      ],
+      "accepted_answer": "ChatGPT first; later Claude compatibility.",
+      "acceptance_evidence": "User answered ChatGPT to first-provider selection.",
+      "prior_recommendation": "Keep both as supported design targets, but prove one actual route first. Investigate Claude Code Channels or its supported CLI if eligible for the requested session; independently assess ChatGPT Work Events where available.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Matrix 1/Q018",
+        "P06 partial focused capability report"
+      ],
+      "remaining_status": "Design recommendation only; no new user execution/write/runtime permission inferred.",
+      "history": [
+        {
+          "version": "0.4.0",
+          "state": "TARGET_CONFIRMED_ROUTE_UNVERIFIED",
+          "recommendation": "Prove the actual selected ChatGPT route before a second adapter; distinguish it from observed Codex projects.",
+          "remaining_status": "No external app-to-ChatGPT roundtrip has been observed."
+        },
+        {
+          "version": "0.5.0",
+          "state": "TARGET_CONFIRMED_ROUTE_UNVERIFIED",
+          "recommendation": "Verify the installed supported native route for this PC and exact course/thread. No silent product/context/billing substitution."
+        }
+      ],
+      "current_design_reference": "docs/project/native-bridge-proof.md",
+      "new_evidence": "Installed queue help; one default control connection failed; effective target safety and result retrieval NOT_RUN.",
+      "historical_state": "CANDIDATE_NATIVE_QUEUE_UNPROVEN",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G05",
+      "group": "Runtime and access",
+      "priority": "P0",
+      "resolution_owner": "USER + ENVIRONMENT_INSPECTION",
+      "state": "CONFIRMED_REQUIREMENT",
+      "question": "Where will the app run: one Windows computer, Windows plus WSL, tablet/phone, or a remotely accessible service; may a local companion run while studying?",
+      "recommendation": "Place the processing supervisor and canonical-writer adapters on that PC; no compulsory hosted writer.",
+      "reasoning": "User answers supersede earlier proposals. Runtime implementation remains unapproved and must be verified.",
+      "advantages": "Reuses existing folders without uploading a second source archive; one operational boundary is easier to validate.",
+      "costs_or_drawbacks": "Cross-device reading does not decide where inference/commits run; an always-on writer requires approved deployment and coordination.",
+      "alternative_and_when": "If phone/tablet access with the laptop off is essential, decide on a hosted processing/sync design now rather than promise it from a local browser.",
+      "evidence_to_resolve": "Second-device Drive/media probe; three deployment decisions; real native route.",
+      "depends_on": [
+        "G01"
+      ],
+      "previous_question_ids": [
+        "Q06",
+        "Q08",
+        "Q09"
+      ],
+      "accepted_answer": "The primary PC with Codex/course projects is always on. Other device interfaces access/submit via Google Drive.",
+      "acceptance_evidence": "User requested running anywhere across their devices and described Drive/G: access.",
+      "prior_recommendation": "For the proposed pilot use a desktop-first web UI with one small authenticated local companion and explicit start/stop. Keep browsing available without a running AI session.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q007-Q012/Q064-Q066"
+      ],
+      "remaining_status": "Verify exact host/user/runtime/autostart/Drive permissions; handle unexpected outages without reopening location preference.",
+      "history": [
+        {
+          "version": "0.4.0",
+          "state": "TARGET_CONFIRMED_DEPLOYMENT_OPEN",
+          "recommendation": "Use portable source identities and a Drive resolver; a G:-only design is not final fulfillment.",
+          "remaining_status": "Whether canonical saves must complete with the laptop off, hosting and writer placement remain open."
+        }
+      ],
+      "current_design_reference": "docs/project/brain-pc-system.md",
+      "historical_state": "CONFIRMED_BY_USER",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G06",
+      "group": "Runtime and access",
+      "priority": "P0",
+      "resolution_owner": "USER + COURSE_POLICY_INSPECTION",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "Which data may be processed by which providers, and may any relay or hosted storage receive course or learner content?",
+      "recommendation": "May a narrowly scoped private hosted adapter process permitted files/excerpts? Require explicit provider/data/retention access; no broad root upload.",
+      "reasoning": "Local file storage, cloud reasoning and permitted academic use are different permissions. A subscription does not establish consent for every source.",
+      "advantages": "Limits disclosure and makes the source context inspectable; preserves an auditable privacy boundary.",
+      "costs_or_drawbacks": "Needs explicit data classifications; some richer cross-source or voice workflows can remain blocked if the needed content cannot be shared.",
+      "alternative_and_when": "A local-only model/processing path would require its own quality and hardware evaluation. A hosted source mirror should be justified by a real access requirement.",
+      "evidence_to_resolve": "User selects per-source/provider processing permissions and supplies applicable recording, textbook and course-AI rules. No new legal authorization inferred.",
+      "depends_on": [
+        "G01",
+        "G03"
+      ],
+      "previous_question_ids": [
+        "Q03",
+        "Q09"
+      ],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Keep originals in existing workspaces; default to minimum approved excerpts and crops per request. Obtain separate decisions for transcript text, slide images, textbook passages, student responses, audio and third-party speech. No telemetry, public sharing or whole-root exposure by default.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q091-Q096"
+      ],
+      "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate.",
+      "current_design_reference": "docs/project/ui-decisions.md",
+      "previous_state_before_ui_baseline": "USER_DECISION_OPEN",
+      "ui_preference_reconciliation": "User said sure to the privacy proposal; scope by actor/provider and raw-audio retention duration remain explicit configuration/approval choices.",
+      "historical_state": "MINIMAL_CONTEXT_PRINCIPLE_ACCEPTED_EXACT_GRANTS_OPEN",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G07",
+      "group": "Reasoning runtime and cost",
+      "priority": "P0",
+      "resolution_owner": "USER",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "What spending, waiting time and background usage are acceptable beyond subscriptions you already have?",
+      "recommendation": "Ask for a recurring hosting/storage/processing budget cap; no separate inference spending assumed. Measure latency instead of promising instant completion.",
+      "reasoning": "No-API preference is not a budget for every non-inference operation; provider response time and available allowance have not been measured.",
+      "advantages": "Prevents surprise charges and background work consuming the allowance needed during study; retains predictable control.",
+      "costs_or_drawbacks": "Initial processing or answers may wait; queued work is not instant. Hard latency targets need measurement on the selected route.",
+      "alternative_and_when": "Add separately approved paid compute only for a demonstrated bottleneck and within a user-set ceiling; never silently change provider/billing.",
+      "evidence_to_resolve": "Incremental monthly ceiling, acceptable answer and per-lecture preparation delay, charging/offline/background rules and retry policy.",
+      "depends_on": [
+        "G03",
+        "G04",
+        "G05",
+        "G06"
+      ],
+      "previous_question_ids": [
+        "Q06"
+      ],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Assume no unapproved additional inference bill. Set explicit caps for transcription/other compute, prioritize submitted study questions, and run bulk enrichment only when deliberately enabled. Show waiting, quota, unknown completion and retry states.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q087/Q100"
+      ],
+      "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate.",
+      "current_design_reference": "docs/project/ui-decisions.md",
+      "previous_state_before_ui_baseline": "USER_DECISION_OPEN",
+      "ui_preference_reconciliation": "User liked the proposal: no additional spending without approval, interactive priority, qualified uncertain results. No numeric throughput/latency or budget ceiling was invented.",
+      "historical_state": "NO_UNAPPROVED_ADDITIONAL_SPEND_ACCEPTED_TARGETS_UNMEASURED",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G08",
+      "group": "Source and record authority",
+      "priority": "P0",
+      "resolution_owner": "SOURCE_INSPECTION + USER",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "Which existing files and writer commands are authoritative for sources, questions, attempts and corrections, and what may this app write?",
+      "recommendation": "Use existing course-learning-v1 and real writers; add verified full-turn sidecar in the existing run area, not a competing attempt schema.",
+      "reasoning": "The uploaded report defines ownership and the prepare/validate/exclusive-create/readback sequence, but the actual schemas, commands and locking behavior remain uninspected.",
+      "advantages": "Preserves IDs/history and avoids a competing mastery or source database; uses tested functionality rather than rebuilding it.",
+      "costs_or_drawbacks": "Adapter work and compatibility handling precede automation. Existing limitations must be surfaced rather than bypassed.",
+      "alternative_and_when": "If a current contract lacks a genuinely needed field, propose a versioned compatible extension or explicitly owned app record; do not overwrite the contract wholesale.",
+      "evidence_to_resolve": "Minimal source-index/anchor record, one skill/family/rubric, one redacted attempt/correction, schema version and actual writer/validator invocation.",
+      "depends_on": [
+        "G02"
+      ],
+      "previous_question_ids": [
+        "Q02"
+      ],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Reuse existing course-owned contracts and validators. Start read-only with staged proposals; enable selected live writes only through the existing validated writer after testing it.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Matrix 4/Q061-Q066",
+        "P06 partial focused capability report"
+      ],
+      "remaining_status": "Design recommendation only; no new user execution/write/runtime permission inferred.",
+      "history": [
+        {
+          "version": "0.4.0",
+          "state": "REPORT_INSPECTED_INTEGRATION_UNVERIFIED",
+          "recommendation": "Reuse distinct course-learning and course-tracking contracts. Wrap the owning writer only after exact source/schema inspection and R02/R03 fixtures.",
+          "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate."
+        },
+        {
+          "version": "0.5.0",
+          "state": "REPORT_INSPECTED_INTEGRATION_UNVERIFIED",
+          "recommendation": "Reuse distinct course-learning and course-tracking contracts. Wrap the owning writer only after exact source/schema inspection and R02/R03 fixtures."
+        }
+      ],
+      "current_design_reference": "docs/project/brain-pc-system.md",
+      "new_evidence": "Locator content/hash unverified by current validator; BE 505 global-root save/refresh unsafe on a purported fixture.",
+      "historical_state": "EXISTING_CANONICAL_CONTRACT_PRESERVED_NEW_WRAPPER_REQUIRED",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G09",
+      "group": "Source and record authority",
+      "priority": "P0",
+      "resolution_owner": "USER + WORKSPACE_INSPECTION",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "Can existing course agents or another machine write concurrently, and how are conflicts and synced placeholders handled?",
+      "recommendation": "Keep tracking on its verified Windows runtime/guard and learning on its own writer; route new publication through a tested facade.",
+      "reasoning": "The report describes synchronized-style paths and existing agent writers. A new lock cannot constrain programs that never acquire it.",
+      "advantages": "Reduces duplicate attempts, half-written state and mistaken replays while retaining portable course records.",
+      "costs_or_drawbacks": "Concurrent/offline multi-device edits need a later explicit sync protocol; coordination with current tools may require an operational rule.",
+      "alternative_and_when": "If concurrent multi-device writing is mandatory, design conflicts and authority as a first-class release requirement rather than treating filesystem sync as a transactional service.",
+      "evidence_to_resolve": "Sync mode, locally available versus cloud-placeholder sources, active writers, current exclusive-create/conflict mechanism and approved writer coordination.",
+      "depends_on": [
+        "G05",
+        "G08"
+      ],
+      "previous_question_ids": [
+        "Q03",
+        "Q09"
+      ],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "One machine owns the active queue initially; keep leases/database outside Drive sync. Route app writes through the same conflict-safe writer contract as other writers, not merely an app-only lock.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q011/Q064-Q066",
+        "P06 partial focused capability report"
+      ],
+      "remaining_status": "Design recommendation only; no new user execution/write/runtime permission inferred.",
+      "history": [
+        {
+          "version": "0.4.0",
+          "state": "REPORTED_LIMITATION_DEPLOYMENT_OPEN",
+          "recommendation": "Choose one coordinated authority per record class. Existing locks are host-specific; a Drive-synced lock cannot coordinate every device.",
+          "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate."
+        },
+        {
+          "version": "0.5.0",
+          "state": "REPORTED_LIMITATION_DEPLOYMENT_OPEN",
+          "recommendation": "Choose one coordinated authority per record class. Existing locks are host-specific; a Drive-synced lock cannot coordinate every device."
+        }
+      ],
+      "current_design_reference": "docs/project/brain-pc-system.md",
+      "new_evidence": "No universal cross-course save CLI; sync/other devices do not share proven locking.",
+      "historical_state": "SAME_USER_PINNED_WRITER_EXTERNAL_ACTORS_UNCOORDINATED",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G10",
+      "group": "Evidence alignment",
+      "priority": "P1",
+      "resolution_owner": "SOURCE_INSPECTION + USER",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "Which material formats and features must the first version support?",
+      "recommendation": "Support reported PDF/PPTX, 24 M4A and six MP4 with 30 TXT transcripts, plus related source formats; verify actual codecs, timings and video content.",
+      "reasoning": "Folder names do not establish file formats, usable timing, visual slide content or equation quality.",
+      "advantages": "Avoids unnecessary OCR, transcription and library integration; supports real classroom input rather than invented examples.",
+      "costs_or_drawbacks": "Unsupported formats may require an explicit export or later adapter; universal ingestion cannot be claimed.",
+      "alternative_and_when": "Add specialized extraction only when a representative source demonstrates the need, and verify formulas/figures independently.",
+      "evidence_to_resolve": "Real authorized bundle with slide deck, media, transcript, problem/subpart, textbook edition/page and common malformed or incomplete examples.",
+      "depends_on": [
+        "G02",
+        "G06"
+      ],
+      "previous_question_ids": [
+        "Q02",
+        "Q04"
+      ],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Inspect the actual pilot before choosing parsers. Prefer supplied PDFs/text/timestamps and original media; preserve separate questions and answer keys. Support video or audio, scans, speaker notes, equations and animations only where the approved slice requires them.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Matrix 2/Q037-Q042"
+      ],
+      "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate.",
+      "current_design_reference": "docs/project/brain-pc-system.md",
+      "historical_state": "MATERIAL_METADATA_REPORTED_CONTENT_PARTIAL",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G11",
+      "group": "Evidence alignment",
+      "priority": "P1",
+      "resolution_owner": "USER + VALIDATION_DESIGN",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "How much alignment uncertainty and manual correction are acceptable before slide-specific playback becomes useful?",
+      "recommendation": "Cover all lecture units with evidence-backed links; retain reviewed associations and explicit unmatched/missing states. Evaluate timing quality and correction cost on real sources.",
+      "reasoning": "The desired interval can be ambiguous; output that confidently chooses the wrong recording or problem defeats the core workflow.",
+      "advantages": "Prioritizes trustworthy navigation and recoverable errors without waiting for perfect automation.",
+      "costs_or_drawbacks": "Some slides require correction; aggressive refusal to guess lowers coverage. Correction effort is part of pilot cost.",
+      "alternative_and_when": "Broader approximate intervals can be a temporary user-approved mode, clearly labeled; never present them as exact verified timestamps.",
+      "evidence_to_resolve": "Reviewed alignment examples, required seek/stop behavior, allowable boundary error and acceptable correction time per lecture.",
+      "depends_on": [
+        "G10"
+      ],
+      "previous_question_ids": [
+        "Q04"
+      ],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Use automatically proposed, correctable many-to-many links, with separate was-visible and was-discussed meanings. Preserve multiple intervals and allow no reliable match. Ask users to inspect uncertainty, not approve every obvious link.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q037-Q042; three alignment chains"
+      ],
+      "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate.",
+      "current_design_reference": "docs/project/brain-pc-system.md",
+      "historical_state": "MATCHING_GOAL_CONFIRMED_METHOD_OPEN",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G12",
+      "group": "Evidence alignment",
+      "priority": "P1",
+      "resolution_owner": "ENGINEERING_RECOMMENDATION + USER_APPROVAL",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "What happens to annotations, links, questions and prior attempts when slides, recordings or textbook editions change?",
+      "recommendation": "Preserve source IDs/versions/aliases and historical attempt references. Add version-keyed anchors without assuming old hashes mean old bytes are recoverable.",
+      "reasoning": "A slide ordinal or textbook PDF page alone is not stable identity. Historic responses must retain their original question/rubric/source context.",
+      "advantages": "Prevents silent relinking and supports explanation of what changed.",
+      "costs_or_drawbacks": "Requires version metadata, targeted reindexing and occasional user conflict review.",
+      "alternative_and_when": "A destructive replace-in-place import is simpler but unsuitable for reliable longitudinal evidence; only use explicit discard operations with reviewed scope.",
+      "evidence_to_resolve": "Source ID/version contract, examples of updated decks, page numbering, correction ownership and a replay/reindex acceptance fixture.",
+      "depends_on": [
+        "G08",
+        "G10"
+      ],
+      "previous_question_ids": [],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Retain original files and stable source-version identities; store corrections as versioned links. Invalidate affected derived evidence without discarding original attempts or user corrections.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q031-Q036"
+      ],
+      "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate.",
+      "current_design_reference": "docs/project/brain-pc-system.md",
+      "historical_state": "CONTRACT_REPORTED_EXTENSION_OPEN",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G13",
+      "group": "Evidence alignment",
+      "priority": "P1",
+      "resolution_owner": "ENGINEERING_RECOMMENDATION + USER_APPROVAL",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "How should slide tags, skills, prerequisites and cross-course concepts be connected without inventing equivalent knowledge?",
+      "recommendation": "Project current catalog IDs and approved relations to concept trees; propose missing owner-compatible extensions, never a second graph authority.",
+      "reasoning": "The operational report says cross-course reuse is bounded and relationships do not imply equivalent performance or successful transfer.",
+      "advantages": "Builds on existing catalog investment while preventing duplicated or falsely shared learning credit.",
+      "costs_or_drawbacks": "Concept curation remains necessary; an automatically complete universal knowledge graph is not promised.",
+      "alternative_and_when": "Expand shared mappings after same-course behavior is dependable and the user approves evidence-backed equivalents.",
+      "evidence_to_resolve": "Existing IDs, relation semantics and examples of same-label/different-skill conflicts; confirm who approves new global relationships.",
+      "depends_on": [
+        "G08",
+        "G12"
+      ],
+      "previous_question_ids": [],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Reuse the current concept/skill/criterion/family distinctions. Propose missing tags or relationships for review, retain course-specific meaning, and use existing reviewed cross-course links rather than label-based merging.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q043-Q048",
+        "P06 partial focused capability report"
+      ],
+      "remaining_status": "Design recommendation only; no new user execution/write/runtime permission inferred.",
+      "history": [
+        {
+          "version": "0.5.0",
+          "state": "CONTRACT_REPORTED_EXTENSION_OPEN",
+          "recommendation": "Reuse existing skill/criterion/question semantics and reviewed relationships; no automatic equivalence or transfer credit."
+        }
+      ],
+      "new_evidence": "Canonical skills/families and BE 505 question index confirmed; no separate installed graph.",
+      "current_design_reference": "docs/project/brain-pc-system.md",
+      "historical_state": "CATALOG_AUTHORITY_CONFIRMED_DERIVED_TREES",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G14",
+      "group": "Evidence and tutoring context",
+      "priority": "P1",
+      "resolution_owner": "USER + COURSE_POLICY_INSPECTION",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "Which sources should answers trust, and may the tutor search beyond the course when sources conflict or are incomplete?",
+      "recommendation": "Preserve actual course-specific source priorities and task rules; outside research requires permitted context and explicit attribution.",
+      "reasoning": "The user wants precise source-linked learning; more context is not automatically more relevant or authorized context.",
+      "advantages": "Keeps explanations aligned with course depth and inspectable evidence; reduces unnecessary whole-archive context.",
+      "costs_or_drawbacks": "The tutor may need clarification or a bounded research step rather than instantly provide a confident single answer.",
+      "alternative_and_when": "Allow a deliberate external-research mode for broader exploration; retain source labels and review course-specific assessment expectations separately.",
+      "evidence_to_resolve": "Course source-priority policy, trusted references, browsing/data permissions, citation granularity and handling of outdated or wrong source statements.",
+      "depends_on": [
+        "G06",
+        "G08",
+        "G13"
+      ],
+      "previous_question_ids": [],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Default to the selected course evidence and current course strategy. Label external explanatory additions separately, retrieve them only when useful and permitted, and expose disagreement rather than silently replacing instructor framing.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q068/E12"
+      ],
+      "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate.",
+      "current_design_reference": "docs/project/brain-pc-system.md",
+      "historical_state": "POLICY_REPORTED_UI_DECISION_OPEN",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G15",
+      "group": "Evidence and tutoring context",
+      "priority": "P1",
+      "resolution_owner": "USER + ADAPTER_VALIDATION",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "How much native conversation history must carry over, and how should provider switching preserve context?",
+      "recommendation": "Store full submitted app turns once with original references; bound context summaries and explicit native session binding. Old full history import is not authorized or assumed.",
+      "reasoning": "The current provider fork can preserve different kinds of context. App history, native context and canonical learner evidence are not interchangeable.",
+      "advantages": "Predictable continuity, source limits and controlled switches; avoids repeated full-course prompting.",
+      "costs_or_drawbacks": "Selected old conversations may need an authorized import or summary; no automatic transfer of hidden native context is promised.",
+      "alternative_and_when": "Requiring a particular existing native thread narrows adapter options and must be verified explicitly.",
+      "evidence_to_resolve": "Which existing chats/tools must be retained, export access, thread/session mapping, context limit behavior and consent to transfer a request between providers.",
+      "depends_on": [
+        "G03",
+        "G04",
+        "G06",
+        "G08"
+      ],
+      "previous_question_ids": [
+        "Q07"
+      ],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Keep one explicit app thread with small versioned context bundles and stable provider-session bindings. Reuse exported relevant historical work with provenance; never rely on a global last chat or assume a different runtime inherits native memories.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q013-Q018/Q069-Q070"
+      ],
+      "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate.",
+      "history": [
+        {
+          "version": "0.4.0",
+          "state": "NATIVE_HISTORY_PARTIAL_ROUTE_OPEN",
+          "recommendation": "Retrieve targeted permitted history by product-qualified identities; carry explicit source/learner context. Existing Codex history is not ChatGPT-project memory.",
+          "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate."
+        }
+      ],
+      "current_design_reference": "docs/project/brain-pc-system.md",
+      "historical_state": "NATIVE_HISTORY_PARTIAL_ROUTE_OPEN",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G16",
+      "group": "Learning interaction",
+      "priority": "P1",
+      "resolution_owner": "USER",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "How should reading, Ask, Explain, Practice and Review map to the existing learn/assess/produce/maintain modes?",
+      "recommendation": "Retain learn/assess/produce/maintain; proposed Ask/Explain/Practice/Review buttons must not create another incompatible stored mode.",
+      "reasoning": "Current draft navigation mixes activity names with existing stored modes. The report already establishes selectable modes and optional assessment.",
+      "advantages": "Preserves user preferences and avoids recording an ordinary question as a failed assessment.",
+      "costs_or_drawbacks": "The interface needs clear mode and answer-visibility indicators; some familiar action labels need careful mapping.",
+      "alternative_and_when": "If you want the app to proactively invite practice, make it dismissible and distinct from a forced assessment.",
+      "evidence_to_resolve": "Example study session showing mode changes and preferred tutor initiative; explicit mapping from every main button to workflow/record semantics.",
+      "depends_on": [
+        "G02",
+        "G08"
+      ],
+      "previous_question_ids": [],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Keep the four existing modes authoritative. Treat UI actions as workflows under a mode; do not introduce a second conflicting mode taxonomy. Answer requests in learn mode without an opening quiz; independent assessment requires explicit exposure conditions.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q067"
+      ],
+      "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate.",
+      "current_design_reference": "docs/project/ui-decisions.md",
+      "previous_state_before_ui_baseline": "EXISTING_CONTRACT_TO_PRESERVE",
+      "ui_preference_reconciliation": "User explicitly wants quick answers when busy without claiming established understanding, and deeper help when requested. Existing learn/assess/produce/maintain remain.",
+      "historical_state": "TIME_ADAPTIVE_TUTORING_ACCEPTED_UI_MAPPING_SPECIFIED",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G17",
+      "group": "Learning interaction",
+      "priority": "P1",
+      "resolution_owner": "USER + MODALITY_VALIDATION",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "Are typed answers, spoken teach-back, equation/diagram input and handwriting required at launch?",
+      "recommendation": "Retain typed fallback. Speech teach-back/transcription and equation/handwriting input need explicit priority and accuracy/privacy decisions; current report does not resolve them.",
+      "reasoning": "Spoken explanation is part of the requested experience, but its timing/priority is unanswered. Speech recognition errors cannot be treated as proof of conceptual weakness.",
+      "advantages": "Preserves a reliable fallback and supports careful grading of technical vocabulary and mathematics.",
+      "costs_or_drawbacks": "Voice/ink adds capture, transcription, correction, privacy and provider-capability work. Deferral may reduce value for a voice-first learner.",
+      "alternative_and_when": "Make push-to-talk or stylus input an initial requirement if that is how you actually study; revise the pilot rather than label missing essential input optional.",
+      "evidence_to_resolve": "Required devices/input formats, language use, speech sample with technical terms, desired voice-output behavior and provider/transcription data consent.",
+      "depends_on": [
+        "G02",
+        "G04",
+        "G05",
+        "G06",
+        "G10"
+      ],
+      "previous_question_ids": [
+        "Q05"
+      ],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Keep typing and source-figure selection usable throughout. Include short recorded speech early if it is essential; allow correction of uncertain transcription before grading. Defer live duplex voice and handwriting recognition unless they are indispensable to the chosen pilot.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q056/Q083/Q087"
+      ],
+      "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate.",
+      "current_design_reference": "docs/project/ui-decisions.md",
+      "previous_state_before_ui_baseline": "USER_PREFERENCE_OPEN_CAPABILITY_UNTESTED",
+      "ui_preference_reconciliation": "Typed input and the prospective speech path are specified; actual transcription/data grants and device coverage remain unverified. Full duplex voice/handwriting recognition are not inferred.",
+      "historical_state": "TYPED_AND_SHORT_VOICE_FLOWS_SPECIFIED_CAPABILITY_GATED",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G18",
+      "group": "Learning interaction",
+      "priority": "P0 for assessed coursework; otherwise P1",
+      "resolution_owner": "USER + COURSE_POLICY_INSPECTION",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "When may the app expose hints, reference answers or full solutions, particularly for active graded assignments?",
+      "recommendation": "Preserve course assistance rules, gate assessor/solution content before retrieval, and record exposure. Collapsed UI is not access control.",
+      "reasoning": "The report records assistance and distinguishes produce from assess; the actual course rules and source permissions have not been inspected.",
+      "advantages": "Protects meaningful self-testing and aligns assistance with actual permitted use.",
+      "costs_or_drawbacks": "Some tasks need a source/rule check before full-solution help; assessment can be marked non-independent when native context already exposes the answer.",
+      "alternative_and_when": "For ungraded practice, permit direct explanations by choice. Do not build a false secure-exam claim around an ordinary desktop chat.",
+      "evidence_to_resolve": "Applicable syllabus/assignment AI rules, available authorized solutions, citation/attribution requirements, and expected behavior on unknown rules.",
+      "depends_on": [
+        "G06",
+        "G08",
+        "G16"
+      ],
+      "previous_question_ids": [],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Use assignment/course-specific assistance rules. Keep answer keys distinct, show solutions only through an explicit action when permitted, and record exposure. Do not assume all homework help is prohibited or all solutions are authorized.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q051/Q068"
+      ],
+      "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate.",
+      "current_design_reference": "docs/project/brain-pc-system.md",
+      "historical_state": "COURSE_POLICY_REPORTED_ENFORCEMENT_OPEN",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G19",
+      "group": "Learning interaction",
+      "priority": "P1",
+      "resolution_owner": "USER + PILOT_EVALUATION",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "How deeply may the tutor investigate a mistake before it should return you to the slide?",
+      "recommendation": "Use optional bounded diagnostic follow-ups and evidence-backed hypotheses, not a mandatory detour or prerequisite failure inferred from one wrong application.",
+      "reasoning": "An error may be conceptual, procedural, linguistic, input-related or due to faulty grading. The root cause is a hypothesis, not a permanent label.",
+      "advantages": "Adds the requested depth without turning every error into a long interrogation.",
+      "costs_or_drawbacks": "Bounded diagnostics may miss a deeper prerequisite; more depth consumes time/allowance and requires more rubric quality.",
+      "alternative_and_when": "Provide a deliberate deep-diagnosis action for persistent problems rather than silently increasing every session length.",
+      "evidence_to_resolve": "User-selected time/interaction tolerance and reviewed examples where a diagnostic did or did not help.",
+      "depends_on": [
+        "G16",
+        "G17",
+        "G18"
+      ],
+      "previous_question_ids": [],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Offer a short optional diagnostic path, initially one or two discriminating questions, then explain the suspected gap and let you choose whether to continue.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q047/Q071/Q075"
+      ],
+      "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate.",
+      "current_design_reference": "docs/project/ui-decisions.md",
+      "previous_state_before_ui_baseline": "PROPOSED_NOT_ACCEPTED",
+      "ui_preference_reconciliation": "Optional short diagnostic detours and deeper user-led exploration; normally two follow-up prompts is a new designer default, not a claimed prior exact user limit.",
+      "historical_state": "ADAPTIVE_DIAGNOSIS_DIRECTION_ACCEPTED_LIMIT_IS_DESIGN_DEFAULT",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G20",
+      "group": "Learning evidence and assessment",
+      "priority": "P1",
+      "resolution_owner": "USER + EXISTING_WRITER_VALIDATION",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "When should feedback become a durable learning assessment, and how should disagreement or uncertainty be handled?",
+      "recommendation": "Record genuine responses/corrections with exact intended skills; derive gaps from effective observations. Keep unverified diagnoses as operational proposals.",
+      "reasoning": "The course records already distinguish an answer, per-skill assistance and its assessment. A model completion is not a new learner attempt or proof of understanding.",
+      "advantages": "Limits harmful automatic history updates and preserves one true response while allowing correction.",
+      "costs_or_drawbacks": "Manual review introduces friction; the learner is not an independent expert grader, so validation also needs trustworthy rubrics and correct alternative-answer fixtures.",
+      "alternative_and_when": "Automatic save is reasonable after the rubric/write pipeline is evaluated and the user opts in; disputes and uncertain judgments must still remain reviewable.",
+      "evidence_to_resolve": "Published rubric/family version, existing correction schema, disagreement flow, acceptable false rejection/false acceptance and live-write approval policy.",
+      "depends_on": [
+        "G08",
+        "G09",
+        "G14",
+        "G16",
+        "G17",
+        "G18",
+        "G19"
+      ],
+      "previous_question_ids": [],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Persist actual submitted responses first; stage criterion-level feedback. In the initial pilot, make assessment publication inspectable through the existing writer. Later permit an explicit validated auto-save policy with visible results and append-only correction. Preserve uncertain and not_observed rather than forcing a grade.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q055-Q066",
+        "P06 partial focused capability report"
+      ],
+      "remaining_status": "Design recommendation only; no new user execution/write/runtime permission inferred.",
+      "history": [
+        {
+          "version": "0.4.0",
+          "state": "EXISTING_RECORD_MEANING_REPORTED_APP_POLICY_OPEN",
+          "recommendation": "Stage criterion-level judgments from genuine responses and use the correct learning writer; preserve unknown/assisted evidence, disputes and immutable original responses.",
+          "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate."
+        },
+        {
+          "version": "0.5.0",
+          "state": "EXISTING_RECORD_MEANING_REPORTED_APP_POLICY_OPEN",
+          "recommendation": "Capture every submitted explanation/answer first; evaluate with source-grounded rubric and preserve uncertainty. Publish through actual learning writer; full capture does not itself authorize all schema/standing-write changes."
+        }
+      ],
+      "current_design_reference": "docs/project/ui-decisions.md",
+      "new_evidence": "No error diagnosis on not_observed; corrections same skills and nonbranching chain.",
+      "previous_state_before_ui_baseline": "ASSESSMENT_AUTHORITY_RETAINED_GAPS_DERIVED",
+      "ui_preference_reconciliation": "Full capture and correctable assessment flows are specified, without new format or live-write grant.",
+      "historical_state": "CANONICAL_ASSESSMENT_AND_CORRECTION_PRESERVED_UI_SPECIFIED",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G21",
+      "group": "Questions and review",
+      "priority": "P1",
+      "resolution_owner": "USER",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "Which existing and generated questions should become visible practice or scheduled review items?",
+      "recommendation": "Reuse BE 505 question map and existing other-course families first. Generate new suggestions with source/rubric provenance; do not create attempts or reviews merely by generating.",
+      "reasoning": "The user already has a question catalog and specifically requested editing suggestions. Generated quantity is not usefulness.",
+      "advantages": "Avoids duplicate work and an overwhelming review backlog; retains instructor/user/AI provenance.",
+      "costs_or_drawbacks": "Requires selection and deduplication; fewer automatic cards may look less impressive initially.",
+      "alternative_and_when": "Allow batch approval later for trustworthy question families, with explicit load limits and preserved item/version history.",
+      "evidence_to_resolve": "Actual saved question formats, answer/rubric quality, preferred question types, maximum comfortable review load and delete-versus-archive semantics.",
+      "depends_on": [
+        "G08",
+        "G13",
+        "G18",
+        "G20"
+      ],
+      "previous_question_ids": [],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Import compatible existing questions first; show a small on-demand set of new proposals with sources and targets. Let the learner select, edit, suspend or reject review items; do not enqueue every generated or diagnostic question.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q049-Q054"
+      ],
+      "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate.",
+      "current_design_reference": "docs/project/ui-decisions.md",
+      "previous_state_before_ui_baseline": "CATALOG_REUSE_SUPPORTED_AUTHORING_POLICY_OPEN",
+      "ui_preference_reconciliation": "Reuse existing questions and offer optional reviewed suggestions. Save-only and scheduled-review selection are distinct.",
+      "historical_state": "SELECTED_REVIEW_DIRECTION_ACCEPTED_UI_SPECIFIED",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G22",
+      "group": "Questions and review",
+      "priority": "P1",
+      "resolution_owner": "USER + ENGINEERING_RECOMMENDATION",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "Should review live in this app, export to Anki, or synchronize both directions?",
+      "recommendation": "Build only an approved operational review queue referencing canonical question/attempt identities; no separate performance authority.",
+      "reasoning": "Native teach-back/source context and remediation are the core interaction. Two independent schedulers can create conflicting histories and more integration work.",
+      "advantages": "One coherent attempt/exposure record and less synchronization complexity.",
+      "costs_or_drawbacks": "Existing Anki habits are not automatically preserved; running both queues can duplicate reviews unless the user chooses one scheduler owner.",
+      "alternative_and_when": "If an active Anki workflow is essential, make Anki the scheduler authority and design that integration explicitly before building another queue.",
+      "evidence_to_resolve": "Current actual Anki use and export needs, scheduler ownership, response-to-rating rules, card revision/review reset semantics and reminder preference.",
+      "depends_on": [
+        "G20",
+        "G21"
+      ],
+      "previous_question_ids": [],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Pilot an in-app source-linked review queue with an established scheduler, separate from diagnostic tutoring. Preserve item IDs for later export; add one-way Anki export before considering two-way schedule/history sync.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q073/Q078",
+        "P06 partial focused capability report"
+      ],
+      "remaining_status": "Design recommendation only; no new user execution/write/runtime permission inferred.",
+      "history": [
+        {
+          "version": "0.5.0",
+          "state": "NEW_CAPABILITY_REQUIRED",
+          "recommendation": "No executing spacing engine or two-way Anki integration was found. Select a maintained scheduler only after workflow priorities; review suggestion remains distinct from scheduled event."
+        }
+      ],
+      "new_evidence": "No adaptive scheduler installed; no reminder/billing activation authorized.",
+      "current_design_reference": "docs/project/brain-pc-system.md",
+      "historical_state": "SCHEDULER_ABSENT_OPERATIONAL_EXTENSION_PROPOSED",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G23",
+      "group": "Learning evidence and priorities",
+      "priority": "P1",
+      "resolution_owner": "USER",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "What should the slide-level understanding indicator mean to you?",
+      "recommendation": "Derive gap views from effective canonical assessment evidence and narrow diagnostic events; preserve assistance, recency and unobserved states.",
+      "reasoning": "The report explicitly calls saved counts observations rather than mastery percentages, and zero attempts is not zero competence.",
+      "advantages": "Honest, actionable feedback that preserves unknowns and the difference between independent and assisted work.",
+      "costs_or_drawbacks": "Less visually simple than one score; users need a compact default view with drill-down evidence.",
+      "alternative_and_when": "A score can display a defined observed denominator (for example sampled rubric criteria), not an unsupported total-knowledge probability.",
+      "evidence_to_resolve": "Preferred summary wording, evidence drill-down, time/assistance display and whether any numeric rubric result is useful.",
+      "depends_on": [
+        "G13",
+        "G20",
+        "G22"
+      ],
+      "previous_question_ids": [],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Show supporting evidence and conditions across recall, explanation and application; use not assessed, supported with help, independently demonstrated on sampled tasks and needs a fresh check. Avoid an uncalibrated mastery percentage.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q057-Q060/Q077"
+      ],
+      "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate.",
+      "history": [
+        {
+          "version": "0.4.0",
+          "state": "EVIDENCE_SEMANTICS_REPORTED_DISPLAY_OPEN",
+          "recommendation": "Display observed skill/assistance/recency with not_observed and uncertain; do not invent mastery/retention probabilities or infer failure from zero records.",
+          "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate."
+        }
+      ],
+      "current_design_reference": "docs/project/ui-decisions.md",
+      "previous_state_before_ui_baseline": "EVIDENCE_SEMANTICS_REPORTED_DISPLAY_OPEN",
+      "ui_preference_reconciliation": "Do not infer mastery from receiving a quick answer or replace existing evidence with a whole-learner unassessed label.",
+      "historical_state": "EVIDENCE_QUALIFIED_PROGRESS_DIRECTION_ACCEPTED",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G24",
+      "group": "Learning evidence and priorities",
+      "priority": "P1",
+      "resolution_owner": "USER + SOURCE_INSPECTION",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "How should exam relevance, foundational importance and your immediate study priority affect ordering?",
+      "recommendation": "Keep assessment relevance, foundation and personal priority distinct; qualitative source-backed reasons, no unsupported exam probability.",
+      "reasoning": "The notes ask for both importance and understanding. Conflating them can hide needed prerequisites or overstate assessment predictions.",
+      "advantages": "Prioritizes work without pretending the tutor knows the exam; can use instructor signals with clear provenance.",
+      "costs_or_drawbacks": "Less magical than a predicted exam likelihood; objectives and assessment guidance may be incomplete.",
+      "alternative_and_when": "Allow explicit exam-preparation mode with source-backed prioritization while retaining foundations and non-exam goals.",
+      "evidence_to_resolve": "Syllabus/objectives/instructor guidance/permitted past assessments plus user preference on depth versus upcoming-assessment emphasis.",
+      "depends_on": [
+        "G13",
+        "G14",
+        "G23"
+      ],
+      "previous_question_ids": [],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Keep three separate signals: documented assessment relevance, justified prerequisite/foundational role, and personal priority based on current goals/evidence. Explain each reason; allow manual overrides. No numeric exam probability without an appropriate evidence/model basis.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q074/Q077"
+      ],
+      "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate.",
+      "current_design_reference": "docs/project/brain-pc-system.md",
+      "historical_state": "PRIORITY_SEMANTICS_REPORTED_DISPLAY_OPEN",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G25",
+      "group": "Study interface",
+      "priority": "P1",
+      "resolution_owner": "USER + DESIGN_VALIDATION",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "What does the first slide workspace look and feel like on your primary screen, and which controls must stay visible?",
+      "recommendation": "Design source-first responsive views across approved devices; prototype embedded versus standalone presentation without silently replacing the requested experience.",
+      "reasoning": "Beauty is requested, but the draft has no approved visual prototype, responsive layout or tested figure/math interaction. Do not let a graph or status dashboard displace studying.",
+      "advantages": "Coherent navigation and reusable components; fewer competing panels and easier keyboard access.",
+      "costs_or_drawbacks": "There are trade-offs between transcript, source, chat and recording space; mobile needs a different arrangement and may be deferred by explicit choice.",
+      "alternative_and_when": "A reading/voice-first or tablet layout may be primary if confirmed in G05/G17; the desktop layout must not dictate all devices.",
+      "evidence_to_resolve": "Typical screen size and two or three reference interfaces; observed ability to play a clip, ask, inspect a source and return without losing work.",
+      "depends_on": [
+        "G02",
+        "G05",
+        "G16",
+        "G17"
+      ],
+      "previous_question_ids": [],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Use a readable dominant slide, collapsible lecture navigator, stable media controls and one contextual Sources/Ask/Explain/Practice panel. Preserve unfinished input and playback position across source jumps. Validate two visual directions with one real slide before choosing tokens.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q079-Q084"
+      ],
+      "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate.",
+      "current_design_reference": "docs/project/ui-decisions.md",
+      "previous_state_before_ui_baseline": "CROSS_DEVICE_UX_TARGET_CONFIRMED_DETAIL_OPEN",
+      "ui_preference_reconciliation": "User approved mock direction and requested night/light mode. Light/Dark/System, responsive panels and state details are specified in current UI decisions.",
+      "historical_state": "SOURCE_FIRST_LIGHT_DARK_DIRECTION_ACCEPTED_UI_BASELINE_FINALIZED",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G26",
+      "group": "Dispatch operations",
+      "priority": "P1",
+      "resolution_owner": "ENGINEERING_RECOMMENDATION + USER",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "What should happen on duplicate sends, provider changes, permission prompts, cancellation, sleep or an unknown completion?",
+      "recommendation": "Local supervisor remains design. Prepare safe proof; on uncertain outcome stop and reconcile instead of resend/reconfigure.",
+      "reasoning": "v0.2.0 already proposes these semantics. They are not yet implemented or tested, and completion receipt is different from accepted output.",
+      "advantages": "Avoids duplicate learning evidence, lost questions, cross-course context and late-answer overwrites.",
+      "costs_or_drawbacks": "More explicit operational states; uncertain jobs may require reconciliation rather than an invisible retry. At-most-one accepted publication does not guarantee one inference computation.",
+      "alternative_and_when": "Persistent background processing can be approved later. Never infer permission for hidden startup tasks, automatic spending or desktop click automation.",
+      "evidence_to_resolve": "Expected closed-app behavior, user-approved notifications, retry/cancel decisions and actual crash/duplicate/native-disconnection tests.",
+      "depends_on": [
+        "G03",
+        "G04",
+        "G05",
+        "G07",
+        "G08",
+        "G09",
+        "G15"
+      ],
+      "previous_question_ids": [
+        "Q09"
+      ],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Use immutable per-request bundles and a single coordinator; separate response display from canonical assessment save. Serialize within a thread, keep exact session IDs and require deliberate retry/provider transfer. Browsing and drafts stay available while AI is blocked.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q019-Q024",
+        "P06 partial focused capability report"
+      ],
+      "remaining_status": "Design recommendation only; no new user execution/write/runtime permission inferred.",
+      "history": [
+        {
+          "version": "0.4.0",
+          "state": "NEW_HANDOFF_REQUIRED",
+          "recommendation": "Add a minimal request/dispatch/result/receipt contract around existing owners. Handle duplicates, staleness, cancellation and uncertain completion; scheduled scan is not an immediate request trigger.",
+          "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate."
+        },
+        {
+          "version": "0.5.0",
+          "state": "NEW_HANDOFF_REQUIRED",
+          "recommendation": "Always-on PC supervisor drains ready queues with committed files, lease/identity checks and durable recovery; idle and wait without model polling."
+        }
+      ],
+      "current_design_reference": "docs/project/native-bridge-proof.md",
+      "new_evidence": "Pending restart; default control failure; no companion lifecycle or terminal readback demonstrated.",
+      "historical_state": "NATIVE_TRANSPORT_GATE_BLOCKED_NO_RESIDENT_INSTALLED",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G27",
+      "group": "Safety, retention and recovery",
+      "priority": "P1",
+      "resolution_owner": "USER + IMPLEMENTATION_VALIDATION",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "How much conversation and raw voice history should be retained, who may access it, and what can be deleted or exported?",
+      "recommendation": "User requested full visible submitted Q/A retention. Keep original turn/version history; raw voice policy, old-history import and deletion scope require explicit detail.",
+      "reasoning": "Existing canonical attempts preserve provenance; local app, provider history, backups and Drive copies are different retention surfaces. Deletion of one cannot be advertised as deletion everywhere.",
+      "advantages": "Reduces unnecessary sensitive data accumulation and gives control without destroying original sources silently.",
+      "costs_or_drawbacks": "Some diagnosis/reproducibility context disappears when raw audio is deleted; comprehensive deletion must reconcile history, derived indices and backups.",
+      "alternative_and_when": "Longer archival retention can be opted into with its access and backup implications. Do not promise zero provider retention without verifying the selected route.",
+      "evidence_to_resolve": "Chosen retention for raw audio, user submissions, AI text, pending jobs, logs, exports and derived records; allowed device/account users and deletion authority.",
+      "depends_on": [
+        "G01",
+        "G06",
+        "G08",
+        "G15",
+        "G20"
+      ],
+      "previous_question_ids": [],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Default to the learner’s explicit study records, not a passive scrape of every native chat. Keep raw audio retention separately configurable; no analytics or cross-user learning by default. Provide scoped export/delete and revision-aware derived-data invalidation.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q094-Q095"
+      ],
+      "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate.",
+      "history": [
+        {
+          "version": "0.4.0",
+          "state": "USER_PERMISSION_OPEN",
+          "recommendation": "Define raw voice/chat/queued response/attempt/provider/backup retention separately; not a passive full-chat recorder. No global deletion guarantee.",
+          "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate."
+        }
+      ],
+      "current_design_reference": "docs/project/ui-decisions.md",
+      "previous_state_before_ui_baseline": "USER_PERMISSION_OPEN",
+      "ui_preference_reconciliation": "Full prospective submitted text and delivered feedback retained; raw audio scope, retention and referential deletion remain explicit. Not a passive export of all native chat history.",
+      "historical_state": "FULL_VISIBLE_TEXT_HISTORY_DIRECTION_ACCEPTED_AUDIO_RETENTION_OPEN",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G28",
+      "group": "Safety, retention and recovery",
+      "priority": "P1",
+      "resolution_owner": "USER + EXISTING_TOOL_INSPECTION",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "What backup, restore and simultaneous-tool guarantees must exist before the app can publish learning records?",
+      "recommendation": "Do not call the installed BE 505 save/refresh on a fixture through --root. Establish isolation under scoped approval first.",
+      "reasoning": "The report describes stale summaries but not lost underlying attempts. Existing backup details have not been supplied; sync alone is not our tested restoration plan.",
+      "advantages": "Prevents an app bug or conflicting writer from becoming irreversible study-history damage.",
+      "costs_or_drawbacks": "Restores, rollback scopes and migration testing cost setup time and may retain data slated for later deletion.",
+      "alternative_and_when": "An entirely read-only pilot postpones live-writer risk, but persistence of real learning is not then demonstrated. Do not auto-repair all course summaries.",
+      "evidence_to_resolve": "Existing backup workflow, retention/deletion interaction, approved write roots and a restore/no-duplicate/no-overwrite test using the installed writer.",
+      "depends_on": [
+        "G08",
+        "G09",
+        "G20",
+        "G27"
+      ],
+      "previous_question_ids": [],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Preserve the supplied exclusive-create/readback/correction process; prepare recoverable backups before live pilot writes and test restoration on a disposable copy. Distinguish durable learning history from rebuildable views/caches and stale summaries.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q061-Q066/Q099",
+        "P06 partial focused capability report"
+      ],
+      "remaining_status": "Design recommendation only; no new user execution/write/runtime permission inferred.",
+      "history": [
+        {
+          "version": "0.4.0",
+          "state": "CURRENT_GUARDS_REPORTED_NEW_APP_TESTS_OPEN",
+          "recommendation": "Test current writer semantics and recovery on isolated roots; do not treat historical fixtures or Drive sync as distributed restoration proof.",
+          "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate."
+        },
+        {
+          "version": "0.5.0",
+          "state": "CURRENT_GUARDS_REPORTED_NEW_APP_TESTS_OPEN",
+          "recommendation": "Test current writer semantics and recovery on isolated roots; do not treat historical fixtures or Drive sync as distributed restoration proof."
+        }
+      ],
+      "current_design_reference": "docs/project/brain-pc-system.md",
+      "new_evidence": "Global ROOT used for hashing and saves; ignored physical-source flag still unfixed.",
+      "historical_state": "GLOBAL_ROOT_FIXTURE_HAZARD_MUST_BE_ISOLATED",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G29",
+      "group": "Engineering and maintained integrations",
+      "priority": "P1; exact packages deferred",
+      "resolution_owner": "ENGINEERING_RECOMMENDATION",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "Which technical architecture and maintained components should we use, and what needs ongoing ownership?",
+      "recommendation": "One modular local supervisor with native/Drive/sidecar/writer wrappers and generated views over existing records.",
+      "reasoning": "The hard choices are source/record/provider contracts. Choosing many services before those are known increases coordination and may duplicate existing scripts.",
+      "advantages": "Smaller code and installation surface, easier end-to-end testing and clear reuse opportunities.",
+      "costs_or_drawbacks": "Not an internet-scale deployment; native/provider changes still require compatibility checks. A maintainer must own upgrades, backups and broken adapters.",
+      "alternative_and_when": "A hosted reader and existing Windows writer is a conservative conditional proposal; full laptop-off canonical saves need an approved always-on owner. User decides the availability compromise.",
+      "evidence_to_resolve": "Actual existing runtime/scripts, source formats and scale; audited candidate licenses/interfaces; named maintainer and supported OS/provider version matrix.",
+      "depends_on": [
+        "G01",
+        "G04",
+        "G05",
+        "G08",
+        "G10",
+        "G22",
+        "G26"
+      ],
+      "previous_question_ids": [],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Start with one modular local application/companion, a bounded job journal and one authority per data type. Use established viewer, transcription, scheduling and protocol components after sample/version checks; keep provider adapters thin and explicit. Do not require a graph database, agent fleet or universal framework in the pilot.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q103-Q107",
+        "P06 partial focused capability report"
+      ],
+      "remaining_status": "Design recommendation only; no new user execution/write/runtime permission inferred.",
+      "history": [
+        {
+          "version": "0.4.0",
+          "state": "PROPOSED_CROSS_DEVICE_ARCHITECTURE",
+          "recommendation": "One modular app with a portable Drive reader and one explicitly designated canonical writer per record class. Preserve data and minimal code; no G:-only final design.",
+          "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate."
+        },
+        {
+          "version": "0.5.0",
+          "state": "PROPOSED_CROSS_DEVICE_ARCHITECTURE",
+          "recommendation": "One PC-local modular supervisor, isolated runtime ledger, thin native/Drive/writer adapters; reuse existing authority and avoid extra distributed frameworks."
+        }
+      ],
+      "current_design_reference": "docs/project/ui-decisions.md",
+      "new_evidence": "Reuse existing updater receipts; eliminate parallel canonical graph/gap stores.",
+      "previous_state_before_ui_baseline": "SAME_SMALL_ARCHITECTURE_THINNER_AUTHORITY_SURFACE",
+      "ui_preference_reconciliation": "User reiterated reuse of reliable libraries/APIs, including graphics/motion; no particular dependency or paid inference route is selected by a screenshot.",
+      "historical_state": "REUSE_FIRST_REQUIRED_DEPENDENCY_SELECTION_NOT_RUN",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    },
+    {
+      "id": "G30",
+      "group": "Acceptance and next delivery",
+      "priority": "P0 for approving implementation; then continuous",
+      "resolution_owner": "USER + ENGINEERING + LEARNING_REVIEW",
+      "state": "ENGINEERING_BASELINED_ACTIVATION_SEPARATE",
+      "question": "What evidence demonstrates the full all-lecture release and the required cross-device ChatGPT workflow?",
+      "recommendation": "One synthetic resident-process roundtrip first after exact permission approval; then separate Drive and isolated writer proofs. All lectures remain scope.",
+      "reasoning": "The packet contains a test plan but no executed app tests, measurable link tolerance, baseline study time or validated learning gain. Seed Repo test counts do not test this app.",
+      "advantages": "Keeps success tied to study value and avoids a beautiful demo masking incorrect links, wrong grading or lost records.",
+      "costs_or_drawbacks": "Requires labeled examples, human review and repeated study observations; some gains remain hypotheses in a small pilot.",
+      "alternative_and_when": "Use a narrowly labeled navigation-only demo if inference is blocked, but do not count it as proof of the full tutor. Do not start unlimited coding from these unresolved drafts.",
+      "evidence_to_resolve": "Signed-off slice, measured baseline, reviewed positive/negative cases, TDD mappings, exact end-to-end request/result and writer traces, evaluation/rollback criteria.",
+      "depends_on": [
+        "G02",
+        "G04",
+        "G06",
+        "G08",
+        "G10",
+        "G11",
+        "G18",
+        "G20",
+        "G25",
+        "G26",
+        "G28"
+      ],
+      "previous_question_ids": [],
+      "accepted_answer": null,
+      "acceptance_evidence": null,
+      "prior_recommendation": "Approve a small slice only after real source/writer inspection and one synthetic native route test. Evaluate exact navigation and correction burden, feedback validity including alternatives/uncertainty, safe persistence/recovery, and later independent performance separately. Agree numerical thresholds after the representative sample.",
+      "prior_recommendation_status": "HISTORICAL_0_3_0_NOT_AUTHORITY",
+      "audit_evidence": [
+        "P05 Q102-Q108",
+        "P06 partial focused capability report"
+      ],
+      "remaining_status": "Design recommendation only; no new user execution/write/runtime permission inferred.",
+      "history": [
+        {
+          "version": "0.4.0",
+          "state": "ACCEPTANCE_NOT_APPROVED",
+          "recommendation": "Require full lecture accounting plus actual native/Drive/writer checks, measured alignment and grading/UX evidence; small probes are not the product limit.",
+          "remaining_status": "Further evidence/approval where indicated; reported existing behavior is not an executed new-app gate."
+        },
+        {
+          "version": "0.5.0",
+          "state": "ACCEPTANCE_NOT_APPROVED",
+          "recommendation": "Require full lecture accounting plus actual native/Drive/writer checks, measured alignment and grading/UX evidence; small probes are not the product limit."
+        }
+      ],
+      "current_design_reference": "docs/project/native-bridge-proof.md",
+      "new_evidence": "Partial report; execution tests NOT_RUN. Help/read-only inspection is not end-to-end acceptance.",
+      "historical_state": "NATIVE_PROOF_PREPARATION_NEXT_NOT_APPROVED",
+      "current_resolution_refs": [
+        "docs/engineering/stack.md",
+        "docs/engineering/interface-contracts.md",
+        "config/defaults.json",
+        "docs/delivery/activation-gates.json"
+      ],
+      "unresolved_interpretation": "Older alternatives/questions are historical; the live deployment identities, consent and capability tests are activation inputs, not authority to substitute product behavior."
+    }
+  ],
+  "audit_source": "P05",
+  "current_design_version": "0.9.0",
+  "latest_evidence": "P06_PARTIAL_CAPABILITY_REPORT",
+  "ui_baseline": "docs/project/experience-spec.json",
+  "finalization_authority": "User requested all engineering specifications/roadmap/versioning finalized. This baselines design choices, not credentials, installs, native dispatch, course writes or deployment."
+}

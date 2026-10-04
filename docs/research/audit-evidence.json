@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-02",
+  "evidence_id": "P05",
+  "source_filename": "Pasted text(1).txt",
+  "source_sha256": "dd5a649674155af213714013744ffc093419a5ba271a0a0349ea7648f9f8a557",
+  "source_line_count": 715,
+  "audit_report_date": "2026-10-02",
+  "audit_author_runtime_reported": "Codex desktop main-planner project",
+  "scope_here": "Read/synthesize user-supplied report and update documentation only. No independent live workspace/code/media inspection.",
+  "reported_preservation": {
+    "files_compared": 91,
+    "unchanged": 91,
+    "independently_repeated_here": false
+  },
+  "counts": {
+    "lecture_units": 37,
+    "sessions": 31,
+    "lecture_session_files": 246,
+    "lecture_session_bytes": 1711362279,
+    "materials_files": 506,
+    "materials_bytes": 2165867093,
+    "recording_transcript_pairs": 30,
+    "learning_attempts": 39
+  },
+  "source_sections": [
+    "Executive findings",
+    "Matrices 1-4",
+    "Answers Q001-Q108",
+    "Current learning and publication health",
+    "Minimal schema and workflow examples",
+    "Existing commands and their side effects",
+    "Recorded tests versus checks run now",
+    "Compatible integration proposal",
+    "Smallest remaining tests"
+  ],
+  "sensitive_identifiers": "Raw audit not included in this package; it contains private host paths, native thread/project IDs, Drive IDs and real learner examples.",
+  "source_preserved": true,
+  "application_tests_executed": false,
+  "native_dispatch_executed": false,
+  "course_writes_executed": false,
+  "remote_changes_executed": false
+}

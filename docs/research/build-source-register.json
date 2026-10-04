@@ -1,0 +1,136 @@
+{
+  "checked_at": "2026-10-04",
+  "scope": "Primary documentation reviewed for engineering choices. Not installation, account verification, license audit or benchmark. Current pages may change; freeze actual package/source identities at LL002.",
+  "sources": [
+    {
+      "id": "REF01",
+      "purpose": "React/TypeScript SPA build",
+      "url": "https://vite.dev/guide/"
+    },
+    {
+      "id": "REF02",
+      "purpose": "Open-code component distribution; selected primitives need review",
+      "url": "https://ui.shadcn.com/docs"
+    },
+    {
+      "id": "REF03",
+      "purpose": "React animation and CSS tradeoff",
+      "url": "https://motion.dev/docs/react"
+    },
+    {
+      "id": "REF04",
+      "purpose": "PDF display layer versus private core",
+      "url": "https://mozilla.github.io/pdf.js/getting_started/"
+    },
+    {
+      "id": "REF05",
+      "purpose": "Server-state/cache library",
+      "url": "https://tanstack.com/query/latest/docs/framework/react/overview"
+    },
+    {
+      "id": "REF06",
+      "purpose": "Native media controls",
+      "url": "https://www.media-chrome.org/docs/en/get-started"
+    },
+    {
+      "id": "REF07",
+      "purpose": "Typed local HTTP/control support",
+      "url": "https://fastapi.tiangolo.com/features/"
+    },
+    {
+      "id": "REF08",
+      "purpose": "SQLAlchemy SQLite behavior",
+      "url": "https://docs.sqlalchemy.org/en/20/dialects/sqlite.html"
+    },
+    {
+      "id": "REF09",
+      "purpose": "Local SQLite WAL constraints",
+      "url": "https://sqlite.org/wal.html"
+    },
+    {
+      "id": "REF10",
+      "purpose": "Schema migration library",
+      "url": "https://alembic.sqlalchemy.org/en/latest/"
+    },
+    {
+      "id": "REF11",
+      "purpose": "Drive OAuth scope definitions",
+      "url": "https://developers.google.com/workspace/drive/api/guides/api-specific-auth"
+    },
+    {
+      "id": "REF12",
+      "purpose": "Browser user-triggered OAuth token model",
+      "url": "https://developers.google.com/identity/oauth2/web/guides/use-token-model"
+    },
+    {
+      "id": "REF13",
+      "purpose": "Authorized content and ranged file retrieval",
+      "url": "https://developers.google.com/workspace/drive/api/guides/manage-downloads"
+    },
+    {
+      "id": "REF14",
+      "purpose": "Resumable uploads",
+      "url": "https://developers.google.com/workspace/drive/api/guides/manage-uploads"
+    },
+    {
+      "id": "REF15",
+      "purpose": "Codex App Server protocol; local operation not verified",
+      "url": "https://developers.openai.com/codex/app-server/"
+    },
+    {
+      "id": "REF16",
+      "purpose": "Codex public CLI reference; installed queue is separately reported",
+      "url": "https://developers.openai.com/codex/cli/reference/"
+    },
+    {
+      "id": "REF17",
+      "purpose": "FSRS scheduling parameters and rating behavior",
+      "url": "https://docs.ankiweb.net/deck-options.html"
+    },
+    {
+      "id": "REF18",
+      "purpose": "Python FSRS implementation",
+      "url": "https://github.com/open-spaced-repetition/py-fsrs"
+    },
+    {
+      "id": "REF19",
+      "purpose": "WebCrypto ECDSA P1363 signing representation",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/sign"
+    },
+    {
+      "id": "REF20",
+      "purpose": "Cryptography ECDSA key/signature API",
+      "url": "https://cryptography.io/en/latest/hazmat/primitives/asymmetric/ec/"
+    },
+    {
+      "id": "REF21",
+      "purpose": "Icon component interface",
+      "url": "https://lucide.dev/guide/react"
+    },
+    {
+      "id": "REF22",
+      "purpose": "Restrict mathematical markup trust",
+      "url": "https://katex.org/docs/security.html"
+    },
+    {
+      "id": "REF23",
+      "purpose": "Static shell hosting; guide is not a package version pin",
+      "url": "https://developers.cloudflare.com/pages/framework-guides/deploy-a-vite3-project/"
+    },
+    {
+      "id": "REF24",
+      "purpose": "Automated accessibility checks and their limits",
+      "url": "https://playwright.dev/docs/accessibility-testing"
+    },
+    {
+      "id": "REF25",
+      "purpose": "sRGB contrast and text thresholds",
+      "url": "https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html"
+    },
+    {
+      "id": "REF26",
+      "purpose": "Nontext contrast thresholds",
+      "url": "https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html"
+    }
+  ]
+}

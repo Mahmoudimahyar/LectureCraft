@@ -1,0 +1,2390 @@
+{
+  "version": "0.8.0",
+  "generated_from": "experience-spec.json",
+  "records": [
+    {
+      "story_id": "US001",
+      "requirement_id": "workspace-access:REQ-101",
+      "feature": "workspace-access",
+      "ui_flow": "UI01",
+      "screens": [
+        "SC01",
+        "SC02",
+        "SC13"
+      ],
+      "workflows": [
+        "WF00",
+        "WF11"
+      ],
+      "memory": [
+        "M01",
+        "M03",
+        "M14"
+      ],
+      "planned_ui_cases": [
+        "UXAC001",
+        "UXAC002",
+        "UXAC003"
+      ],
+      "prior_workflow_cases": [
+        "AC05",
+        "AC06",
+        "AC39",
+        "AC41",
+        "AC43",
+        "AC47"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US002",
+      "requirement_id": "workspace-access:REQ-102",
+      "feature": "workspace-access",
+      "ui_flow": "UI01",
+      "screens": [
+        "SC01",
+        "SC02",
+        "SC13"
+      ],
+      "workflows": [
+        "WF00",
+        "WF11"
+      ],
+      "memory": [
+        "M01",
+        "M03",
+        "M14"
+      ],
+      "planned_ui_cases": [
+        "UXAC004",
+        "UXAC005",
+        "UXAC006"
+      ],
+      "prior_workflow_cases": [
+        "AC05",
+        "AC06",
+        "AC39",
+        "AC41",
+        "AC43",
+        "AC47"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US003",
+      "requirement_id": "workspace-access:REQ-103",
+      "feature": "workspace-access",
+      "ui_flow": "UI02",
+      "screens": [
+        "SC01",
+        "SC13",
+        "SC14"
+      ],
+      "workflows": [
+        "WF00",
+        "WF10",
+        "WF11"
+      ],
+      "memory": [
+        "M03",
+        "M12",
+        "M14",
+        "M15"
+      ],
+      "planned_ui_cases": [
+        "UXAC007",
+        "UXAC008",
+        "UXAC009"
+      ],
+      "prior_workflow_cases": [
+        "AC32",
+        "AC33",
+        "AC34",
+        "AC47"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US004",
+      "requirement_id": "workspace-access:REQ-104",
+      "feature": "workspace-access",
+      "ui_flow": "UI02",
+      "screens": [
+        "SC01",
+        "SC13",
+        "SC14"
+      ],
+      "workflows": [
+        "WF00",
+        "WF10",
+        "WF11"
+      ],
+      "memory": [
+        "M03",
+        "M12",
+        "M14",
+        "M15"
+      ],
+      "planned_ui_cases": [
+        "UXAC010",
+        "UXAC011",
+        "UXAC012"
+      ],
+      "prior_workflow_cases": [
+        "AC32",
+        "AC33",
+        "AC34",
+        "AC47"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US005",
+      "requirement_id": "workspace-access:REQ-105",
+      "feature": "workspace-access",
+      "ui_flow": "UI03",
+      "screens": [
+        "SC02",
+        "SC03",
+        "SC04"
+      ],
+      "workflows": [
+        "WF01",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M09",
+        "M12"
+      ],
+      "planned_ui_cases": [
+        "UXAC013",
+        "UXAC014",
+        "UXAC015"
+      ],
+      "prior_workflow_cases": [
+        "AC09",
+        "AC13",
+        "AC74"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US006",
+      "requirement_id": "workspace-access:REQ-106",
+      "feature": "workspace-access",
+      "ui_flow": "UI03",
+      "screens": [
+        "SC02",
+        "SC03",
+        "SC04"
+      ],
+      "workflows": [
+        "WF01",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M09",
+        "M12"
+      ],
+      "planned_ui_cases": [
+        "UXAC016",
+        "UXAC017",
+        "UXAC018"
+      ],
+      "prior_workflow_cases": [
+        "AC09",
+        "AC13",
+        "AC74"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US007",
+      "requirement_id": "workspace-access:REQ-107",
+      "feature": "workspace-access",
+      "ui_flow": "UI04",
+      "screens": [
+        "SC17",
+        "SC04",
+        "SC05",
+        "SC06",
+        "SC10"
+      ],
+      "workflows": [
+        "WF04",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M04",
+        "M05",
+        "M12",
+        "M13"
+      ],
+      "planned_ui_cases": [
+        "UXAC019",
+        "UXAC020",
+        "UXAC021"
+      ],
+      "prior_workflow_cases": [
+        "AC17",
+        "AC18",
+        "AC39",
+        "AC75"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US008",
+      "requirement_id": "workspace-access:REQ-108",
+      "feature": "workspace-access",
+      "ui_flow": "UI04",
+      "screens": [
+        "SC17",
+        "SC04",
+        "SC05",
+        "SC06",
+        "SC10"
+      ],
+      "workflows": [
+        "WF04",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M04",
+        "M05",
+        "M12",
+        "M13"
+      ],
+      "planned_ui_cases": [
+        "UXAC022",
+        "UXAC023",
+        "UXAC024"
+      ],
+      "prior_workflow_cases": [
+        "AC17",
+        "AC18",
+        "AC39",
+        "AC75"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US009",
+      "requirement_id": "workspace-access:REQ-109",
+      "feature": "workspace-access",
+      "ui_flow": "UI05",
+      "screens": [
+        "SC03",
+        "SC05",
+        "SC12"
+      ],
+      "workflows": [
+        "WF01",
+        "WF02",
+        "WF03",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M02",
+        "M04",
+        "M14"
+      ],
+      "planned_ui_cases": [
+        "UXAC025",
+        "UXAC026",
+        "UXAC027"
+      ],
+      "prior_workflow_cases": [
+        "AC09",
+        "AC10",
+        "AC46",
+        "AC57",
+        "AC74"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US010",
+      "requirement_id": "workspace-access:REQ-110",
+      "feature": "workspace-access",
+      "ui_flow": "UI05",
+      "screens": [
+        "SC03",
+        "SC05",
+        "SC12"
+      ],
+      "workflows": [
+        "WF01",
+        "WF02",
+        "WF03",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M02",
+        "M04",
+        "M14"
+      ],
+      "planned_ui_cases": [
+        "UXAC028",
+        "UXAC029",
+        "UXAC030"
+      ],
+      "prior_workflow_cases": [
+        "AC09",
+        "AC10",
+        "AC46",
+        "AC57",
+        "AC74"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US011",
+      "requirement_id": "evidence-alignment:REQ-101",
+      "feature": "evidence-alignment",
+      "ui_flow": "UI06",
+      "screens": [
+        "SC04",
+        "SC05"
+      ],
+      "workflows": [
+        "WF02",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M02",
+        "M12"
+      ],
+      "planned_ui_cases": [
+        "UXAC031",
+        "UXAC032",
+        "UXAC033"
+      ],
+      "prior_workflow_cases": [
+        "AC12",
+        "AC13",
+        "AC20",
+        "AC33"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US012",
+      "requirement_id": "evidence-alignment:REQ-102",
+      "feature": "evidence-alignment",
+      "ui_flow": "UI06",
+      "screens": [
+        "SC04",
+        "SC05"
+      ],
+      "workflows": [
+        "WF02",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M02",
+        "M12"
+      ],
+      "planned_ui_cases": [
+        "UXAC034",
+        "UXAC035",
+        "UXAC036"
+      ],
+      "prior_workflow_cases": [
+        "AC12",
+        "AC13",
+        "AC20",
+        "AC33"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US013",
+      "requirement_id": "evidence-alignment:REQ-103",
+      "feature": "evidence-alignment",
+      "ui_flow": "UI07",
+      "screens": [
+        "SC04",
+        "SC05"
+      ],
+      "workflows": [
+        "WF02",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M02",
+        "M12"
+      ],
+      "planned_ui_cases": [
+        "UXAC037",
+        "UXAC038",
+        "UXAC039"
+      ],
+      "prior_workflow_cases": [
+        "AC11",
+        "AC12",
+        "AC13",
+        "AC14"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US014",
+      "requirement_id": "evidence-alignment:REQ-104",
+      "feature": "evidence-alignment",
+      "ui_flow": "UI07",
+      "screens": [
+        "SC04",
+        "SC05"
+      ],
+      "workflows": [
+        "WF02",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M02",
+        "M12"
+      ],
+      "planned_ui_cases": [
+        "UXAC040",
+        "UXAC041",
+        "UXAC042"
+      ],
+      "prior_workflow_cases": [
+        "AC11",
+        "AC12",
+        "AC13",
+        "AC14"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US015",
+      "requirement_id": "evidence-alignment:REQ-105",
+      "feature": "evidence-alignment",
+      "ui_flow": "UI08",
+      "screens": [
+        "SC04",
+        "SC05"
+      ],
+      "workflows": [
+        "WF02",
+        "WF04",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M02",
+        "M12",
+        "M13"
+      ],
+      "planned_ui_cases": [
+        "UXAC043",
+        "UXAC044",
+        "UXAC045"
+      ],
+      "prior_workflow_cases": [
+        "AC11",
+        "AC18",
+        "AC21",
+        "AC63"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US016",
+      "requirement_id": "evidence-alignment:REQ-106",
+      "feature": "evidence-alignment",
+      "ui_flow": "UI08",
+      "screens": [
+        "SC04",
+        "SC05"
+      ],
+      "workflows": [
+        "WF02",
+        "WF04",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M02",
+        "M12",
+        "M13"
+      ],
+      "planned_ui_cases": [
+        "UXAC046",
+        "UXAC047",
+        "UXAC048"
+      ],
+      "prior_workflow_cases": [
+        "AC11",
+        "AC18",
+        "AC21",
+        "AC63"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US017",
+      "requirement_id": "evidence-alignment:REQ-107",
+      "feature": "evidence-alignment",
+      "ui_flow": "UI09",
+      "screens": [
+        "SC04",
+        "SC05",
+        "SC06"
+      ],
+      "workflows": [
+        "WF02",
+        "WF04",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M02",
+        "M05",
+        "M12",
+        "M13"
+      ],
+      "planned_ui_cases": [
+        "UXAC049",
+        "UXAC050",
+        "UXAC051"
+      ],
+      "prior_workflow_cases": [
+        "AC17",
+        "AC20",
+        "AC21"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US018",
+      "requirement_id": "evidence-alignment:REQ-108",
+      "feature": "evidence-alignment",
+      "ui_flow": "UI09",
+      "screens": [
+        "SC04",
+        "SC05",
+        "SC06"
+      ],
+      "workflows": [
+        "WF02",
+        "WF04",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M02",
+        "M05",
+        "M12",
+        "M13"
+      ],
+      "planned_ui_cases": [
+        "UXAC052",
+        "UXAC053",
+        "UXAC054"
+      ],
+      "prior_workflow_cases": [
+        "AC17",
+        "AC20",
+        "AC21"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US019",
+      "requirement_id": "evidence-alignment:REQ-109",
+      "feature": "evidence-alignment",
+      "ui_flow": "UI10",
+      "screens": [
+        "SC04",
+        "SC05",
+        "SC14",
+        "SC12"
+      ],
+      "workflows": [
+        "WF02",
+        "WF09",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M02",
+        "M12",
+        "M14"
+      ],
+      "planned_ui_cases": [
+        "UXAC055",
+        "UXAC056",
+        "UXAC057"
+      ],
+      "prior_workflow_cases": [
+        "AC14",
+        "AC57",
+        "AC58"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US020",
+      "requirement_id": "evidence-alignment:REQ-110",
+      "feature": "evidence-alignment",
+      "ui_flow": "UI10",
+      "screens": [
+        "SC04",
+        "SC05",
+        "SC14",
+        "SC12"
+      ],
+      "workflows": [
+        "WF02",
+        "WF09",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M02",
+        "M12",
+        "M14"
+      ],
+      "planned_ui_cases": [
+        "UXAC058",
+        "UXAC059",
+        "UXAC060"
+      ],
+      "prior_workflow_cases": [
+        "AC14",
+        "AC57",
+        "AC58"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US021",
+      "requirement_id": "tutoring:REQ-101",
+      "feature": "tutoring",
+      "ui_flow": "UI11",
+      "screens": [
+        "SC04",
+        "SC06",
+        "SC12"
+      ],
+      "workflows": [
+        "WF00",
+        "WF04",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M03",
+        "M05",
+        "M06",
+        "M12",
+        "M13",
+        "M14"
+      ],
+      "planned_ui_cases": [
+        "UXAC061",
+        "UXAC062",
+        "UXAC063"
+      ],
+      "prior_workflow_cases": [
+        "AC18",
+        "AC39",
+        "AC75"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US022",
+      "requirement_id": "tutoring:REQ-102",
+      "feature": "tutoring",
+      "ui_flow": "UI11",
+      "screens": [
+        "SC04",
+        "SC06",
+        "SC12"
+      ],
+      "workflows": [
+        "WF00",
+        "WF04",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M03",
+        "M05",
+        "M06",
+        "M12",
+        "M13",
+        "M14"
+      ],
+      "planned_ui_cases": [
+        "UXAC064",
+        "UXAC065",
+        "UXAC066"
+      ],
+      "prior_workflow_cases": [
+        "AC18",
+        "AC39",
+        "AC75"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US023",
+      "requirement_id": "tutoring:REQ-103",
+      "feature": "tutoring",
+      "ui_flow": "UI12",
+      "screens": [
+        "SC04",
+        "SC05",
+        "SC10",
+        "SC11"
+      ],
+      "workflows": [
+        "WF00",
+        "WF04",
+        "WF06",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M03",
+        "M04",
+        "M05",
+        "M06",
+        "M12",
+        "M13"
+      ],
+      "planned_ui_cases": [
+        "UXAC067",
+        "UXAC068",
+        "UXAC069"
+      ],
+      "prior_workflow_cases": [
+        "AC18",
+        "AC24",
+        "AC65",
+        "AC75"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US024",
+      "requirement_id": "tutoring:REQ-104",
+      "feature": "tutoring",
+      "ui_flow": "UI12",
+      "screens": [
+        "SC04",
+        "SC05",
+        "SC10",
+        "SC11"
+      ],
+      "workflows": [
+        "WF00",
+        "WF04",
+        "WF06",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M03",
+        "M04",
+        "M05",
+        "M06",
+        "M12",
+        "M13"
+      ],
+      "planned_ui_cases": [
+        "UXAC070",
+        "UXAC071",
+        "UXAC072"
+      ],
+      "prior_workflow_cases": [
+        "AC18",
+        "AC24",
+        "AC65",
+        "AC75"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US025",
+      "requirement_id": "tutoring:REQ-105",
+      "feature": "tutoring",
+      "ui_flow": "UI13",
+      "screens": [
+        "SC04",
+        "SC06",
+        "SC18",
+        "SC12"
+      ],
+      "workflows": [
+        "WF00",
+        "WF05",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M03",
+        "M04",
+        "M05",
+        "M06",
+        "M07",
+        "M08",
+        "M09",
+        "M13",
+        "M14"
+      ],
+      "planned_ui_cases": [
+        "UXAC073",
+        "UXAC074",
+        "UXAC075"
+      ],
+      "prior_workflow_cases": [
+        "AC19",
+        "AC20",
+        "AC21",
+        "AC22",
+        "AC23",
+        "AC49",
+        "AC50",
+        "AC51",
+        "AC61",
+        "AC62"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US026",
+      "requirement_id": "tutoring:REQ-106",
+      "feature": "tutoring",
+      "ui_flow": "UI13",
+      "screens": [
+        "SC04",
+        "SC06",
+        "SC18",
+        "SC12"
+      ],
+      "workflows": [
+        "WF00",
+        "WF05",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M03",
+        "M04",
+        "M05",
+        "M06",
+        "M07",
+        "M08",
+        "M09",
+        "M13",
+        "M14"
+      ],
+      "planned_ui_cases": [
+        "UXAC076",
+        "UXAC077",
+        "UXAC078"
+      ],
+      "prior_workflow_cases": [
+        "AC19",
+        "AC20",
+        "AC21",
+        "AC22",
+        "AC23",
+        "AC49",
+        "AC50",
+        "AC51",
+        "AC61",
+        "AC62"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US027",
+      "requirement_id": "tutoring:REQ-107",
+      "feature": "tutoring",
+      "ui_flow": "UI14",
+      "screens": [
+        "SC18",
+        "SC04",
+        "SC06"
+      ],
+      "workflows": [
+        "WF00",
+        "WF05",
+        "WF09",
+        "WF10"
+      ],
+      "memory": [
+        "M03",
+        "M05",
+        "M06",
+        "M07",
+        "M12",
+        "M13",
+        "M15"
+      ],
+      "planned_ui_cases": [
+        "UXAC079",
+        "UXAC080",
+        "UXAC081"
+      ],
+      "prior_workflow_cases": [
+        "AC19",
+        "AC21",
+        "AC63",
+        "AC64"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US028",
+      "requirement_id": "tutoring:REQ-108",
+      "feature": "tutoring",
+      "ui_flow": "UI14",
+      "screens": [
+        "SC18",
+        "SC04",
+        "SC06"
+      ],
+      "workflows": [
+        "WF00",
+        "WF05",
+        "WF09",
+        "WF10"
+      ],
+      "memory": [
+        "M03",
+        "M05",
+        "M06",
+        "M07",
+        "M12",
+        "M13",
+        "M15"
+      ],
+      "planned_ui_cases": [
+        "UXAC082",
+        "UXAC083",
+        "UXAC084"
+      ],
+      "prior_workflow_cases": [
+        "AC19",
+        "AC21",
+        "AC63",
+        "AC64"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US029",
+      "requirement_id": "tutoring:REQ-109",
+      "feature": "tutoring",
+      "ui_flow": "UI15",
+      "screens": [
+        "SC06",
+        "SC04",
+        "SC05"
+      ],
+      "workflows": [
+        "WF00",
+        "WF05",
+        "WF06",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M03",
+        "M05",
+        "M06",
+        "M07",
+        "M08",
+        "M12"
+      ],
+      "planned_ui_cases": [
+        "UXAC085",
+        "UXAC086",
+        "UXAC087"
+      ],
+      "prior_workflow_cases": [
+        "AC20",
+        "AC21",
+        "AC27"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US030",
+      "requirement_id": "tutoring:REQ-110",
+      "feature": "tutoring",
+      "ui_flow": "UI15",
+      "screens": [
+        "SC06",
+        "SC04",
+        "SC05"
+      ],
+      "workflows": [
+        "WF00",
+        "WF05",
+        "WF06",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M03",
+        "M05",
+        "M06",
+        "M07",
+        "M08",
+        "M12"
+      ],
+      "planned_ui_cases": [
+        "UXAC088",
+        "UXAC089",
+        "UXAC090"
+      ],
+      "prior_workflow_cases": [
+        "AC20",
+        "AC21",
+        "AC27"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US031",
+      "requirement_id": "tutoring:REQ-111",
+      "feature": "tutoring",
+      "ui_flow": "UI16",
+      "screens": [
+        "SC04",
+        "SC06",
+        "SC10",
+        "SC11"
+      ],
+      "workflows": [
+        "WF05",
+        "WF06",
+        "WF10"
+      ],
+      "memory": [
+        "M03",
+        "M04",
+        "M05",
+        "M06",
+        "M07",
+        "M08",
+        "M12",
+        "M13"
+      ],
+      "planned_ui_cases": [
+        "UXAC091",
+        "UXAC092",
+        "UXAC093"
+      ],
+      "prior_workflow_cases": [
+        "AC24",
+        "AC25",
+        "AC40",
+        "AC65",
+        "AC66"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US032",
+      "requirement_id": "tutoring:REQ-112",
+      "feature": "tutoring",
+      "ui_flow": "UI16",
+      "screens": [
+        "SC04",
+        "SC06",
+        "SC10",
+        "SC11"
+      ],
+      "workflows": [
+        "WF05",
+        "WF06",
+        "WF10"
+      ],
+      "memory": [
+        "M03",
+        "M04",
+        "M05",
+        "M06",
+        "M07",
+        "M08",
+        "M12",
+        "M13"
+      ],
+      "planned_ui_cases": [
+        "UXAC094",
+        "UXAC095",
+        "UXAC096"
+      ],
+      "prior_workflow_cases": [
+        "AC24",
+        "AC25",
+        "AC40",
+        "AC65",
+        "AC66"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US033",
+      "requirement_id": "tutoring:REQ-113",
+      "feature": "tutoring",
+      "ui_flow": "UI17",
+      "screens": [
+        "SC06",
+        "SC11",
+        "SC12",
+        "SC14"
+      ],
+      "workflows": [
+        "WF05",
+        "WF09",
+        "WF10"
+      ],
+      "memory": [
+        "M05",
+        "M06",
+        "M07",
+        "M08",
+        "M09",
+        "M14"
+      ],
+      "planned_ui_cases": [
+        "UXAC097",
+        "UXAC098",
+        "UXAC099"
+      ],
+      "prior_workflow_cases": [
+        "AC22",
+        "AC29",
+        "AC30",
+        "AC52",
+        "AC54",
+        "AC69"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US034",
+      "requirement_id": "tutoring:REQ-114",
+      "feature": "tutoring",
+      "ui_flow": "UI17",
+      "screens": [
+        "SC06",
+        "SC11",
+        "SC12",
+        "SC14"
+      ],
+      "workflows": [
+        "WF05",
+        "WF09",
+        "WF10"
+      ],
+      "memory": [
+        "M05",
+        "M06",
+        "M07",
+        "M08",
+        "M09",
+        "M14"
+      ],
+      "planned_ui_cases": [
+        "UXAC100",
+        "UXAC101",
+        "UXAC102"
+      ],
+      "prior_workflow_cases": [
+        "AC22",
+        "AC29",
+        "AC30",
+        "AC52",
+        "AC54",
+        "AC69"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US035",
+      "requirement_id": "evidence-alignment:REQ-111",
+      "feature": "evidence-alignment",
+      "ui_flow": "UI18",
+      "screens": [
+        "SC04",
+        "SC05",
+        "SC11"
+      ],
+      "workflows": [
+        "WF04",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M02",
+        "M06",
+        "M12"
+      ],
+      "planned_ui_cases": [
+        "UXAC103",
+        "UXAC104",
+        "UXAC105"
+      ],
+      "prior_workflow_cases": [
+        "AC20",
+        "AC33",
+        "AC49"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US036",
+      "requirement_id": "evidence-alignment:REQ-112",
+      "feature": "evidence-alignment",
+      "ui_flow": "UI18",
+      "screens": [
+        "SC04",
+        "SC05",
+        "SC11"
+      ],
+      "workflows": [
+        "WF04",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M02",
+        "M06",
+        "M12"
+      ],
+      "planned_ui_cases": [
+        "UXAC106",
+        "UXAC107",
+        "UXAC108"
+      ],
+      "prior_workflow_cases": [
+        "AC20",
+        "AC33",
+        "AC49"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US037",
+      "requirement_id": "progress:REQ-101",
+      "feature": "progress",
+      "ui_flow": "UI19",
+      "screens": [
+        "SC10",
+        "SC04",
+        "SC06",
+        "SC09"
+      ],
+      "workflows": [
+        "WF03",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M04",
+        "M05",
+        "M07",
+        "M08",
+        "M10"
+      ],
+      "planned_ui_cases": [
+        "UXAC109",
+        "UXAC110",
+        "UXAC111"
+      ],
+      "prior_workflow_cases": [
+        "AC15",
+        "AC16",
+        "AC53",
+        "AC59",
+        "AC60",
+        "AC65"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US038",
+      "requirement_id": "progress:REQ-102",
+      "feature": "progress",
+      "ui_flow": "UI19",
+      "screens": [
+        "SC10",
+        "SC04",
+        "SC06",
+        "SC09"
+      ],
+      "workflows": [
+        "WF03",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M04",
+        "M05",
+        "M07",
+        "M08",
+        "M10"
+      ],
+      "planned_ui_cases": [
+        "UXAC112",
+        "UXAC113",
+        "UXAC114"
+      ],
+      "prior_workflow_cases": [
+        "AC15",
+        "AC16",
+        "AC53",
+        "AC59",
+        "AC60",
+        "AC65"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US039",
+      "requirement_id": "progress:REQ-103",
+      "feature": "progress",
+      "ui_flow": "UI20",
+      "screens": [
+        "SC09",
+        "SC10",
+        "SC11"
+      ],
+      "workflows": [
+        "WF05",
+        "WF06",
+        "WF10"
+      ],
+      "memory": [
+        "M03",
+        "M04",
+        "M07",
+        "M08",
+        "M09",
+        "M10"
+      ],
+      "planned_ui_cases": [
+        "UXAC115",
+        "UXAC116",
+        "UXAC117"
+      ],
+      "prior_workflow_cases": [
+        "AC31",
+        "AC40",
+        "AC54",
+        "AC70",
+        "AC72"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US040",
+      "requirement_id": "progress:REQ-104",
+      "feature": "progress",
+      "ui_flow": "UI20",
+      "screens": [
+        "SC09",
+        "SC10",
+        "SC11"
+      ],
+      "workflows": [
+        "WF05",
+        "WF06",
+        "WF10"
+      ],
+      "memory": [
+        "M03",
+        "M04",
+        "M07",
+        "M08",
+        "M09",
+        "M10"
+      ],
+      "planned_ui_cases": [
+        "UXAC118",
+        "UXAC119",
+        "UXAC120"
+      ],
+      "prior_workflow_cases": [
+        "AC31",
+        "AC40",
+        "AC54",
+        "AC70",
+        "AC72"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US041",
+      "requirement_id": "progress:REQ-105",
+      "feature": "progress",
+      "ui_flow": "UI21",
+      "screens": [
+        "SC11",
+        "SC09",
+        "SC04"
+      ],
+      "workflows": [
+        "WF09",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M05",
+        "M06",
+        "M07",
+        "M08",
+        "M09",
+        "M12",
+        "M15"
+      ],
+      "planned_ui_cases": [
+        "UXAC121",
+        "UXAC122",
+        "UXAC123"
+      ],
+      "prior_workflow_cases": [
+        "AC29",
+        "AC49",
+        "AC50",
+        "AC62",
+        "AC73"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US042",
+      "requirement_id": "progress:REQ-106",
+      "feature": "progress",
+      "ui_flow": "UI21",
+      "screens": [
+        "SC11",
+        "SC09",
+        "SC04"
+      ],
+      "workflows": [
+        "WF09",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M05",
+        "M06",
+        "M07",
+        "M08",
+        "M09",
+        "M12",
+        "M15"
+      ],
+      "planned_ui_cases": [
+        "UXAC124",
+        "UXAC125",
+        "UXAC126"
+      ],
+      "prior_workflow_cases": [
+        "AC29",
+        "AC49",
+        "AC50",
+        "AC62",
+        "AC73"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US043",
+      "requirement_id": "review:REQ-101",
+      "feature": "review",
+      "ui_flow": "UI22",
+      "screens": [
+        "SC07",
+        "SC06",
+        "SC04"
+      ],
+      "workflows": [
+        "WF03",
+        "WF07",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M03",
+        "M04",
+        "M05",
+        "M11"
+      ],
+      "planned_ui_cases": [
+        "UXAC127",
+        "UXAC128",
+        "UXAC129"
+      ],
+      "prior_workflow_cases": [
+        "AC26",
+        "AC28",
+        "AC68"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US044",
+      "requirement_id": "review:REQ-102",
+      "feature": "review",
+      "ui_flow": "UI22",
+      "screens": [
+        "SC07",
+        "SC06",
+        "SC04"
+      ],
+      "workflows": [
+        "WF03",
+        "WF07",
+        "WF10"
+      ],
+      "memory": [
+        "M01",
+        "M03",
+        "M04",
+        "M05",
+        "M11"
+      ],
+      "planned_ui_cases": [
+        "UXAC130",
+        "UXAC131",
+        "UXAC132"
+      ],
+      "prior_workflow_cases": [
+        "AC26",
+        "AC28",
+        "AC68"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US045",
+      "requirement_id": "review:REQ-103",
+      "feature": "review",
+      "ui_flow": "UI23",
+      "screens": [
+        "SC07",
+        "SC06",
+        "SC14"
+      ],
+      "workflows": [
+        "WF07",
+        "WF08",
+        "WF09",
+        "WF10"
+      ],
+      "memory": [
+        "M05",
+        "M07",
+        "M11"
+      ],
+      "planned_ui_cases": [
+        "UXAC133",
+        "UXAC134",
+        "UXAC135"
+      ],
+      "prior_workflow_cases": [
+        "AC26",
+        "AC29",
+        "AC67",
+        "AC68"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US046",
+      "requirement_id": "review:REQ-104",
+      "feature": "review",
+      "ui_flow": "UI23",
+      "screens": [
+        "SC07",
+        "SC06",
+        "SC14"
+      ],
+      "workflows": [
+        "WF07",
+        "WF08",
+        "WF09",
+        "WF10"
+      ],
+      "memory": [
+        "M05",
+        "M07",
+        "M11"
+      ],
+      "planned_ui_cases": [
+        "UXAC136",
+        "UXAC137",
+        "UXAC138"
+      ],
+      "prior_workflow_cases": [
+        "AC26",
+        "AC29",
+        "AC67",
+        "AC68"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US047",
+      "requirement_id": "review:REQ-105",
+      "feature": "review",
+      "ui_flow": "UI24",
+      "screens": [
+        "SC07",
+        "SC08",
+        "SC06",
+        "SC11"
+      ],
+      "workflows": [
+        "WF05",
+        "WF06",
+        "WF08",
+        "WF10"
+      ],
+      "memory": [
+        "M03",
+        "M05",
+        "M06",
+        "M07",
+        "M08",
+        "M11",
+        "M12"
+      ],
+      "planned_ui_cases": [
+        "UXAC139",
+        "UXAC140",
+        "UXAC141"
+      ],
+      "prior_workflow_cases": [
+        "AC24",
+        "AC27",
+        "AC28",
+        "AC40",
+        "AC67",
+        "AC68"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US048",
+      "requirement_id": "review:REQ-106",
+      "feature": "review",
+      "ui_flow": "UI24",
+      "screens": [
+        "SC07",
+        "SC08",
+        "SC06",
+        "SC11"
+      ],
+      "workflows": [
+        "WF05",
+        "WF06",
+        "WF08",
+        "WF10"
+      ],
+      "memory": [
+        "M03",
+        "M05",
+        "M06",
+        "M07",
+        "M08",
+        "M11",
+        "M12"
+      ],
+      "planned_ui_cases": [
+        "UXAC142",
+        "UXAC143",
+        "UXAC144"
+      ],
+      "prior_workflow_cases": [
+        "AC24",
+        "AC27",
+        "AC28",
+        "AC40",
+        "AC67",
+        "AC68"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US049",
+      "requirement_id": "agent-dispatch:REQ-101",
+      "feature": "agent-dispatch",
+      "ui_flow": "UI25",
+      "screens": [
+        "SC12",
+        "SC04",
+        "SC14"
+      ],
+      "workflows": [
+        "WF00",
+        "WF11"
+      ],
+      "memory": [
+        "M03",
+        "M06",
+        "M07",
+        "M12",
+        "M14"
+      ],
+      "planned_ui_cases": [
+        "UXAC145",
+        "UXAC146",
+        "UXAC147"
+      ],
+      "prior_workflow_cases": [
+        "AC01",
+        "AC02",
+        "AC03",
+        "AC05",
+        "AC07",
+        "AC08",
+        "AC32",
+        "AC41",
+        "AC42",
+        "AC44",
+        "AC45",
+        "AC48",
+        "AC62"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US050",
+      "requirement_id": "agent-dispatch:REQ-102",
+      "feature": "agent-dispatch",
+      "ui_flow": "UI25",
+      "screens": [
+        "SC12",
+        "SC04",
+        "SC14"
+      ],
+      "workflows": [
+        "WF00",
+        "WF11"
+      ],
+      "memory": [
+        "M03",
+        "M06",
+        "M07",
+        "M12",
+        "M14"
+      ],
+      "planned_ui_cases": [
+        "UXAC148",
+        "UXAC149",
+        "UXAC150"
+      ],
+      "prior_workflow_cases": [
+        "AC01",
+        "AC02",
+        "AC03",
+        "AC05",
+        "AC07",
+        "AC08",
+        "AC32",
+        "AC41",
+        "AC42",
+        "AC44",
+        "AC45",
+        "AC48",
+        "AC62"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US051",
+      "requirement_id": "workspace-access:REQ-111",
+      "feature": "workspace-access",
+      "ui_flow": "UI26",
+      "screens": [
+        "SC02",
+        "SC04",
+        "SC14",
+        "SC11"
+      ],
+      "workflows": [
+        "WF00",
+        "WF10",
+        "WF11"
+      ],
+      "memory": [
+        "M01",
+        "M06",
+        "M12",
+        "M14"
+      ],
+      "planned_ui_cases": [
+        "UXAC151",
+        "UXAC152",
+        "UXAC153"
+      ],
+      "prior_workflow_cases": [
+        "AC03",
+        "AC33",
+        "AC62"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US052",
+      "requirement_id": "workspace-access:REQ-112",
+      "feature": "workspace-access",
+      "ui_flow": "UI26",
+      "screens": [
+        "SC02",
+        "SC04",
+        "SC14",
+        "SC11"
+      ],
+      "workflows": [
+        "WF00",
+        "WF10",
+        "WF11"
+      ],
+      "memory": [
+        "M01",
+        "M06",
+        "M12",
+        "M14"
+      ],
+      "planned_ui_cases": [
+        "UXAC154",
+        "UXAC155",
+        "UXAC156"
+      ],
+      "prior_workflow_cases": [
+        "AC03",
+        "AC33",
+        "AC62"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US053",
+      "requirement_id": "agent-dispatch:REQ-103",
+      "feature": "agent-dispatch",
+      "ui_flow": "UI27",
+      "screens": [
+        "SC04",
+        "SC12",
+        "SC13"
+      ],
+      "workflows": [
+        "WF00",
+        "WF11"
+      ],
+      "memory": [
+        "M01",
+        "M06",
+        "M12",
+        "M14",
+        "M15"
+      ],
+      "planned_ui_cases": [
+        "UXAC157",
+        "UXAC158",
+        "UXAC159"
+      ],
+      "prior_workflow_cases": [
+        "AC07",
+        "AC34",
+        "AC35",
+        "AC36",
+        "AC38",
+        "AC45",
+        "AC48"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US054",
+      "requirement_id": "agent-dispatch:REQ-104",
+      "feature": "agent-dispatch",
+      "ui_flow": "UI27",
+      "screens": [
+        "SC04",
+        "SC12",
+        "SC13"
+      ],
+      "workflows": [
+        "WF00",
+        "WF11"
+      ],
+      "memory": [
+        "M01",
+        "M06",
+        "M12",
+        "M14",
+        "M15"
+      ],
+      "planned_ui_cases": [
+        "UXAC160",
+        "UXAC161",
+        "UXAC162"
+      ],
+      "prior_workflow_cases": [
+        "AC07",
+        "AC34",
+        "AC35",
+        "AC36",
+        "AC38",
+        "AC45",
+        "AC48"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US055",
+      "requirement_id": "workspace-access:REQ-113",
+      "feature": "workspace-access",
+      "ui_flow": "UI28",
+      "screens": [
+        "SC13",
+        "SC04",
+        "SC07",
+        "SC09"
+      ],
+      "workflows": [
+        "WF10"
+      ],
+      "memory": [
+        "M03",
+        "M12"
+      ],
+      "planned_ui_cases": [
+        "UXAC163",
+        "UXAC164",
+        "UXAC165"
+      ],
+      "prior_workflow_cases": [
+        "AC33"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US056",
+      "requirement_id": "workspace-access:REQ-114",
+      "feature": "workspace-access",
+      "ui_flow": "UI28",
+      "screens": [
+        "SC13",
+        "SC04",
+        "SC07",
+        "SC09"
+      ],
+      "workflows": [
+        "WF10"
+      ],
+      "memory": [
+        "M03",
+        "M12"
+      ],
+      "planned_ui_cases": [
+        "UXAC166",
+        "UXAC167",
+        "UXAC168"
+      ],
+      "prior_workflow_cases": [
+        "AC33"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US057",
+      "requirement_id": "agent-dispatch:REQ-105",
+      "feature": "agent-dispatch",
+      "ui_flow": "UI29",
+      "screens": [
+        "SC13",
+        "SC12",
+        "SC01"
+      ],
+      "workflows": [
+        "WF00",
+        "WF11"
+      ],
+      "memory": [
+        "M03",
+        "M12",
+        "M13",
+        "M14"
+      ],
+      "planned_ui_cases": [
+        "UXAC169",
+        "UXAC170",
+        "UXAC171"
+      ],
+      "prior_workflow_cases": [
+        "AC05",
+        "AC06",
+        "AC39",
+        "AC41",
+        "AC42",
+        "AC43",
+        "AC44",
+        "AC47"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US058",
+      "requirement_id": "agent-dispatch:REQ-106",
+      "feature": "agent-dispatch",
+      "ui_flow": "UI29",
+      "screens": [
+        "SC13",
+        "SC12",
+        "SC01"
+      ],
+      "workflows": [
+        "WF00",
+        "WF11"
+      ],
+      "memory": [
+        "M03",
+        "M12",
+        "M13",
+        "M14"
+      ],
+      "planned_ui_cases": [
+        "UXAC172",
+        "UXAC173",
+        "UXAC174"
+      ],
+      "prior_workflow_cases": [
+        "AC05",
+        "AC06",
+        "AC39",
+        "AC41",
+        "AC42",
+        "AC43",
+        "AC44",
+        "AC47"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US059",
+      "requirement_id": "workspace-access:REQ-115",
+      "feature": "workspace-access",
+      "ui_flow": "UI30",
+      "screens": [
+        "SC13",
+        "SC11",
+        "SC12"
+      ],
+      "workflows": [
+        "WF10",
+        "WF11"
+      ],
+      "memory": [
+        "M01",
+        "M03",
+        "M06",
+        "M07",
+        "M11",
+        "M12",
+        "M15"
+      ],
+      "planned_ui_cases": [
+        "UXAC175",
+        "UXAC176",
+        "UXAC177"
+      ],
+      "prior_workflow_cases": [
+        "AC38",
+        "AC49",
+        "AC64",
+        "AC73"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US060",
+      "requirement_id": "workspace-access:REQ-116",
+      "feature": "workspace-access",
+      "ui_flow": "UI30",
+      "screens": [
+        "SC13",
+        "SC11",
+        "SC12"
+      ],
+      "workflows": [
+        "WF10",
+        "WF11"
+      ],
+      "memory": [
+        "M01",
+        "M03",
+        "M06",
+        "M07",
+        "M11",
+        "M12",
+        "M15"
+      ],
+      "planned_ui_cases": [
+        "UXAC178",
+        "UXAC179",
+        "UXAC180"
+      ],
+      "prior_workflow_cases": [
+        "AC38",
+        "AC49",
+        "AC64",
+        "AC73"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US061",
+      "requirement_id": "progress:REQ-107",
+      "feature": "progress",
+      "ui_flow": "UI31",
+      "screens": [
+        "SC16",
+        "SC04",
+        "SC07",
+        "SC12"
+      ],
+      "workflows": [
+        "WF10"
+      ],
+      "memory": [
+        "M03",
+        "M06",
+        "M07",
+        "M09",
+        "M11",
+        "M12",
+        "M14"
+      ],
+      "planned_ui_cases": [
+        "UXAC181",
+        "UXAC182",
+        "UXAC183"
+      ],
+      "prior_workflow_cases": [
+        "AC24",
+        "AC31",
+        "AC32",
+        "AC40",
+        "AC72"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US062",
+      "requirement_id": "progress:REQ-108",
+      "feature": "progress",
+      "ui_flow": "UI31",
+      "screens": [
+        "SC16",
+        "SC04",
+        "SC07",
+        "SC12"
+      ],
+      "workflows": [
+        "WF10"
+      ],
+      "memory": [
+        "M03",
+        "M06",
+        "M07",
+        "M09",
+        "M11",
+        "M12",
+        "M14"
+      ],
+      "planned_ui_cases": [
+        "UXAC184",
+        "UXAC185",
+        "UXAC186"
+      ],
+      "prior_workflow_cases": [
+        "AC24",
+        "AC31",
+        "AC32",
+        "AC40",
+        "AC72"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US063",
+      "requirement_id": "agent-dispatch:REQ-107",
+      "feature": "agent-dispatch",
+      "ui_flow": "UI32",
+      "screens": [
+        "SC13",
+        "SC15",
+        "SC12"
+      ],
+      "workflows": [
+        "WF01",
+        "WF09",
+        "WF10",
+        "WF11"
+      ],
+      "memory": [
+        "M01",
+        "M02",
+        "M07",
+        "M09",
+        "M14",
+        "M15"
+      ],
+      "planned_ui_cases": [
+        "UXAC187",
+        "UXAC188",
+        "UXAC189"
+      ],
+      "prior_workflow_cases": [
+        "AC31",
+        "AC34",
+        "AC37",
+        "AC38",
+        "AC45",
+        "AC51",
+        "AC55",
+        "AC56",
+        "AC73",
+        "AC74"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    },
+    {
+      "story_id": "US064",
+      "requirement_id": "agent-dispatch:REQ-108",
+      "feature": "agent-dispatch",
+      "ui_flow": "UI32",
+      "screens": [
+        "SC13",
+        "SC15",
+        "SC12"
+      ],
+      "workflows": [
+        "WF01",
+        "WF09",
+        "WF10",
+        "WF11"
+      ],
+      "memory": [
+        "M01",
+        "M02",
+        "M07",
+        "M09",
+        "M14",
+        "M15"
+      ],
+      "planned_ui_cases": [
+        "UXAC190",
+        "UXAC191",
+        "UXAC192"
+      ],
+      "prior_workflow_cases": [
+        "AC31",
+        "AC34",
+        "AC37",
+        "AC38",
+        "AC45",
+        "AC51",
+        "AC55",
+        "AC56",
+        "AC73",
+        "AC74"
+      ],
+      "runtime_test_ids": [],
+      "verification_status": "NOT_RUN"
+    }
+  ],
+  "global_cases": "ui-global-acceptance.json",
+  "warning": "Maps plans, not semantic test adequacy, execution evidence or source-code implementation."
+}

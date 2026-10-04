@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.lecture-learning.invalid/v1/resume.schema.json",
+  "title": "Lecture Learning resume v1 (new adapter contract; not existing academic schema)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "checkpoint_id",
+    "device_id",
+    "scope",
+    "session_id",
+    "sequence",
+    "parent_checkpoint",
+    "cursor",
+    "updated_at"
+  ],
+  "properties": {
+    "contract": {
+      "const": "ll.resume/1"
+    },
+    "checkpoint_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "device_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "scope": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/scope"
+    },
+    "session_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "parent_checkpoint": {
+      "anyOf": [
+        {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/evidence_ref"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "cursor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lecture_id",
+        "source",
+        "position_ms",
+        "panel",
+        "draft"
+      ],
+      "properties": {
+        "lecture_id": {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+        },
+        "source": {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/source"
+        },
+        "position_ms": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "panel": {
+          "enum": [
+            "slide",
+            "tutor",
+            "transcript",
+            "sources"
+          ]
+        },
+        "draft": {
+          "anyOf": [
+            {
+              "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/artifact"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "updated_at": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/time"
+    }
+  }
+}

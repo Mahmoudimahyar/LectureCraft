@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.lecture-learning.invalid/v1/view.schema.json",
+  "title": "Lecture Learning view v1 (new adapter contract; not existing academic schema)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "view_id",
+    "scope",
+    "kind",
+    "inputs",
+    "outputs",
+    "generator",
+    "generation",
+    "created_at",
+    "contains_new_assessment_facts"
+  ],
+  "properties": {
+    "contract": {
+      "const": "ll.view/1"
+    },
+    "view_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "scope": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/scope"
+    },
+    "kind": {
+      "enum": [
+        "inventory",
+        "concept_tree",
+        "gaps",
+        "due",
+        "history",
+        "job_state"
+      ]
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/artifact"
+      },
+      "minItems": 1,
+      "maxItems": 10000
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/artifact"
+      },
+      "minItems": 1,
+      "maxItems": 256
+    },
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "revision",
+        "policy"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+        },
+        "revision": {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/hash"
+        },
+        "policy": {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/hash"
+        }
+      }
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "created_at": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/time"
+    },
+    "contains_new_assessment_facts": {
+      "const": false
+    }
+  }
+}

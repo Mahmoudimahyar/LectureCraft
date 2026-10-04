@@ -1,0 +1,832 @@
+{
+  "source": "docs/project/experience-spec.json",
+  "records": [
+    {
+      "story_id": "US001",
+      "requirement_id": "workspace-access:REQ-101",
+      "implementation_tasks": [
+        "LL017",
+        "LL020",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US002",
+      "requirement_id": "workspace-access:REQ-102",
+      "implementation_tasks": [
+        "LL017",
+        "LL020",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US003",
+      "requirement_id": "workspace-access:REQ-103",
+      "implementation_tasks": [
+        "LL017",
+        "LL020",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US004",
+      "requirement_id": "workspace-access:REQ-104",
+      "implementation_tasks": [
+        "LL017",
+        "LL020",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US005",
+      "requirement_id": "workspace-access:REQ-105",
+      "implementation_tasks": [
+        "LL009",
+        "LL010",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US006",
+      "requirement_id": "workspace-access:REQ-106",
+      "implementation_tasks": [
+        "LL009",
+        "LL010",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US007",
+      "requirement_id": "workspace-access:REQ-107",
+      "implementation_tasks": [
+        "LL010",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US008",
+      "requirement_id": "workspace-access:REQ-108",
+      "implementation_tasks": [
+        "LL010",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US009",
+      "requirement_id": "workspace-access:REQ-109",
+      "implementation_tasks": [
+        "LL014",
+        "LL015",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US010",
+      "requirement_id": "workspace-access:REQ-110",
+      "implementation_tasks": [
+        "LL014",
+        "LL015",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US011",
+      "requirement_id": "evidence-alignment:REQ-101",
+      "implementation_tasks": [
+        "LL011",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US012",
+      "requirement_id": "evidence-alignment:REQ-102",
+      "implementation_tasks": [
+        "LL011",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US013",
+      "requirement_id": "evidence-alignment:REQ-103",
+      "implementation_tasks": [
+        "LL012",
+        "LL015",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US014",
+      "requirement_id": "evidence-alignment:REQ-104",
+      "implementation_tasks": [
+        "LL012",
+        "LL015",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US015",
+      "requirement_id": "evidence-alignment:REQ-105",
+      "implementation_tasks": [
+        "LL012",
+        "LL015",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US016",
+      "requirement_id": "evidence-alignment:REQ-106",
+      "implementation_tasks": [
+        "LL012",
+        "LL015",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US017",
+      "requirement_id": "evidence-alignment:REQ-107",
+      "implementation_tasks": [
+        "LL011",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US018",
+      "requirement_id": "evidence-alignment:REQ-108",
+      "implementation_tasks": [
+        "LL011",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US019",
+      "requirement_id": "evidence-alignment:REQ-109",
+      "implementation_tasks": [
+        "LL013",
+        "LL015",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US020",
+      "requirement_id": "evidence-alignment:REQ-110",
+      "implementation_tasks": [
+        "LL013",
+        "LL015",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US021",
+      "requirement_id": "tutoring:REQ-101",
+      "implementation_tasks": [
+        "LL022",
+        "LL025",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US022",
+      "requirement_id": "tutoring:REQ-102",
+      "implementation_tasks": [
+        "LL022",
+        "LL025",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US023",
+      "requirement_id": "tutoring:REQ-103",
+      "implementation_tasks": [
+        "LL022",
+        "LL025",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US024",
+      "requirement_id": "tutoring:REQ-104",
+      "implementation_tasks": [
+        "LL022",
+        "LL025",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US025",
+      "requirement_id": "tutoring:REQ-105",
+      "implementation_tasks": [
+        "LL006",
+        "LL023",
+        "LL025",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US026",
+      "requirement_id": "tutoring:REQ-106",
+      "implementation_tasks": [
+        "LL006",
+        "LL023",
+        "LL025",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US027",
+      "requirement_id": "tutoring:REQ-107",
+      "implementation_tasks": [
+        "LL024",
+        "LL025",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US028",
+      "requirement_id": "tutoring:REQ-108",
+      "implementation_tasks": [
+        "LL024",
+        "LL025",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US029",
+      "requirement_id": "tutoring:REQ-109",
+      "implementation_tasks": [
+        "LL023",
+        "LL025",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US030",
+      "requirement_id": "tutoring:REQ-110",
+      "implementation_tasks": [
+        "LL023",
+        "LL025",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US031",
+      "requirement_id": "tutoring:REQ-111",
+      "implementation_tasks": [
+        "LL026",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US032",
+      "requirement_id": "tutoring:REQ-112",
+      "implementation_tasks": [
+        "LL026",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US033",
+      "requirement_id": "tutoring:REQ-113",
+      "implementation_tasks": [
+        "LL008",
+        "LL027",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US034",
+      "requirement_id": "tutoring:REQ-114",
+      "implementation_tasks": [
+        "LL008",
+        "LL027",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US035",
+      "requirement_id": "evidence-alignment:REQ-111",
+      "implementation_tasks": [
+        "LL006",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US036",
+      "requirement_id": "evidence-alignment:REQ-112",
+      "implementation_tasks": [
+        "LL006",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US037",
+      "requirement_id": "progress:REQ-101",
+      "implementation_tasks": [
+        "LL009",
+        "LL016",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US038",
+      "requirement_id": "progress:REQ-102",
+      "implementation_tasks": [
+        "LL009",
+        "LL016",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US039",
+      "requirement_id": "progress:REQ-103",
+      "implementation_tasks": [
+        "LL030",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US040",
+      "requirement_id": "progress:REQ-104",
+      "implementation_tasks": [
+        "LL030",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US041",
+      "requirement_id": "progress:REQ-105",
+      "implementation_tasks": [
+        "LL027",
+        "LL030",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US042",
+      "requirement_id": "progress:REQ-106",
+      "implementation_tasks": [
+        "LL027",
+        "LL030",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US043",
+      "requirement_id": "review:REQ-101",
+      "implementation_tasks": [
+        "LL028",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US044",
+      "requirement_id": "review:REQ-102",
+      "implementation_tasks": [
+        "LL028",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US045",
+      "requirement_id": "review:REQ-103",
+      "implementation_tasks": [
+        "LL028",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US046",
+      "requirement_id": "review:REQ-104",
+      "implementation_tasks": [
+        "LL028",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US047",
+      "requirement_id": "review:REQ-105",
+      "implementation_tasks": [
+        "LL029",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US048",
+      "requirement_id": "review:REQ-106",
+      "implementation_tasks": [
+        "LL029",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US049",
+      "requirement_id": "agent-dispatch:REQ-101",
+      "implementation_tasks": [
+        "LL007",
+        "LL018",
+        "LL019",
+        "LL021",
+        "LL033",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US050",
+      "requirement_id": "agent-dispatch:REQ-102",
+      "implementation_tasks": [
+        "LL007",
+        "LL018",
+        "LL019",
+        "LL021",
+        "LL033",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US051",
+      "requirement_id": "workspace-access:REQ-111",
+      "implementation_tasks": [
+        "LL031",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US052",
+      "requirement_id": "workspace-access:REQ-112",
+      "implementation_tasks": [
+        "LL031",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US053",
+      "requirement_id": "agent-dispatch:REQ-103",
+      "implementation_tasks": [
+        "LL020",
+        "LL021",
+        "LL033",
+        "LL034",
+        "LL035",
+        "LL036",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US054",
+      "requirement_id": "agent-dispatch:REQ-104",
+      "implementation_tasks": [
+        "LL020",
+        "LL021",
+        "LL033",
+        "LL034",
+        "LL035",
+        "LL036",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US055",
+      "requirement_id": "workspace-access:REQ-113",
+      "implementation_tasks": [
+        "LL005",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US056",
+      "requirement_id": "workspace-access:REQ-114",
+      "implementation_tasks": [
+        "LL005",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US057",
+      "requirement_id": "agent-dispatch:REQ-105",
+      "implementation_tasks": [
+        "LL018",
+        "LL019",
+        "LL033",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US058",
+      "requirement_id": "agent-dispatch:REQ-106",
+      "implementation_tasks": [
+        "LL018",
+        "LL019",
+        "LL033",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US059",
+      "requirement_id": "workspace-access:REQ-115",
+      "implementation_tasks": [
+        "LL032",
+        "LL034",
+        "LL035",
+        "LL036",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US060",
+      "requirement_id": "workspace-access:REQ-116",
+      "implementation_tasks": [
+        "LL032",
+        "LL034",
+        "LL035",
+        "LL036",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US061",
+      "requirement_id": "progress:REQ-107",
+      "implementation_tasks": [
+        "LL030",
+        "LL031",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US062",
+      "requirement_id": "progress:REQ-108",
+      "implementation_tasks": [
+        "LL030",
+        "LL031",
+        "LL034",
+        "LL035",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US063",
+      "requirement_id": "agent-dispatch:REQ-107",
+      "implementation_tasks": [
+        "LL021",
+        "LL033",
+        "LL034",
+        "LL035",
+        "LL036",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    },
+    {
+      "story_id": "US064",
+      "requirement_id": "agent-dispatch:REQ-108",
+      "implementation_tasks": [
+        "LL021",
+        "LL033",
+        "LL034",
+        "LL035",
+        "LL036",
+        "LL038"
+      ],
+      "runtime_test_ids": [],
+      "status": "PLANNED_NOT_RUN"
+    }
+  ],
+  "notice": "Empty runtime IDs are honest before application implementation. The final release requires executed case evidence, not only this mapping."
+}

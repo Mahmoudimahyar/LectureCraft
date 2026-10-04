@@ -1,0 +1,44 @@
+{
+  "contract": "ll.annotation/1",
+  "annotation_id": "link-fixture",
+  "scope": {
+    "course_id": "fixture-course",
+    "term": "fixture-term"
+  },
+  "revision": 1,
+  "supersedes": null,
+  "relation": "discussed_during",
+  "from": {
+    "source_id": "fixture-source",
+    "version_id": "fixture-v1",
+    "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "locator": {
+      "kind": "page",
+      "page": 1,
+      "printed_label": null
+    }
+  },
+  "to": {
+    "source_id": "fixture-source",
+    "version_id": "fixture-v1",
+    "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "locator": {
+      "kind": "media",
+      "start_ms": 232000,
+      "end_ms": 349000,
+      "origin": "original_source_start"
+    }
+  },
+  "review_state": "suggested",
+  "basis": "transcript_only",
+  "support": [
+    {
+      "path": "evidence/notes.json",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bytes": 12,
+      "media_type": "application/json"
+    }
+  ],
+  "reviewer_ref": null,
+  "created_at": "2026-10-03T12:00:00Z"
+}

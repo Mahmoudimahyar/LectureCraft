@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.lecture-learning.invalid/v1/context.schema.json",
+  "title": "Lecture Learning context v1 (new adapter contract; not existing academic schema)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "context_id",
+    "request_id",
+    "scope",
+    "instructions",
+    "sources",
+    "effective_attempts",
+    "known_solution_exposure",
+    "native_history_blind",
+    "created_at",
+    "policy_revision",
+    "selection_note"
+  ],
+  "properties": {
+    "contract": {
+      "const": "ll.context/1"
+    },
+    "context_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "request_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "scope": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/scope"
+    },
+    "instructions": {
+      "type": "array",
+      "items": {
+        "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/artifact"
+      },
+      "minItems": 1,
+      "maxItems": 32
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/source"
+      },
+      "minItems": 0,
+      "maxItems": 64
+    },
+    "effective_attempts": {
+      "type": "array",
+      "items": {
+        "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/evidence_ref"
+      },
+      "minItems": 0,
+      "maxItems": 32
+    },
+    "known_solution_exposure": {
+      "enum": [
+        "yes",
+        "no_known_exposure",
+        "unknown"
+      ]
+    },
+    "native_history_blind": {
+      "const": false
+    },
+    "created_at": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/time"
+    },
+    "policy_revision": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/hash"
+    },
+    "selection_note": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    }
+  }
+}

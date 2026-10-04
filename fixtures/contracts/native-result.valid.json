@@ -1,0 +1,31 @@
+{
+  "contract": "ll.native-result/1",
+  "request_id": "req-fixture",
+  "dispatch_id": "dispatch-fixture",
+  "scope": {
+    "course_id": "fixture-course",
+    "term": "fixture-term"
+  },
+  "binding_id": "fixture-binding",
+  "binding_revision": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "native_thread_id": "fixture-native-thread",
+  "native_turn_id": "fixture-native-turn",
+  "state": "completed",
+  "terminal": true,
+  "output_files": [
+    {
+      "path": "answer.json",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bytes": 12,
+      "media_type": "application/json"
+    }
+  ],
+  "context_receipt": {
+    "path": "context.json",
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "bytes": 12,
+    "media_type": "application/json"
+  },
+  "observed_at": "2026-10-03T12:00:00Z",
+  "failure_code": null
+}

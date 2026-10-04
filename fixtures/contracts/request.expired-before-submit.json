@@ -1,0 +1,24 @@
+{
+  "contract": "ll.request/1",
+  "request_id": "req-fixture",
+  "logical_input_id": "input-fixture",
+  "device_id": "device-fixture",
+  "sequence": 1,
+  "scope": {
+    "course_id": "fixture-course",
+    "term": "fixture-term"
+  },
+  "thread_key": "thread-fixture",
+  "binding_revision": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "parent_request_id": null,
+  "action": "ask",
+  "depth": "quick",
+  "submitted_at": "2026-10-03T12:00:00Z",
+  "payload": {
+    "path": "payload.json",
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "bytes": 12,
+    "media_type": "application/json"
+  },
+  "expires_at": "2026-10-02T12:00:00Z"
+}

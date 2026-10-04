@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.lecture-learning.invalid/v1/publication.schema.json",
+  "title": "Lecture Learning publication v1 (new adapter contract; not existing academic schema)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "receipt_id",
+    "request_id",
+    "scope",
+    "writer_id",
+    "kind",
+    "status",
+    "canonical_record",
+    "view_status",
+    "captured_submission",
+    "observed_at",
+    "reason"
+  ],
+  "properties": {
+    "contract": {
+      "const": "ll.publication/1"
+    },
+    "receipt_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "request_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "scope": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/scope"
+    },
+    "writer_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "kind": {
+      "enum": [
+        "attempt",
+        "assessment_revision",
+        "source_annotation",
+        "catalog",
+        "review",
+        "none"
+      ]
+    },
+    "status": {
+      "enum": [
+        "saved",
+        "already_saved",
+        "blocked",
+        "incomplete",
+        "not_requested"
+      ]
+    },
+    "canonical_record": {
+      "anyOf": [
+        {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/evidence_ref"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "view_status": {
+      "enum": [
+        "current",
+        "stale",
+        "unavailable",
+        "not_applicable"
+      ]
+    },
+    "captured_submission": {
+      "anyOf": [
+        {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/artifact"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "observed_at": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/time"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

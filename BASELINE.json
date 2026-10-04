@@ -1,0 +1,48 @@
+{
+  "baseline_version": "0.9.0",
+  "artifact_kind": "Private finalized engineering specification and offline contract-verification kit",
+  "status": "DESIGN_BASELINED_APPLICATION_NOT_IMPLEMENTED",
+  "previous_archive": {
+    "file": "lecture-learning-discovery-v0.8.0.zip",
+    "sha256": "b84013e19e6e4a2076c3ddda0e78c987a2e5b1df90c3ec9bd894c650f49be964"
+  },
+  "app_version": null,
+  "first_executable_candidate": "0.1.0-alpha.1",
+  "upstream_seed_reference": "0.5.0-rc.1; not bundled, imported or reverified in this artifact",
+  "new_adapter_schema_set": "1.0.0",
+  "canonical_existing_schema": "course-learning-v1 unchanged; actual owner source required by LL003",
+  "current_authorities": {
+    "experience": "docs/project/experience-spec.json",
+    "workflows": "docs/project/workflow-catalog.json",
+    "memory": "docs/project/memory-workflow-fit.json",
+    "build_tasks": "docs/delivery/backlog.json",
+    "contracts": "contracts/index.json",
+    "defaults": "config/defaults.json",
+    "quality": "docs/engineering/quality-targets.json",
+    "activation": "docs/delivery/activation-gates.json"
+  },
+  "counts": {
+    "ui_flows": 32,
+    "stories": 64,
+    "surfaces": 18,
+    "backend_workflows": 12,
+    "memory_responsibilities": 15,
+    "tasks": 38,
+    "milestones": 6,
+    "new_record_types": 14,
+    "json_schemas_including_shared": 15,
+    "synthetic_contract_cases": 84
+  },
+  "source_evidence_status": "User-uploaded v0.8.0 and reports inspected; no current PC/schema/Drive/native read. New selected technology choices use cited official docs, not claimed installed compatibility.",
+  "permissions": {
+    "documentation_finalization_requested": true,
+    "offline_doc_contract_checks": true,
+    "application_scope_approved": false,
+    "native_dispatch": false,
+    "live_course_writes": false,
+    "drive_oauth_or_pairing": false,
+    "public_deployment": false
+  },
+  "runtime_tests": "NOT_RUN",
+  "verification_kit": "Offline reference checks only; exact final results in companion archive verification."
+}

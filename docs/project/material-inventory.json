@@ -1,0 +1,223 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "REPORTED_CURRENT_OBSERVATION_NOT_RERUN_HERE",
+  "as_of": "2026-10-02",
+  "source": "P05",
+  "source_sha256": "dd5a649674155af213714013744ffc093419a5ba271a0a0349ea7648f9f8a557",
+  "reference": "Matrix 2; Q025-Q042; current learning and publication health",
+  "unit": "bytes and physical files, not unique intellectual works",
+  "independent_media_inspection_here": false,
+  "courses": [
+    {
+      "id": "be505",
+      "title": "BE 505",
+      "lecture_units": 7,
+      "unit_ids": [
+        "L01",
+        "L02",
+        "L03",
+        "L04",
+        "L05",
+        "L06",
+        "L07"
+      ],
+      "sessions": 7,
+      "session_dates": [
+        "2026-09-03",
+        "2026-09-08",
+        "2026-09-10",
+        "2026-09-15",
+        "2026-09-17",
+        "2026-09-22",
+        "2026-09-24"
+      ],
+      "lecture_session_files": 24,
+      "lecture_session_bytes": 263805191,
+      "materials_files": 59,
+      "materials_bytes": 571529459,
+      "recording_format": "M4A",
+      "recording_transcript_pairs": 7,
+      "transcript_format": "TXT",
+      "gaps": [
+        "Precise recording intervals unverified.",
+        "L07 has no cataloged diagnostic set.",
+        "Textbook references in examined maps are broad, not precise passages."
+      ],
+      "learning_attempts": 17,
+      "learning_view": "consistent",
+      "cataloged_skills": 385
+    },
+    {
+      "id": "be562",
+      "title": "BE 562",
+      "lecture_units": 7,
+      "unit_ids": [
+        "L01",
+        "L02",
+        "L03",
+        "L04",
+        "L05",
+        "L06",
+        "L07"
+      ],
+      "sessions": 7,
+      "session_dates": [
+        "2026-09-03",
+        "2026-09-08",
+        "2026-09-10",
+        "2026-09-15",
+        "2026-09-17",
+        "2026-09-22",
+        "2026-09-24"
+      ],
+      "lecture_session_files": 19,
+      "lecture_session_bytes": 238855879,
+      "materials_files": 63,
+      "materials_bytes": 276838285,
+      "recording_format": "M4A",
+      "recording_transcript_pairs": 6,
+      "transcript_format": "TXT",
+      "gaps": [
+        "L02 deck present but unindexed.",
+        "Sep 22 session folder empty.",
+        "Roadmap records the learner report that Lecture 6 was not recorded; not merely a transcription backlog."
+      ],
+      "learning_attempts": 21,
+      "learning_view": "consistent",
+      "cataloged_skills": 29
+    },
+    {
+      "id": "be572",
+      "title": "BE 572",
+      "lecture_units": 14,
+      "unit_ids": [
+        "L00",
+        "L01",
+        "L02",
+        "L03",
+        "L04",
+        "L05",
+        "L06",
+        "L07",
+        "L08",
+        "L09",
+        "L10",
+        "L11",
+        "L12",
+        "L13"
+      ],
+      "sessions": 7,
+      "session_dates": [
+        "2026-09-03",
+        "2026-09-08",
+        "2026-09-10",
+        "2026-09-15",
+        "2026-09-17",
+        "2026-09-22",
+        "2026-09-24"
+      ],
+      "lecture_session_files": 173,
+      "lecture_session_bytes": 451082298,
+      "materials_files": 220,
+      "materials_bytes": 539957756,
+      "recording_format": "M4A",
+      "recording_transcript_pairs": 7,
+      "transcript_format": "TXT",
+      "gaps": [
+        "L01 PDF is zero bytes.",
+        "L03-L13 packets not fully source-indexed.",
+        "L13 has information only.",
+        "HTML assets and ZIP/extracted duplicates are physical files, not independent lectures."
+      ],
+      "learning_attempts": 1,
+      "learning_view": "stale_or_modified",
+      "cataloged_skills": 7
+    },
+    {
+      "id": "cs542",
+      "title": "CS 542",
+      "lecture_units": 6,
+      "unit_ids": [
+        "L01",
+        "L02",
+        "L03",
+        "L04",
+        "L05",
+        "L06"
+      ],
+      "sessions": 6,
+      "session_dates": [
+        "2026-09-02",
+        "2026-09-09",
+        "2026-09-14",
+        "2026-09-16",
+        "2026-09-21",
+        "2026-09-23"
+      ],
+      "lecture_session_files": 17,
+      "lecture_session_bytes": 575874933,
+      "materials_files": 83,
+      "materials_bytes": 595258046,
+      "recording_format": "MP4",
+      "recording_transcript_pairs": 6,
+      "transcript_format": "TXT",
+      "gaps": [
+        "L01 folder empty.",
+        "L04-L06 PPTX present but unindexed.",
+        "Three of six transcripts present but unindexed.",
+        "Video screen/slide visibility was not verified; MP4 alone does not establish it."
+      ],
+      "learning_attempts": 0,
+      "learning_view": "stale_or_modified",
+      "cataloged_skills": 6
+    },
+    {
+      "id": "ds551",
+      "title": "DS 551",
+      "lecture_units": 3,
+      "unit_ids": [
+        "L01",
+        "L02",
+        "L03"
+      ],
+      "sessions": 4,
+      "session_dates": [
+        "2026-09-03",
+        "2026-09-10",
+        "2026-09-17",
+        "2026-09-24"
+      ],
+      "lecture_session_files": 13,
+      "lecture_session_bytes": 181743978,
+      "materials_files": 81,
+      "materials_bytes": 182283547,
+      "recording_format": "M4A",
+      "recording_transcript_pairs": 4,
+      "transcript_format": "TXT",
+      "gaps": [
+        "All three present lecture PDFs are unindexed.",
+        "No L04 deck found in inventoried lecture area; absence from scope is not proof it never existed.",
+        "No precise slide-time alignment established."
+      ],
+      "learning_attempts": 0,
+      "learning_view": "stale_or_modified",
+      "cataloged_skills": 7
+    }
+  ],
+  "totals": {
+    "lecture_units": 37,
+    "sessions": 31,
+    "lecture_session_files": 246,
+    "lecture_session_bytes": 1711362279,
+    "materials_files": 506,
+    "materials_bytes": 2165867093,
+    "recording_transcript_pairs": 30,
+    "learning_attempts": 39
+  },
+  "source_index": {
+    "records": 175,
+    "distinct_current_paths": 168,
+    "not_comparable_as_coverage_ratio_to_material_files": true
+  },
+  "coverage_policy": "All lectures in every configured course remain in release scope, including later arrivals. Exceptions stay visible; no inferred recording for unrecorded material."
+}

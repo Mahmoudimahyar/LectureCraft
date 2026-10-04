@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.lecture-learning.invalid/v1/submission.schema.json",
+  "title": "Lecture Learning submission v1 (new adapter contract; not existing academic schema)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "turn_id",
+    "logical_input_id",
+    "scope",
+    "session_id",
+    "question",
+    "response",
+    "interaction",
+    "occurred_at",
+    "time_basis",
+    "captured_at",
+    "conditions",
+    "supersedes_capture"
+  ],
+  "properties": {
+    "contract": {
+      "const": "ll.submission/1"
+    },
+    "turn_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "logical_input_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "scope": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/scope"
+    },
+    "session_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "question": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/question"
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "text",
+        "attachments",
+        "transcription_revision"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "text",
+            "voice_transcript",
+            "attachment"
+          ]
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/artifact"
+          },
+          "minItems": 0,
+          "maxItems": 16
+        },
+        "transcription_revision": {
+          "anyOf": [
+            {
+              "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "interaction": {
+      "enum": [
+        "explain_back",
+        "practice",
+        "review_answer",
+        "diagnostic_answer"
+      ]
+    },
+    "occurred_at": {
+      "anyOf": [
+        {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "time_basis": {
+      "enum": [
+        "client_reported",
+        "learner_reported",
+        "unknown"
+      ]
+    },
+    "captured_at": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/time"
+    },
+    "conditions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assistance_before_answer",
+        "reference_access",
+        "prior_exposure"
+      ],
+      "properties": {
+        "assistance_before_answer": {
+          "enum": [
+            "none_reported",
+            "hint",
+            "formula",
+            "worked_solution",
+            "unknown"
+          ]
+        },
+        "reference_access": {
+          "enum": [
+            "none_reported",
+            "notes",
+            "sources",
+            "unknown"
+          ]
+        },
+        "prior_exposure": {
+          "enum": [
+            "unseen_reported",
+            "seen_question",
+            "seen_solution",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "supersedes_capture": {
+      "anyOf": [
+        {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/evidence_ref"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

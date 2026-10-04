@@ -198,18 +198,18 @@ export const ClipPlayer = forwardRef<ClipPlayerHandle, ClipPlayerProps>(function
       <div className="flex flex-wrap items-center gap-2">
         <IconButton label="Back 10 seconds" size="sm" onClick={() => seek(positionMs - 10_000)}><RotateCcw aria-hidden className="size-4" /></IconButton>
         <IconButton label="Forward 10 seconds" size="sm" onClick={() => seek(positionMs + 10_000)}><RotateCw aria-hidden className="size-4" /></IconButton>
-        <label className="flex items-center gap-1 text-sm">
+        <label className="flex min-w-0 max-w-full items-center gap-1 text-sm">
           <span>Speed</span>
-          <select className="ll-input min-h-[36px] w-auto py-0" value={rate} onChange={(e) => setRate(Number(e.target.value))} aria-label="Playback speed">
+          <select className="ll-input min-h-[36px] w-auto min-w-0 max-w-full py-0" value={rate} onChange={(e) => setRate(Number(e.target.value))} aria-label="Playback speed">
             {RATES.map((r) => <option key={r} value={r}>{r}×</option>)}
           </select>
         </label>
         <Button size="sm" aria-pressed={repeat} onClick={() => setRepeat((r) => !r)} disabled={!clip} className={cn(repeat && "border-accent text-accent")}>
           <Repeat aria-hidden className="size-4" /> Repeat segment{repeat ? ": on" : ""}
         </Button>
-        <label className="flex items-center gap-1 text-sm">
+        <label className="flex min-w-0 max-w-full items-center gap-1 text-sm">
           <span>Play</span>
-          <select className="ll-input min-h-[36px] w-auto py-0" value={choice} aria-label="Which part of the recording to play"
+          <select className="ll-input min-h-[36px] w-auto min-w-0 max-w-full py-0" value={choice} aria-label="Which part of the recording to play"
             onChange={(e) => {
               mediaRef.current?.pause();
               setChoice(e.target.value);

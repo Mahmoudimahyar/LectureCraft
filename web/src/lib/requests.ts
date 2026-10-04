@@ -70,6 +70,7 @@ interface SubmitArgs {
   label: string;
   context: DraftContext;
   text: string;
+  answered?: LocalRequest["answered"];
 }
 
 async function deliver(bundle: BuiltBundle, record: LocalRequest): Promise<SubmitOutcome> {
@@ -116,6 +117,7 @@ export async function submit(args: SubmitArgs): Promise<SubmitOutcome> {
   const record: LocalRequest = {
     requestId: bundle.requestId, courseId: args.courseId, action: args.action, depth: args.depth, logicalInputId: bundle.logicalInputId, parentRequestId: args.parentRequestId ?? null,
     createdAt: isoNow(), label: args.label, context: args.context, text: args.text, upload: "retained_locally", sessionId: sessionId(),
+    ...(args.answered ? { answered: args.answered } : {}),
   };
   return deliver(bundle, record);
 }

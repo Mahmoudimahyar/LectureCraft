@@ -43,7 +43,7 @@ test.describe("progress, history and review", () => {
     await expect(page.getByText("What your recorded responses showed — not a score.")).toBeVisible();
     const summary = page.getByRole("list", { name: "Evidence summary" });
     await expect(summary).toContainText(/\d+ recorded attempts/);
-    await expect(summary).toContainText("1 assessment correction (not new attempts)");
+    await expect(summary).toContainText(/\d+ assessment corrections? \(not new attempts\)/); // corrections are counted apart from attempts
     await expect(page.getByText("No mastery percentage, forgetting curve or exam probability is computed.")).toBeVisible();
     await expect(page.locator("main")).not.toContainText("%"); // no percentage of any kind on this page
 
@@ -81,6 +81,8 @@ test.describe("progress, history and review", () => {
     await expect(attempts.getByText("(full capture)").first()).toBeVisible(); // responses sent from this app are kept whole
 
     await attempts.getByLabel("Only attempts with corrections").check();
+    await expect(attempts.getByRole("listitem").filter({ hasText: "the original assessment is kept" }).first()).toBeVisible();
+    await attempts.getByLabel("Filter attempts").fill("l01-q03-assisted"); // the course's own earlier regrade
     const revised = attempts.getByRole("listitem").filter({ hasText: "the original assessment is kept" });
     await expect(revised).toHaveCount(1);
     await expect(revised).toContainText("Assessment in effect (after correction)");
@@ -88,6 +90,7 @@ test.describe("progress, history and review", () => {
     await expect(revised).toContainText(/Original: .*Not shown in this response|Original: /);
     await expect(revised).toContainText("(a regrade of the same response, not a new answer)");
     await expect(revised).toContainText("time of the response not known"); // an unknown time is not invented
+    await attempts.getByLabel("Filter attempts").fill("");
     await attempts.getByLabel("Only attempts with corrections").uncheck();
 
     await page.getByRole("tab", { name: /^Conversations/ }).click();

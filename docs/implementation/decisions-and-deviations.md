@@ -1,0 +1,45 @@
+# Implementation decisions and deviations (application 0.1.0-alpha.1 on baseline 0.9.0)
+
+This records material choices made while implementing the 38 local task facets, with their rationale.
+It does not change any frozen acceptance criterion, requirement, story or gate; where the
+implementation falls short of a specified behaviour, the shortfall is listed under **Known limits**
+and stays an open item. All-lecture scope is unchanged: the coverage denominator is every lecture
+unit of all five configured courses and cannot be filtered.
+
+## Decisions
+
+| # | Decision | Rationale | Where |
+|---|---|---|---|
+| D1 | **Three profiles.** `fixture` (generated synthetic workspace, labeled test-double tutor, writes into its own synthetic roots), `local` (real roots read-only, every write staged under the local state directory), `live` (requires bound, approved writers and a verified native target). | Lets the whole product run and be tested without touching a real course, while the real-root code paths are the same readers. | `brain/src/lecture_brain/config.py` |
+| D2 | **Local transport is file-shaped.** The browser uploads the same immutable, signed bundle files to the loopback Brain that it would place in Drive; the Brain admits only complete bundles. A Drive transport (GIS token client + Drive v3) is implemented and not activated. | One protocol for both paths; no private PC port is ever exposed off loopback; Drive needs the owner's OAuth client and consent. | `web/src/lib/transport.ts`, `brain/…/transport/` |
+| D3 | **Device identity** is a non-extractable P-256 WebCrypto key; signatures are `ES256-P1363` over `LL-BUNDLE-V1\n<manifest sha256>`. Pairing is approved at the Brain PC after comparing fingerprints. | Standard primitives in both runtimes; a request can never enrol or approve its own key. | `web/src/lib/device.ts`, `brain/…/transport/signing.py` |
+| D4 | **Request identity is scoped to device and sitting.** `request_id`/`logical_input_id` = hash(device id, browser session id, action, draft key, text). | A double click or an immediate retry is one request; another device, or the same words on another day, is a new request. (Before this, two devices sending identical text collided.) | `web/src/lib/requests.ts` |
+| D5 | **Attempt id** = `<course>-ll-<sha256(logical_input_id)[:20]>`; an assessment revision id = `<course>-ll-rev-<sha256(request_id)[:20]>`. | Deterministic, so an interrupted commit resumes with the same candidate bytes and the owner's "same id, same bytes" rule gives exactly-once. | `brain/…/coordinator.py` |
+| D6 | **Mapping to the owners' vocabulary.** Interaction → `mode`: review answer → `maintain`; otherwise `assess` when no help was reported, else `learn`. Help: `none_reported→none`, `hint→hint`, `formula→formula_provided`, `worked_solution→solution_shown`, `unknown→unknown`. References: `none_reported→none`, `sources/notes→notes`, `unknown→unknown`. Prior exposure: `unseen_reported→unseen`, `seen_question/seen_solution→seen_exact`, `unknown→unknown`. Time: `recorded_now` only when the device time is within 15 minutes before the Brain records it; otherwise `occurred_at: null` with the device value kept in the capture sidecar. | Reuses the existing `course-learning-v1` fields instead of adding a parallel schema; quick/understand/explain depth stays UI metadata. All conditions are self-reported and labeled so. | `brain/…/writer/candidate.py` |
+| D7 | **`question_version` comes from the course's question index** (default 1 only when a course has no index). | The owner's save helper refuses a mismatching version. Found by running a copy of that helper on synthetic roots. | `brain/…/tutoring/context.py` |
+| D8 | **Full-turn capture** lives beside the owner's run evidence: `.agent/course-learning/runs/ll-<session>/{turns,messages,attachments,receipts,proposals,context}`; the attempt's `response_evidence.locator` points at the frozen submission with its digest. App-owned operational data lives under `.agent/learning-app/`. With writes disabled everything goes to `<state>/shadow/<course>/`. | Keeps one canonical attempt record (the owner's) and adds only referenced sidecars. | `brain/…/capture.py`, `config.py` |
+| D9 | **BE 505 save helper is wrapped, never imported**, and only for the course root it lives in (its `--root` flag does not redirect writes). An existing record is decided by bytes without starting the helper. | The helper's identical-retry path regenerates derived files and can fail after the record is safe. | `brain/…/writer/__init__.py`, `tools/isolated_writer_check.py` |
+| D10 | **Slide↔recording matcher** = TF-IDF similarity with a monotone dynamic programme over transcript lines; every output is a *suggestion* until the learner confirms it. | Deterministic, no model download, no inference cost; quality on real lectures is unmeasured and stays a live gate. | `brain/…/preparation.py` |
+| D11 | **Review scheduling** uses py-fsrs 6 (fuzz off, desired retention 0.9) replayed from immutable review events; a hinted or ungraded review is "practice only" and feeds no rating. | Maintained library; schedule is always derivable from events. | `brain/…/review.py` |
+| D12 | **Study priority** on the Progress screen is saved as the learner's note; the course's skills catalog and requirements are not edited. | The catalog is owned by the course; the app has no reviewed writer for it. | `web/src/features/progress/` |
+| D13 | **Cleanup removes only rebuildable data and queues its rebuild.** | Otherwise removed slide text silently dropped out of search (found by the browser suite). | `brain/…/runtime.py` |
+| D14 | **Browser suite retries once**; any test that needed the retry is reported as flaky, never as a plain pass. | Long runs on Windows occasionally hit loopback socket exhaustion (`net::ERR_NO_BUFFER_SPACE`). | `web/playwright.config.ts` |
+| D15 | **Storybook without addons**, built to ignored `.local/`, and every story is rendered and accessibility-checked in both themes by the browser suite. | Component states become checked behaviour instead of screenshots; no extra plugins. | `web/.storybook`, `web/e2e/stories/` |
+| D17 | **A corrected capture is linked evidence on the same attempt.** A submission carrying `supersedes_capture` is frozen as new evidence; when the original capture belongs to a saved attempt, that attempt is re-read against the corrected wording for the same skills — a changed outcome becomes one linked `assessment_revision` (reason starts "Capture correction"), an unchanged one writes nothing. The original snapshot and attempt are never edited and no second attempt is created. | A transcription mistake is neither a plain regrade nor new knowledge evidence (UXAC100, LL027). | `brain/…/coordinator.py` (`_capture_correction`), `web/src/features/tutor/RequestCard.tsx` |
+| D16 | **Candidate label.** The packaging tool labels a build `integration-blocked-candidate` while any original gate is uncleared, and at most `release-candidate-awaiting-approval`. | A local build cannot approve itself. | `tools/package_candidate.py` |
+
+## Known limits (open, not waived)
+
+- **Spoken teach-back has no automatic transcription.** Recording is local-only and the learner types or corrects the
+  transcript; no speech model is installed and no online speech service is used (`LOCAL_MODEL_INSTALL`, `MICROPHONE`
+  gates). The text path and the "microphone refused" path are implemented and tested.
+- **Assessment quality is unmeasured.** The evaluation harness runs; the bundled cases are synthetic and exercise mechanics
+  only. Real reviewed labels and an authorised model run are required (`EVALUATION_RUNS`).
+- **PPTX decks** are listed as "needs a PDF rendition"; conversion needs LibreOffice, which is not installed. Nothing is
+  regenerated in their place.
+- **Native tutor**: the app-server adapter is a candidate tested against a labeled local double of the protocol; it has
+  never contacted a real thread (`NATIVE_PROBE`).
+- **Drive, static hosting, a second physical device, live course writes, processing of the real archive**: prepared in
+  code, not performed (`DRIVE_OAUTH`, `STATIC_DEPLOYMENT`, `DEVICE_PAIRING`, `DEVICE_ACCEPTANCE`, `LIVE_WRITE`,
+  `PREPARATION_EXECUTION`).
+- **Seed foundation**: the upstream archive was not available; its tools and tests are not bundled or claimed.

@@ -467,4 +467,5 @@ export interface ResultDetail {
   review_event?: { event_id?: string; apply_schedule?: boolean; rating?: string | null; rating_basis?: string; note?: string | null; error?: string };
   target_state?: string;
   conflict_id?: string;
+  capture_correction?: { attempt_id: string };
 }

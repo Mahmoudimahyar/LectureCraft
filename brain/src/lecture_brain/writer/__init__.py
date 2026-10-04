@@ -247,10 +247,11 @@ class WriterFacade:
                    "canonical_record": record_ref, "view_status": view_status, "captured_submission": capture, "observed_at": now, "reason": reason[:2000] if reason else None}
         return c.require_valid("publication", receipt)
 
-    def none_publication(self, course_id: str, request_id: str, now: str, reason: str | None = "No assessment was requested in this exchange.") -> dict:
+    def none_publication(self, course_id: str, request_id: str, now: str, reason: str | None = "No assessment was requested in this exchange.",
+                         capture: dict | None = None) -> dict:
         """A quick answer yields kind:none / not_requested — never an invented attempt."""
         return self._receipt(course_id=course_id, request_id=request_id, writer_id="none", kind="none", status="not_requested", record_ref=None,
-                             view_status="not_applicable", capture=None, now=now, reason=reason)
+                             view_status="not_applicable", capture=capture, now=now, reason=reason)
 
     def blocked(self, course_id: str, request_id: str, kind: str, now: str, reason: str, capture: dict | None = None, status: str = "blocked") -> dict:
         return self._receipt(course_id=course_id, request_id=request_id, writer_id=self.writer_for(course_id).writer_id, kind=kind, status=status, record_ref=None,

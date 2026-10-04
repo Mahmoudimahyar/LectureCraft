@@ -22,6 +22,15 @@
 }
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+/* "wide": the multi-column layout. Used only when the viewport has room AND the learner has not
+   enlarged text; with large text every screen falls back to the single-column (phone) arrangement. */
+@custom-variant wide {
+  @media (min-width: 64rem) {
+    html:not([data-text-scale="large"]) & {
+      @slot;
+    }
+  }
+}
 
 html {
   color-scheme: light;
@@ -121,6 +130,13 @@ body {
     color: var(--ll-text);
     font-size: 0.875rem;
     line-height: 1.3;
+    /* A chip never forces its row wider than the screen: its text wraps instead. */
+    max-width: 100%;
+    min-width: 0;
+  }
+  .ll-chip > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
   .ll-label {
     font-size: 0.75rem;
@@ -204,4 +220,45 @@ body {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* Compact bottom navigation: six destinations in one row; two rows of three once text is enlarged, so
+   labels stay whole instead of being cut. Content keeps clear of the fixed bar in both cases. */
+.ll-bottom-nav {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+.ll-main {
+  padding-bottom: 5.5rem;
+}
+[data-text-scale="large"] .ll-bottom-nav {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+[data-text-scale="large"] .ll-main {
+  padding-bottom: 9.5rem;
+}
+@media (min-width: 768px) {
+  .ll-main {
+    padding-bottom: 1.5rem;
+  }
+}
+
+/* Narrow lecture workspace: four pane tabs in a row; two rows of two with enlarged text. */
+.ll-pane-tabs {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+[data-text-scale="large"] .ll-pane-tabs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Form controls never force a row wider than the screen (narrow viewports, enlarged text):
+   a long option label is clipped inside its own control instead of pushing the page sideways. */
+label {
+  max-width: 100%;
+  min-width: 0;
+}
+select.ll-input,
+input.ll-input,
+textarea.ll-input {
+  max-width: 100%;
+  min-width: 0;
 }

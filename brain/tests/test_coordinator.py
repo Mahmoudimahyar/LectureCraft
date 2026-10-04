@@ -419,3 +419,73 @@ def test_saved_attempt_carries_the_question_version_from_the_course_index(env):
     assert pub["status"] == "saved"
     record = json.loads((env.root / pub["canonical_record"]["artifact"]["path"]).read_text(encoding="utf-8"))
     assert record["question"]["question_id"] == "BE505-L01-Q01" and record["question"]["question_version"] == 3
+
+
+# ---- LL027 capture correction ---------------------------------------------------------------------
+GARBLED = "The oregano is where application starts on the plasma."
+
+
+def _correction(env, request_id, original_capture, turn="turn-req-orig", text=GOOD):
+    sub = submission(request_id, text=text, prompt="Explain what the origin of replication does.", question_id="BE505-L01-Q01", family=Q1, sources=[source_ref(env.root)],
+                     supersedes={"record_id": turn, "artifact": original_capture})
+    env.send(request_id, "explain", sub, depth="standard")
+    return sub
+
+
+def test_capture_correction_adds_linked_evidence_and_revises_the_same_attempt(env):
+    env.explain("req-orig", text=GARBLED)
+    env.coordinator.tick()
+    first = env.result("req-orig")["publication"]
+    assert first["status"] == "saved" and first["kind"] == "attempt"
+    attempt_id, original_capture = first["canonical_record"]["record_id"], first["captured_submission"]
+    attempt_path = env.root / first["canonical_record"]["artifact"]["path"]
+    attempt_bytes, before = attempt_path.read_bytes(), env.attempts()
+    assert before["effective"][attempt_id]["observations"][0]["outcome"] == "not_demonstrated"
+
+    _correction(env, "req-fix", original_capture)
+    env.coordinator.tick()
+    result = env.result("req-fix")
+    pub = result["publication"]
+    assert pub["kind"] == "assessment_revision" and pub["status"] == "saved"
+    after = env.attempts()
+    assert len(after["attempts"]) == len(before["attempts"])  # a corrected transcript is not a second attempt
+    effective = after["effective"][attempt_id]
+    assert len(effective["chain"]) == 2 and not effective["conflict"]
+    assert effective["observations"][0]["outcome"] == "demonstrated"
+    assert [o["skill_id"] for o in effective["observations"]] == [o["skill_id"] for o in before["attempts"][attempt_id]["observations"]]  # same skill set
+    revision = after["revisions"][effective["chain"][1]]
+    assert revision["reason"].startswith("Capture correction") and pub["captured_submission"]["path"] in revision["reason"]
+    # The original attempt record and the original snapshot are byte-identical; the corrected capture links back to it.
+    assert attempt_path.read_bytes() == attempt_bytes
+    assert env.coordinator.capture.verify("be505", original_capture)["response"]["text"] == GARBLED
+    corrected = env.coordinator.capture.verify("be505", pub["captured_submission"])
+    assert corrected["response"]["text"] == GOOD and corrected["supersedes_capture"]["artifact"]["sha256"] == original_capture["sha256"]
+    assert result["detail"]["previous_outcomes"] == {"be505.skill.ori.explain": "not_demonstrated"}
+    assert env.job("req-fix")["state"] == S.SUCCEEDED
+
+
+def test_capture_correction_that_does_not_change_the_outcome_writes_no_revision_but_keeps_the_link(env):
+    env.explain("req-orig", text=GOOD)
+    env.coordinator.tick()
+    first = env.result("req-orig")["publication"]
+    before = env.attempts()
+    _correction(env, "req-fix", first["captured_submission"], text=GOOD + " (typo fixed)")
+    env.coordinator.tick()
+    pub = env.result("req-fix")["publication"]
+    assert pub["kind"] == "none" and "unchanged" in pub["reason"] and pub["captured_submission"] is not None
+    after = env.attempts()
+    assert len(after["attempts"]) == len(before["attempts"]) and not after["revisions"].keys() - before["revisions"].keys()
+
+
+def test_capture_correction_of_an_unknown_capture_changes_nothing(env):
+    env.explain("req-orig", text=GARBLED)
+    env.coordinator.tick()
+    before = env.attempts()
+    bogus = {"path": ".agent/course-learning/runs/ll-session-test-1/turns/turn-nope.json", "sha256": "0" * 64, "bytes": 10, "media_type": "application/json"}
+    _correction(env, "req-fix", bogus, turn="turn-nope")
+    env.coordinator.tick()
+    job = env.job("req-fix")
+    assert job["state"] == S.FAILED_FINAL and "could not be verified" in job["waiting_reason"]
+    after = env.attempts()
+    assert len(after["attempts"]) == len(before["attempts"]) and after["revisions"].keys() == before["revisions"].keys()
+    assert env.adapter.calls == 1  # the tutor was not asked to assess against an unverifiable original

@@ -38,7 +38,7 @@ function PaneTabs({ value, onChange }: { value: Panel; onChange: (value: Panel) 
     refs.current[(index + PANES.length) % PANES.length]?.focus();
   };
   return (
-    <div role="tablist" aria-label="Workspace pane" className="flex gap-1 border-b border-line/40 lg:hidden">
+    <div role="tablist" aria-label="Workspace pane" className="ll-pane-tabs grid gap-1 border-b border-line/40 wide:hidden">
       {PANES.map((pane, index) => (
         <button key={pane.value} ref={(node) => { refs.current[index] = node; }} type="button" role="tab" aria-selected={value === pane.value} aria-controls={pane.value === "slide" ? "pane-slide" : "pane-context"}
           tabIndex={value === pane.value ? 0 : -1} onClick={() => onChange(pane.value)}
@@ -49,7 +49,7 @@ function PaneTabs({ value, onChange }: { value: Panel; onChange: (value: Panel) 
             event.preventDefault();
             event.stopPropagation();
           }}
-          className={cn("min-h-[44px] flex-1 border-b-2 border-transparent px-2 font-medium text-muted", value === pane.value && "border-accent text-accent")}>
+          className={cn("min-h-[44px] min-w-0 border-b-2 border-transparent px-2 font-medium text-muted", value === pane.value && "border-accent text-accent")}>
           {pane.label}
         </button>
       ))}
@@ -198,7 +198,7 @@ export function LectureWorkspace() {
 
   const contextPanel = (
     <Tabs value={panel === "slide" ? "tutor" : panel} onValueChange={(value) => update({ panel: value }, true)} className="flex h-full min-h-0 flex-col">
-      <TabList label="Context panel" className="max-lg:hidden">
+      <TabList label="Context panel" className="hidden wide:flex">
         <Tab value="tutor">Tutor</Tab>
         <Tab value="transcript">Transcript</Tab>
         <Tab value="sources">Sources</Tab>
@@ -249,9 +249,9 @@ export function LectureWorkspace() {
       {/* Narrow screens: explicit single-pane navigation with the same actions. */}
       <PaneTabs value={panel} onChange={(value) => update({ panel: value }, true)} />
 
-      <div className={cn("grid gap-4", focus ? "grid-cols-1" : "lg:grid-cols-[auto_minmax(0,1fr)_minmax(22rem,30rem)]")}>
+      <div className={cn("grid gap-4", focus ? "grid-cols-1" : "wide:grid-cols-[auto_minmax(0,1fr)_minmax(22rem,30rem)]")}>
         {!focus && (
-          <aside className={cn("hidden lg:block", navOpen ? "w-[13rem]" : "w-[3rem]")} aria-label="Slide navigator">
+          <aside className={cn("hidden wide:block", navOpen ? "w-[13rem]" : "w-[3rem]")} aria-label="Slide navigator">
             <div className="sticky top-[76px] flex max-h-[calc(100dvh-96px)] flex-col gap-2">
               <IconButton size="sm" variant="quiet" label={navOpen ? "Collapse slide navigator" : "Open slide navigator"} onClick={() => setNavOpen((o) => !o)}>
                 {navOpen ? <PanelLeftClose aria-hidden className="size-4" /> : <PanelLeftOpen aria-hidden className="size-4" />}
@@ -268,7 +268,7 @@ export function LectureWorkspace() {
           </aside>
         )}
 
-        <section id="pane-slide" className={cn("min-w-0 flex-col gap-3", panel === "slide" || focus ? "flex" : "hidden lg:flex")} aria-label="Slide and recording">
+        <section id="pane-slide" className={cn("min-w-0 flex-col gap-3", panel === "slide" || focus ? "flex" : "hidden wide:flex")} aria-label="Slide and recording">
           <div className="flex flex-wrap items-end justify-between gap-2">
             <div className="min-w-0">
               <h1 className="text-xl font-bold">{slide?.title ?? lecture.title}</h1>
@@ -327,7 +327,7 @@ export function LectureWorkspace() {
             </div>
           ) : null}
 
-          <div className="flex items-center justify-between gap-2 border-t border-line/40 pt-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line/40 pt-3">
             <Button onClick={() => goTo(page - 1)} disabled={page <= 1}><ChevronLeft aria-hidden className="size-4" /> Previous slide</Button>
             <span className="text-sm text-muted max-sm:hidden">Continue at your own pace</span>
             <Button variant="primary" onClick={() => goTo(page + 1)} disabled={!total || page >= total}>Next slide <ChevronRight aria-hidden className="size-4" /></Button>
@@ -335,7 +335,7 @@ export function LectureWorkspace() {
         </section>
 
         {!focus && (
-          <aside id="pane-context" className={cn("min-h-[32rem] min-w-0 lg:sticky lg:top-[76px] lg:h-[calc(100dvh-96px)]", panel === "slide" ? "hidden lg:block" : "block")} aria-label="Context panel">
+          <aside id="pane-context" className={cn("min-h-[32rem] min-w-0 wide:sticky wide:top-[76px] wide:h-[calc(100dvh-96px)]", panel === "slide" ? "hidden wide:block" : "block")} aria-label="Context panel">
             <div className="ll-card h-full p-3">{contextPanel}</div>
           </aside>
         )}

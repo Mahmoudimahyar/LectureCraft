@@ -14,6 +14,9 @@
     var motion = window.localStorage.getItem("ll.motion");
     if (motion === "reduced") root.dataset.motion = "reduced";
     var scale = window.localStorage.getItem("ll.textScale");
-    if (scale) root.style.fontSize = scale + "%";
+    if (scale) {
+      root.style.fontSize = scale + "%";
+      if (Number(scale) >= 150) root.dataset.textScale = "large";
+    }
   } catch (e) {}
 })();

@@ -80,6 +80,8 @@ export function getTextScale(): number {
 export function applyTextScale(percent: number): { persisted: boolean } {
   const value = (SCALES as readonly number[]).includes(percent) ? percent : 100;
   document.documentElement.style.fontSize = value === 100 ? "" : `${value}%`;
+  if (value >= 150) document.documentElement.dataset.textScale = "large";
+  else delete document.documentElement.dataset.textScale;
   return { persisted: write(SCALE_KEY, String(value)) };
 }
 

@@ -8,7 +8,8 @@ import { Button, Callout, Dialog, Field, formatWhen, Markdown, OUTCOME_LABEL, St
 import type { LocalRequest } from "@/lib/db";
 import { ASSISTANCE_LABEL, JOB_STATE, REFERENCE_LABEL } from "@/lib/labels";
 import { useRequestStatus } from "@/lib/queries";
-import type { ResultDetail } from "@/lib/types";
+import type { Conditions } from "@/lib/requests";
+import type { QuestionRecord, ResultDetail } from "@/lib/types";
 import { useSubmitActions } from "./actions";
 
 const ACTION_LABEL: Record<string, string> = {
@@ -61,6 +62,7 @@ export function RequestCard({ request, onFollowUp, showContext = true }: { reque
   const [disputeOpen, setDisputeOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [kind, setKind] = useState<"assessment" | "input" | "rubric" | "new_answer">("assessment");
+  const [corrected, setCorrected] = useState(request.text);
 
   const job = status.data?.envelope.job ?? null;
   const verified = status.data?.verified ?? null;
@@ -70,6 +72,8 @@ export function RequestCard({ request, onFollowUp, showContext = true }: { reque
   const isAsk = request.action === "ask";
   const isAnswer = ["explain", "practice", "review_answer"].includes(request.action);
   const running = !!job && ["READY", "CLAIMED", "RUNNING", "STAGED", "COMMIT_PENDING", "WAITING_SYNC"].includes(job.state);
+
+  const canCorrect = kind === "input" && isAnswer && !!publication?.captured_submission && !!request.answered;
 
   const act = async (name: string, fn: () => Promise<unknown>, done?: string) => {
     setBusy(name);
@@ -132,6 +136,12 @@ export function RequestCard({ request, onFollowUp, showContext = true }: { reque
 
       {verified && isAnswer && (
         <section aria-label="Feedback and save status" className="flex flex-col gap-2" data-testid="feedback">
+          {detail?.capture_correction && (
+            <Callout tone="neutral" role="note" title="Correction of an earlier capture">
+              This is the same response with corrected wording. The original capture is kept unchanged and no new attempt was created
+              {detail.previous_outcomes ? ` (before: ${Object.values(detail.previous_outcomes).map((o) => OUTCOME_LABEL[o]?.label ?? o).join(", ")})` : ""}.
+            </Callout>
+          )}
           {detail?.observations && detail.observations.length > 0 ? (
             <ul className="flex flex-col gap-1.5">
               {detail.observations.map((o) => {
@@ -155,8 +165,10 @@ export function RequestCard({ request, onFollowUp, showContext = true }: { reque
             <li><StatusChip tone={publication?.captured_submission ? "success" : "caution"}>Full response {publication?.captured_submission ? "retained" : "retention not confirmed"}</StatusChip></li>
             <li><StatusChip tone={verified.message?.assessment_disposition === "canonical_saved" ? "success" : "caution"}>
               Assessment: {verified.message?.assessment_disposition === "canonical_saved" ? "recorded" : verified.message?.assessment_disposition === "provisional" ? "provisional" : "pending"}</StatusChip></li>
-            <li><StatusChip tone={publication && ["saved", "already_saved"].includes(publication.status) ? "success" : "caution"}>
-              {publication && ["saved", "already_saved"].includes(publication.status) ? "Saved to course" : publication?.status === "incomplete" ? "Course save uncertain — being reconciled" : "Awaiting course save"}</StatusChip></li>
+            <li><StatusChip tone={(publication && ["saved", "already_saved"].includes(publication.status)) || (detail?.capture_correction && publication?.kind === "none") ? "success" : "caution"}>
+              {publication && ["saved", "already_saved"].includes(publication.status) ? (publication.kind === "assessment_revision" ? "Correction saved to course (revision of the same attempt)" : "Saved to course")
+                : detail?.capture_correction && publication?.kind === "none" ? "Assessment unchanged — nothing rewritten"
+                : publication?.status === "incomplete" ? "Course save uncertain — being reconciled" : "Awaiting course save"}</StatusChip></li>
             {publication && ["saved", "already_saved"].includes(publication.status) && (
               <li><StatusChip tone={publication.view_status === "current" ? "success" : "unassessed"}>Course summary view: {publication.view_status === "current" ? "current" : "stale (your attempt is saved; only the summary lags)"}</StatusChip></li>
             )}
@@ -202,7 +214,7 @@ export function RequestCard({ request, onFollowUp, showContext = true }: { reque
       <Dialog open={disputeOpen} onOpenChange={setDisputeOpen} title="Report an issue with this feedback" description="Choose what is wrong. The original response and its time are always kept."
         footer={<>
           <Button onClick={() => setDisputeOpen(false)}>Close</Button>
-          <Button variant="primary" busy={busy === "dispute"} disabled={kind !== "new_answer" && reason.trim().length < 5}
+          <Button variant="primary" busy={busy === "dispute"} disabled={canCorrect ? corrected.trim().length === 0 || corrected.trim() === request.text.trim() : kind !== "new_answer" && reason.trim().length < 5}
             onClick={() => {
               if (kind === "new_answer") {
                 setDisputeOpen(false);
@@ -210,6 +222,16 @@ export function RequestCard({ request, onFollowUp, showContext = true }: { reque
                 return;
               }
               const attempt = publication?.canonical_record;
+              const original = publication?.captured_submission;
+              if (kind === "input" && original && request.answered && isAnswer) {
+                void act("dispute", async () => {
+                  await actions.answer({ courseId: request.courseId, text: corrected.trim(), action: request.action as "explain" | "practice" | "review_answer",
+                    question: request.answered!.question as unknown as QuestionRecord, conditions: request.answered!.conditions as unknown as Conditions, context: request.context,
+                    parentRequestId: request.requestId, draftKey: `correction:${request.requestId}`, supersedes: { record_id: `turn-${request.requestId}`, artifact: original } });
+                  setDisputeOpen(false);
+                }, "Correction sent. The original capture is kept; the same attempt is re-read against your corrected wording — it is not a new attempt.");
+                return;
+              }
               void act("dispute", async () => {
                 if (kind === "assessment" && attempt) await actions.dispute(request.courseId, attempt, reason.trim());
                 else await actions.control(request.courseId, "save_note", { text: `[${kind === "input" ? "Captured input issue" : kind === "rubric" ? "Source or rubric issue" : "Assessment issue (not yet saved to course)"}] ${reason.trim()} — about request ${request.requestId}`,
@@ -218,7 +240,7 @@ export function RequestCard({ request, onFollowUp, showContext = true }: { reque
                 setReason("");
               }, kind === "assessment" && attempt ? "Sent for review. Nothing changes until the regrade is verified; clicking disagree does not change your record by itself." : "Recorded for review with the original evidence untouched.");
             }}>
-            {kind === "new_answer" ? "Write a new answer" : "Submit for review"}
+            {kind === "new_answer" ? "Write a new answer" : canCorrect ? "Send corrected wording" : "Submit for review"}
           </Button>
         </>}>
         <div className="flex flex-col gap-3">
@@ -234,7 +256,12 @@ export function RequestCard({ request, onFollowUp, showContext = true }: { reque
               </label>
             ))}
           </fieldset>
-          {kind !== "new_answer" && (
+          {canCorrect && (
+            <Field label="What you actually said or wrote" htmlFor={`corrected-${request.requestId}`} hint="Fix only what was captured wrongly. This is recorded as a correction of the same response; to answer differently, choose “I understand it better now”.">
+              <textarea id={`corrected-${request.requestId}`} className="ll-input min-h-[7rem]" value={corrected} onChange={(e) => setCorrected(e.target.value)} />
+            </Field>
+          )}
+          {kind !== "new_answer" && !canCorrect && (
             <Field label="What should be reconsidered?" htmlFor={`reason-${request.requestId}`} hint={kind === "assessment" && !publication?.canonical_record ? "This assessment is not saved to the course yet, so your report is kept as a note for review." : undefined}>
               <textarea id={`reason-${request.requestId}`} className="ll-input min-h-[6rem]" value={reason} onChange={(e) => setReason(e.target.value)} />
             </Field>

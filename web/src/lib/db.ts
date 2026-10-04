@@ -57,6 +57,8 @@ export interface LocalRequest {
   text: string;
   upload: "retained_locally" | "uploaded" | "upload_failed";
   sessionId: string;
+  /** For a submitted response: the exact question it answered and the conditions reported with it. */
+  answered?: { question: Record<string, unknown>; conditions: Record<string, string> };
 }
 
 export type Durability = "saved_on_device" | "memory_only";

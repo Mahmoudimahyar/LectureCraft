@@ -32,6 +32,8 @@ export interface AnswerInput {
   parentRequestId?: string | null;
   draftKey: string;
   transcriptionRevision?: string | null;
+  /** Set when this text corrects how an earlier response was captured: the original capture is linked, never replaced. */
+  supersedes?: { record_id: string; artifact: Artifact } | null;
 }
 
 const INTERACTION = { explain: "explain_back", practice: "practice", review_answer: "review_answer", diagnose: "diagnostic_answer" } as const;
@@ -58,9 +60,10 @@ export function useSubmitActions() {
   const answer = useCallback(async (input: AnswerInput) => {
     const ids = await stableIds(input.action, input.draftKey, input.text);
     const payload = submissionPayload({ courseId: input.courseId, requestId: ids.requestId, logicalInputId: ids.logicalInputId, question: input.question, text: input.text,
-      interaction: INTERACTION[input.action], conditions: input.conditions, transcriptionRevision: input.transcriptionRevision });
+      interaction: INTERACTION[input.action], conditions: input.conditions, transcriptionRevision: input.transcriptionRevision, supersedes: input.supersedes ?? null });
     const outcome = await submit({ courseId: input.courseId, bindingRevision, action: input.action, depth: "standard", requestId: ids.requestId, logicalInputId: ids.logicalInputId, payload,
-      parentRequestId: input.parentRequestId, label: input.context.label, context: input.context, text: input.text });
+      parentRequestId: input.parentRequestId, label: input.context.label, context: input.context, text: input.text,
+      answered: { question: input.question as unknown as Record<string, unknown>, conditions: input.conditions as unknown as Record<string, string> } });
     return after(input.courseId, outcome);
   }, [bindingRevision, after]);
 

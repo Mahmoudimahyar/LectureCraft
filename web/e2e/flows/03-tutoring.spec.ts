@@ -332,4 +332,49 @@ test.describe("tutoring", () => {
     expect(final.attempts.length).toBe(before.attempts.length + 1);
     expect((final.attempts as typeof before.attempts).find((a: { attempt_id: string }) => a.attempt_id === original.attempt_id)!.response.full_text).toBe(first);
   });
+
+  test("UI17 correcting a mis-captured response links new evidence and revises the same attempt — never a second attempt", async ({ page, request, unique }) => {
+    await pair(page);
+    await page.goto(`/courses/${COURSE}/questions/BE505-L01-Q01`);
+    const garbled = unique("The oregano is where application starts on the plasma.");
+    await page.locator("#practice-answer").fill(garbled);
+    await page.getByTestId("submit-answer").click();
+    const work = page.getByRole("region", { name: "Your work on this question" });
+    const card = work.getByTestId("request-card").filter({ hasText: garbled });
+    await expect(card.getByTestId("feedback")).toContainText("Not shown in this response", { timeout: 20_000 });
+    await expect(card.getByTestId("feedback").getByRole("list", { name: "Save status" })).toContainText("Saved to course");
+    await settle(request);
+    type Attempt = { attempt_id: string; response: { full_text: string | null }; revisions: Array<{ reason: string }>; effective: { observations: Array<{ outcome: string }> } };
+    const before = (await (await request.get(`/api/courses/${COURSE}/history`)).json()).attempts as Attempt[];
+    const original = before.find((a) => a.response.full_text === garbled)!;
+
+    await card.getByRole("button", { name: "Report an issue" }).click();
+    const dialog = page.getByRole("dialog", { name: "Report an issue with this feedback" });
+    await dialog.getByRole("radio", { name: /My response was captured wrongly/ }).click();
+    const field = dialog.getByLabel("What you actually said or wrote");
+    await expect(field).toHaveValue(garbled); // starts from exactly what was captured
+    await expect(dialog.getByRole("button", { name: "Send corrected wording" })).toBeDisabled(); // nothing to correct yet
+    const corrected = unique("Plasmid replication starts at the origin, and it does not control expression of the gene.");
+    await field.fill(corrected);
+    await dialog.getByRole("button", { name: "Send corrected wording" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(card.getByRole("status")).toContainText("it is not a new attempt");
+
+    const fixed = work.getByTestId("request-card").filter({ hasText: corrected });
+    const feedback = fixed.getByTestId("feedback");
+    await expect(feedback.getByRole("note")).toContainText("Correction of an earlier capture", { timeout: 20_000 });
+    await expect(feedback.getByRole("note")).toContainText("before: Not shown in this response");
+    await expect(feedback).toContainText("Demonstrated");
+    await expect(feedback.getByRole("list", { name: "Save status" })).toContainText("Correction saved to course (revision of the same attempt)");
+
+    await settle(request);
+    const after = (await (await request.get(`/api/courses/${COURSE}/history`)).json()).attempts as Attempt[];
+    expect(after.length, "a corrected transcript is not a second attempt").toBe(before.length);
+    const revised = after.find((a) => a.attempt_id === original.attempt_id)!;
+    expect(revised.response.full_text, "the original snapshot is untouched").toBe(garbled);
+    expect(revised.revisions).toHaveLength(1);
+    expect(revised.revisions[0]!.reason).toMatch(/^Capture correction/);
+    expect(revised.effective.observations[0]!.outcome).toBe("demonstrated");
+    expect(after.some((a) => a.response.full_text === corrected), "the corrected wording did not become its own attempt").toBe(false);
+  });
 });

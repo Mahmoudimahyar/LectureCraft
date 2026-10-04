@@ -61,8 +61,19 @@ export async function settle(request: APIRequestContext, timeoutMs = 30_000): Pr
 
 /** No element may be wider than the viewport: no sideways scrolling at any required size. */
 export async function expectNoHorizontalOverflow(page: Page): Promise<void> {
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  expect(overflow, "horizontal overflow in px").toBeLessThanOrEqual(1);
+  const report = await page.evaluate(() => {
+    const overflow = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+    if (overflow <= 1) return { overflow, offenders: [] as string[] };
+    const limit = document.documentElement.clientWidth;
+    const offenders = Array.from(document.querySelectorAll<HTMLElement>("body *"))
+      .map((el) => ({ el, right: el.getBoundingClientRect().right }))
+      .filter((x) => x.right > limit + 1)
+      .sort((a, b) => b.right - a.right)
+      .slice(0, 6)
+      .map((x) => `${x.el.tagName.toLowerCase()}.${String(x.el.className).split(" ").slice(0, 4).join(".")} → ${Math.round(x.right)}px`);
+    return { overflow, offenders };
+  });
+  expect(report.overflow, `horizontal overflow in px; widest elements: ${report.offenders.join(" | ")}`).toBeLessThanOrEqual(1);
 }
 
 /** Automated accessibility scan (WCAG 2.2 A/AA rules). Original course content is excluded: it is not ours to restyle. */

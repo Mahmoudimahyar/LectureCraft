@@ -21,7 +21,7 @@ const OPEN_STATES = new Set(["READY", "CLAIMED", "RUNNING", "STAGED", "COMMIT_PE
 
 function NavItem({ to, label, icon: Icon, badge, compact }: { to: string; label: string; icon: typeof BookOpen; badge?: number; compact?: boolean }) {
   return (
-    <NavLink to={to} className={({ isActive }) => cn("relative flex min-h-[56px] flex-col items-center justify-center gap-0.5 rounded-[var(--ll-radius)] text-xs font-medium text-muted", compact ? "min-w-0 flex-1 px-0.5" : "min-w-[64px] px-2",
+    <NavLink to={to} className={({ isActive }) => cn("relative flex min-h-[56px] flex-col items-center justify-center gap-0.5 rounded-[var(--ll-radius)] text-xs font-medium text-muted", compact ? "min-w-0 px-0.5" : "min-w-[64px] px-2",
       isActive && "bg-raised font-semibold text-accent")}>
       <Icon aria-hidden className="size-6" />
       <span className="max-w-full truncate">{label}</span>
@@ -61,14 +61,14 @@ export function Shell() {
     <div className="flex min-h-dvh flex-col bg-bg text-ink">
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-surface focus:p-2">Skip to content</a>
       {!focusMode && (
-        <header className="sticky top-0 z-30 flex flex-wrap items-center gap-3 border-b border-line/40 bg-surface px-4 py-2">
+        <header className="top-0 z-30 flex flex-wrap items-center gap-3 border-b border-line/40 bg-surface px-4 py-2 md:sticky">
           <Link to="/study" className="flex items-center gap-2 text-lg font-bold">
             <GraduationCap aria-hidden className="size-7 text-accent" />
             <span>Lecture Learning</span>
           </Link>
-          <label className="ml-2 flex items-center gap-2 text-sm">
+          <label className="flex min-w-0 max-w-full items-center gap-2 text-sm md:ml-2">
             <span className="sr-only">Active course</span>
-            <select className="ll-input min-h-[40px] w-auto max-w-[16rem] py-1" value={app.courseId ?? ""} onChange={(e) => app.setCourseId(e.target.value)} aria-label="Active course">
+            <select className="ll-input min-h-[40px] w-auto max-w-[min(16rem,100%)] py-1" value={app.courseId ?? ""} onChange={(e) => app.setCourseId(e.target.value)} aria-label="Active course">
               {(app.workspace?.courses ?? []).map((course) => (
                 <option key={course.course_id} value={course.course_id} disabled={course.binding !== "bound"}>
                   {course.display_name}{course.binding !== "bound" ? " (binding problem)" : ""}
@@ -76,9 +76,9 @@ export function Shell() {
               ))}
             </select>
           </label>
-          <button type="button" onClick={() => app.setSearchOpen(true)} className="ll-btn ll-btn-sm ml-auto gap-2 text-muted" aria-keyshortcuts="Control+K /">
-            <Search aria-hidden className="size-4" />
-            <span>Search {courseName(app.workspace, app.courseId)}</span>
+          <button type="button" onClick={() => app.setSearchOpen(true)} className="ll-btn ll-btn-sm ml-auto min-w-0 max-w-full gap-2 text-muted" aria-keyshortcuts="Control+K /">
+            <Search aria-hidden className="size-4 shrink-0" />
+            <span className="truncate">Search {courseName(app.workspace, app.courseId)}</span>
             <kbd className="hidden rounded border border-line/50 px-1 text-xs sm:inline">Ctrl K</kbd>
           </button>
           <Segmented label="Appearance" value={app.theme} onChange={(value) => app.setTheme(value)} options={themeOptions} className="max-md:hidden" />
@@ -108,12 +108,12 @@ export function Shell() {
             </div>
           </nav>
         )}
-        <main id="main" tabIndex={-1} className={cn("min-w-0 flex-1 outline-none", focusMode ? "p-2" : "p-4 pb-24 md:pb-6")}>
+        <main id="main" tabIndex={-1} className={cn("ll-main min-w-0 flex-1 outline-none", focusMode ? "p-2" : "p-4 md:pb-6")}>
           <Outlet />
         </main>
       </div>
       {!focusMode && (
-        <nav aria-label="Main (compact)" className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line/40 bg-surface px-1 py-1 md:hidden">
+        <nav aria-label="Main (compact)" className="ll-bottom-nav fixed inset-x-0 bottom-0 z-30 grid border-t border-line/40 bg-surface px-1 py-1 md:hidden">
           {DESTINATIONS.map((item) => <NavItem key={item.to} {...item} compact />)}
           <NavItem to="/activity" label="Activity" icon={Activity} badge={open} compact />
           <NavItem to="/settings" label="Settings" icon={Settings} compact />

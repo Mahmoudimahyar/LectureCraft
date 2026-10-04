@@ -25,7 +25,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 # Never packaged, whatever the caller lists: machine-local state, bindings to real folders, secrets, caches.
-PRIVATE_PREFIXES = (".local/", ".seed-local/", ".venv/", ".git/", "config/local-bindings/", "web/node_modules/", "web/dist/", "web/.vite/")
+PRIVATE_PREFIXES = (".local/", ".seed-local/", ".venv/", ".git/", ".claude/", "config/local-bindings/", "web/node_modules/", "web/dist/", "web/.vite/")
 PRIVATE_NAMES = (".env",)
 PRIVATE_SUFFIXES = (".sqlite", ".db", ".log", ".pyc")
 LOCKS = ("brain/requirements.lock", "web/package-lock.json")

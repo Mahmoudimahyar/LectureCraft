@@ -1,5 +1,5 @@
 // Global UI cases that cut across screens (UXG02, UXG05, UXG09, UXG11, UXG14, UXG15, UXG20).
-import { COURSE, isNarrow, pair, settle } from "../helpers";
+import { COURSE, expectNoHorizontalOverflow, isNarrow, pair, settle } from "../helpers";
 import { expect, test } from "../fixtures";
 
 const L2 = `/courses/${COURSE}/lectures/lecture-02`;
@@ -121,5 +121,33 @@ test.describe("global behaviour", () => {
     await card.getByRole("link", { name: "Details" }).click();
     expect(page.url()).toMatch(/\/activity\/req-[a-f0-9]{24}$/);
     expect(decodeURIComponent(page.url())).not.toContain("ignore previous instructions");
+  });
+
+  test("UXG06 text enlarged to 200% reflows the app while the slide keeps its own contained zoom", async ({ page }) => {
+    await pair(page);
+    await page.goto("/settings/appearance");
+    const base = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize));
+    await page.getByLabel("Text size").selectOption("200");
+    await expect.poll(() => page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize))).toBeCloseTo(base * 2, 0);
+    await expectNoHorizontalOverflow(page);
+
+    await page.goto(`${L2}?page=2`); // the enlargement is applied before paint on the next page as well
+    expect(await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize))).toBeCloseTo(base * 2, 0);
+    await expect(page.getByTestId("slide-canvas")).toHaveAttribute("data-rendered", "2");
+    await expectNoHorizontalOverflow(page);
+    // The slide is not shrunk to make room for bigger text: it still fills its frame and can be zoomed further.
+    const canvas = await page.getByTestId("slide-canvas").boundingBox();
+    expect(canvas!.width).toBeGreaterThan(200);
+    await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Next slide" })).toBeVisible();
+    // With enlarged text even a wide screen uses the one-pane-at-a-time arrangement, so nothing is squeezed.
+    await expect(page.getByRole("tablist", { name: "Workspace pane" })).toBeVisible();
+    await page.getByRole("tab", { name: "Tutor", exact: true }).click();
+    await expect(page.locator("#tutor-composer")).toBeVisible();
+    await expect(page.getByTestId("send")).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await page.goto("/progress");
+    await expect(page.getByRole("heading", { name: "Progress", level: 1 })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
   });
 });

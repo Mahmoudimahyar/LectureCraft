@@ -315,6 +315,10 @@ class Coordinator:
         except CaptureError as exc:
             raise _Pause(S.FAILED_FINAL, f"The submitted response could not be captured ({exc.code}); nothing was assessed.") from exc
         self.journal.add_receipt(kind="capture", job_id=job["job_id"], generation=job["generation"], ref=capture["path"], sha256=capture["sha256"], payload={"turn_id": submission["turn_id"]})
+        if submission.get("supersedes_capture") is not None:
+            corrected = self._capture_correction(job, lease, request, submission, capture, prior)
+            if corrected is not None:
+                return (*corrected, capture)
         stored = self._stored_candidate(job)
         if stored is None and self._existing_attempt_for(course_id, submission["logical_input_id"]):
             publication = self.writer.blocked(course_id, request["request_id"], "attempt", self.now(), capture=capture,
@@ -358,6 +362,76 @@ class Coordinator:
         if publication["status"] == "incomplete":
             return records, S.UNCERTAIN_COMPLETION, publication["reason"], extra, capture
         return records, S.WAITING_REVIEW, f"Awaiting course save: {publication['reason']}", extra, capture
+
+    def _capture_correction(self, job, lease, request, submission, capture, prior):
+        """The learner corrected how a response was captured (for example a transcription mistake).
+
+        The corrected wording is new evidence linked to the original capture, which is never edited. When
+        that original capture belongs to a saved attempt, the same attempt is re-read against the corrected
+        wording for the same skills: a changed outcome becomes one linked assessment revision, an unchanged
+        one writes nothing. It is not a new attempt. Returns None when no attempt references the original
+        capture, so the corrected response is assessed as the (first) attempt for that response.
+        """
+        course_id = job["course_id"]
+        supersedes = submission["supersedes_capture"]
+        try:
+            self.capture.verify(course_id, supersedes["artifact"], expect_turn_id=supersedes["record_id"])
+        except CaptureError as exc:
+            raise _Pause(S.FAILED_FINAL, f"The capture being corrected could not be verified ({exc.code}); nothing was changed. Your corrected text is retained.") from exc
+        records = read_attempt_records(self.settings.course(course_id).root, course_id)
+        target = None
+        for attempt_id, attempt in records["attempts"].items():
+            match = _LOCATOR.match(attempt["response_evidence"]["locator"])
+            if match and match["path"] == supersedes["artifact"]["path"] and match["sha"] == supersedes["artifact"]["sha256"]:
+                target = attempt_id
+                break
+        if target is None:
+            return None
+        attempt, effective = records["attempts"][target], records["effective"][target]
+        if effective["conflict"]:
+            raise _Pause(S.WAITING_REVIEW, "This attempt's correction chain is already branched; reconcile it before another revision. Your corrected text is retained.")
+        family = family_for(self.settings, course_id, attempt["question"]["family_id"], attempt["question"]["family_revision"])
+        if family is None:
+            raise _Pause(S.WAITING_REVIEW, "The attempt's question family revision is no longer in the catalog, so the corrected wording was not assessed. It is retained and linked.")
+        skill_ids = [o["skill_id"] for o in attempt["observations"]]
+        context, material = select_context(self.settings, request=request, sources=submission["question"]["sources"], skill_ids=skill_ids, question_id=submission["question"]["question_id"],
+                                           for_assessment=True, prior_exposure=submission["conditions"]["prior_exposure"], now=self.now())
+        current = [{k: o[k] for k in ("skill_id", "outcome", "analysis")} for o in effective["observations"]]
+        note = "The learner corrected how this same response was captured (for example a transcription mistake). Assess the corrected wording for the same skills."
+        prompt, _ = build_prompt(action="correct_assessment", depth=request["depth"], material=material, submission=submission, family=family, policy=self.settings.policy,
+                                 correction={"reason": note, "current_observations": current})
+        text, native_result, _ = self._native(job, lease, request, prompt=prompt, context=context, session_id=submission["session_id"], prior=prior)
+        out = parse_tutor_output(text, expect_assessment=True, intended_skill_ids=skill_ids, max_sources=len(material["spans"]))
+        if out.observations is None:
+            raise _Pause(S.WAITING_REVIEW, "The corrected wording could not be assessed for the same skills; the earlier assessment stands and your corrected text is retained and linked.")
+        before = {o["skill_id"]: o["outcome"] for o in effective["observations"]}
+        after = {o["skill_id"]: o["outcome"] for o in out.observations}
+        extra = {"observations": out.observations, "previous_outcomes": before, "problems": out.problems, "conditions": submission["conditions"], "capture_correction": {"attempt_id": target}}
+        if before == after:
+            message, _ = self._tutor_message(request, out, material, reply_to_turn=submission["turn_id"], disposition="canonical_saved", session_id=submission["session_id"])
+            publication = self.writer.none_publication(course_id, request["request_id"], self.now(), capture=capture,
+                                                       reason="Corrected wording recorded and linked to the original capture. The assessment is unchanged: no revision was written and no new attempt exists.")
+            return {"publication": publication, "message": message, "native-result": native_result, "context": context}, S.SUCCEEDED, None, extra
+        self._settle(job, lease, S.STAGED)
+        by_skill = {o["skill_id"]: o for o in effective["observations"]}
+        stored = self._stored_candidate(job)
+        revision = stored if stored is not None else {
+            "contract_version": "course-learning-v1", "course_id": course_id, "term": request["scope"]["term"], "record_kind": "assessment_revision",
+            "event_id": f"{course_id}-ll-rev-{_short(request['request_id'], 20)}", "attempt_id": target, "replaces_assessment_id": effective["assessment_id"], "recorded_at": self.now_offset(),
+            "reason": (f"Capture correction: the learner corrected how this response was captured; assessed from the corrected wording in capture {capture['path']} "
+                       f"sha256:{capture['sha256']}. The original capture is kept unchanged.")[:2000],
+            "observations": [{"skill_id": o["skill_id"], "outcome": o["outcome"], "assistance": by_skill[o["skill_id"]]["assistance"], "reference_access": by_skill[o["skill_id"]]["reference_access"],
+                              "analysis": o["analysis"], "missing_or_incorrect": o["missing_or_incorrect"], "error_types": o["error_types"], "assessment_confidence": o["assessment_confidence"]}
+                             for o in out.observations]}
+        if stored is None:
+            self._store_candidate(job, revision["event_id"], revision)
+        self._settle(job, lease, S.COMMIT_PENDING)
+        publication = self.writer.publish_revision(course_id, revision, capture=capture, submission=submission, request_id=request["request_id"], now=self.now())
+        self.journal.add_receipt(kind="publication", job_id=job["job_id"], generation=job["generation"], ref=(publication["canonical_record"] or {}).get("record_id"), payload=publication)
+        saved = publication["status"] in {"saved", "already_saved"}
+        message, _ = self._tutor_message(request, out, material, reply_to_turn=submission["turn_id"], disposition="canonical_saved" if saved else "provisional", session_id=submission["session_id"])
+        records_out = {"publication": publication, "message": message, "native-result": native_result, "context": context}
+        return records_out, (S.SUCCEEDED if saved else S.WAITING_REVIEW), (None if saved else f"Awaiting course save: {publication['reason']}"), extra
 
     def _do_explain(self, job, lease, request, payload, directory, payload_bytes, prior):
         return self._assess(job, lease, request, payload, directory, payload_bytes, prior)[:4]

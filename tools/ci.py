@@ -59,9 +59,13 @@ def stages(extra: list[str]) -> dict[str, list[tuple[list[str], Path]]]:
         ],
         "web-unit": [(_web("vitest/vitest.mjs", "run", *extra), WEB)],
         "web-build": [(_web("vite/bin/vite.js", "build"), WEB)],
-        "storybook": [(_web("storybook/dist/bin/dispatcher.js", "build", "-o", "storybook-static", "--quiet"), WEB)],
+        "storybook": [(_web("storybook/dist/bin/dispatcher.js", "build", "-o", str(ROOT / ".local" / "storybook-static"), "--quiet"), WEB)],
         # Real browser against a fresh fixture-profile Brain on loopback, serving the app that was just built.
-        "e2e": [(_web("vite/bin/vite.js", "build"), WEB), (_web("@playwright/test/cli.js", "test", *extra), WEB)],
+        "e2e": [
+            (_web("vite/bin/vite.js", "build"), WEB),
+            (_web("storybook/dist/bin/dispatcher.js", "build", "-o", str(ROOT / ".local" / "storybook-static"), "--quiet"), WEB),
+            (_web("@playwright/test/cli.js", "test", *extra), WEB),
+        ],
     }
 
 

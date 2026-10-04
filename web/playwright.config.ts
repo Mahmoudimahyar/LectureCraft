@@ -25,8 +25,14 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   reporter: [["list"], ["json", { outputFile: "../.local/e2e-results/report.json" }]],
   use: { baseURL, trace: "retain-on-failure", screenshot: "only-on-failure", actionTimeout: 10_000, launchOptions: { args: ["--autoplay-policy=no-user-gesture-required", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] } },
-  webServer: { command: "node e2e/serve-brain.mjs", url: `${baseURL}/api/health`, reuseExistingServer: !!process.env.LL_E2E_REUSE, timeout: 120_000, stdout: "pipe", stderr: "pipe" },
+  webServer: [
+    { command: "node e2e/serve-brain.mjs", url: `${baseURL}/api/health`, reuseExistingServer: !!process.env.LL_E2E_REUSE, timeout: 120_000, stdout: "pipe", stderr: "pipe" },
+    { command: "node e2e/serve-static.mjs", url: `http://127.0.0.1:${process.env.LL_STORIES_PORT ?? 8793}/index.json`, reuseExistingServer: !!process.env.LL_E2E_REUSE, timeout: 30_000 },
+  ],
   projects: [
+    // Component states: every shared story, both themes.
+    { ...viewport("stories-light", 1280, 800, "light"), testMatch: /stories\/.*\.spec\.ts/ },
+    { ...viewport("stories-dark", 1280, 800, "dark"), testMatch: /stories\/.*\.spec\.ts/ },
     // Flows: every journey in a wide Light layout and a narrow Dark layout.
     { ...viewport("flows-desktop-light", 1280, 800, "light"), testMatch: /flows\/.*\.spec\.ts/ },
     { ...viewport("flows-phone-dark", 390, 844, "dark", { hasTouch: true }), testMatch: /flows\/.*\.spec\.ts/, dependencies: ["flows-desktop-light"] },

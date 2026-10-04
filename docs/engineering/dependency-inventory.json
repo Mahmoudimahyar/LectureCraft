@@ -398,6 +398,13 @@
       {
         "declared_license": "MIT",
         "dev": true,
+        "integrity": "sha512-oyUZxuW2lIJN8BRbYyMyZbfjeYqtF6HwmNfqa1SAF525zRnMewYp66wm/5d8FAgwqejOf6N2+wR3hX866lSwMA==",
+        "name": "@storybook/react-vite",
+        "version": "10.6.1"
+      },
+      {
+        "declared_license": "MIT",
+        "dev": true,
         "integrity": "sha512-yYU8cogLeSh/ms2jh8Fj7jaba/EWa7Ja6GoUqYZaraEuCI5YS6ms6ObZgjjedm+jm6XZjdNRWBpPP6Z86oOxcw==",
         "name": "@tailwindcss/vite",
         "version": "4.3.3"
@@ -607,6 +614,13 @@
       },
       {
         "declared_license": "MIT",
+        "dev": true,
+        "integrity": "sha512-NeEmukMWPA5OqHizUkQtxCIhGt7MUZLPY4FFgpC0LNiipjrac/oKpH0TxI+9Zc+vI5+IoN+NiskOmBP7gtYfmA==",
+        "name": "storybook",
+        "version": "10.6.1"
+      },
+      {
+        "declared_license": "MIT",
         "dev": false,
         "integrity": "sha512-XPPUyAc+cvspz3lHTcR/QgPfW2A0lv/xQNIjX3HGhLR+Nq2lHaLq5MtTesHn8GUr3W3DguT2KT5x3NVgRtYwmA==",
         "name": "tailwind-merge",
@@ -643,22 +657,23 @@
     ],
     "license_counts_all_locked": {
       "0BSD": 1,
-      "Apache-2.0": 31,
-      "BSD-2-Clause": 3,
-      "BSD-3-Clause": 4,
-      "BlueOak-1.0.0": 1,
+      "Apache-2.0": 33,
+      "BSD-2-Clause": 5,
+      "BSD-3-Clause": 5,
+      "BlueOak-1.0.0": 5,
+      "CC-BY-4.0": 1,
       "CC0-1.0": 1,
-      "ISC": 7,
-      "MIT": 360,
+      "ISC": 12,
+      "MIT": 523,
       "MIT-0": 2,
       "MPL-2.0": 26,
       "Python-2.0": 1
     },
     "lock_files": {
-      "web/package-lock.json": "61cde470c11120e6a84888ba17868d98ea13d6aeaec1b152133dd9c9228114d8"
+      "web/package-lock.json": "af90bd9476f4db483a7b11347ba390b100580da4643a7bb4a03fdaf83c45d9b4"
     },
     "packages_without_integrity": 0,
     "registry": "https://registry.npmjs.org (npm lockfileVersion 3)",
-    "total_locked_packages": 437
+    "total_locked_packages": 615
   }
 }

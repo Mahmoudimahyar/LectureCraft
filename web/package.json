@@ -14,7 +14,7 @@
     "test": "vitest run",
     "e2e": "playwright test",
     "storybook": "storybook dev -p 6006 --host 127.0.0.1 --no-open",
-    "build-storybook": "storybook build -o storybook-static"
+    "build-storybook": "storybook build -o ../.local/storybook-static"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.104.1",
@@ -41,6 +41,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.63.0",
+    "@storybook/react-vite": "^10.6.1",
     "@tailwindcss/vite": "^4.3.3",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
@@ -52,6 +53,7 @@
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^29.1.1",
     "json-schema-to-typescript": "^16.0.0",
+    "storybook": "^10.6.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.3.2",

@@ -17,7 +17,9 @@ export default defineConfig({
   outputDir: "../.local/e2e-results/artifacts",
   fullyParallel: false,
   workers: 1,
-  retries: 0,
+  // One retry absorbs OS-level loopback socket exhaustion seen on Windows in long runs (net::ERR_NO_BUFFER_SPACE).
+  // A test that needed it is reported as "flaky", never as a plain pass; TEST_REPORT lists every such case.
+  retries: 1,
   forbidOnly: !!process.env.CI,
   timeout: 60_000,
   expect: { timeout: 10_000 },

@@ -1,7 +1,7 @@
 // Shared UI primitives. Accessible behaviour comes from Radix (dialog focus trap/return, tabs roving
 // focus, toggle groups); these wrappers add the app's semantic tokens. Components are written here
 // in the shadcn composition style on top of the `radix-ui` package — no template or registry copy.
-import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { forwardRef, useRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { Dialog as RDialog, Tabs as RTabs, ToggleGroup as RToggleGroup } from "radix-ui";
 import { AlertTriangle, CheckCircle2, CircleDashed, HelpCircle, Info, Loader2, X, XCircle } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
@@ -141,12 +141,23 @@ interface DialogProps {
 }
 /** Modal dialog or side drawer. Focus is trapped while open and returns to the invoking control on close. */
 export function Dialog({ open, onOpenChange, title, description, children, side = "center", footer, wide }: DialogProps) {
+  // These dialogs are opened by state, not by a Radix trigger, so remember the invoking control ourselves.
+  const opener = useRef<HTMLElement | null>(null);
+  const wasOpen = useRef(false);
+  if (open && !wasOpen.current) opener.current = typeof document !== "undefined" && document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  wasOpen.current = open;
   return (
     <RDialog.Root open={open} onOpenChange={onOpenChange}>
       <RDialog.Portal>
         <RDialog.Overlay className="fixed inset-0 z-40 bg-black/45" />
         <RDialog.Content
-          aria-describedby={description ? undefined : undefined}
+          onCloseAutoFocus={(event) => {
+            const target = opener.current;
+            if (target && target.isConnected && target !== document.body) {
+              event.preventDefault();
+              target.focus();
+            }
+          }}
           className={cn("fixed z-50 flex flex-col bg-surface text-ink shadow-2xl outline-none",
             side === "center" ? cn("left-1/2 top-1/2 max-h-[90dvh] w-[min(96vw,40rem)] -translate-x-1/2 -translate-y-1/2 rounded-[var(--ll-radius)] border border-line/50", wide && "w-[min(96vw,56rem)]")
               : "inset-y-0 right-0 w-full max-w-[34rem] border-l border-line/50 max-sm:max-w-none")}>

@@ -49,12 +49,14 @@ def stages(extra: list[str]) -> dict[str, list[tuple[list[str], Path]]]:
         "brain": [([py, "-m", "pytest", *(extra or ["brain/tests"])], ROOT)],
         "web-types": [
             ([_node(), "scripts/gen-types.mjs", "--check"], WEB),
+            ([_node(), "scripts/gen-tokens.mjs", "--check"], WEB),
             (_web("typescript/bin/tsc", "--noEmit", "-p", "tsconfig.json"), WEB),
         ],
         "web-unit": [(_web("vitest/vitest.mjs", "run", *extra), WEB)],
         "web-build": [(_web("vite/bin/vite.js", "build"), WEB)],
         "storybook": [(_web("storybook/dist/bin/dispatcher.js", "build", "-o", "storybook-static", "--quiet"), WEB)],
-        "e2e": [(_web("@playwright/test/cli.js", "test", *extra), WEB)],
+        # Real browser against a fresh fixture-profile Brain on loopback, serving the app that was just built.
+        "e2e": [(_web("vite/bin/vite.js", "build"), WEB), (_web("@playwright/test/cli.js", "test", *extra), WEB)],
     }
 
 

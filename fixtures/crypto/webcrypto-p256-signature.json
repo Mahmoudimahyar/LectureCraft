@@ -1,0 +1,16 @@
+{
+  "note": "Synthetic cross-language signature fixture. No private key is stored.",
+  "produced_by": "node v22.15.1 webcrypto.subtle",
+  "public_key_spki_b64": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEkYWqgeDsbOvAlj/jnbOr/AHUemrgL9tVpibQ/sdHQ8cenOXfNV/iiMiDFTwu0//A/bBhYFtfopMoYmo2Rb65uw==",
+  "fingerprint": "c5fa0c8c07acdfe5e941dbdb23079562393a8db6438239ccfabd5da15b428df0",
+  "manifest_b64": "eyJidW5kbGVfaWQiOiJidW5kbGUtY3J5cHRvLWZpeHR1cmUiLCJjb250cmFjdCI6ImxsLmJ1bmRsZS8xIiwibm90ZSI6InN5bnRoZXRpYyBtYW5pZmVzdCBieXRlcyBmb3Igc2lnbmF0dXJlIGNvbXBhdGliaWxpdHkgb25seSJ9",
+  "signature_record": {
+    "contract": "ll.signature/1",
+    "signature": {
+      "algorithm": "ES256-P1363",
+      "key_id": "dev-c5fa0c8c07acdfe5e941dbdb",
+      "manifest_sha256": "8228e3525ac6927bae5c2afeab5459a33ab2e3b76940c6061284ace5ed991922",
+      "value": "p_Y47jQpZtwUka5RB7roaaZ3nI8VZHqdapwoeHcnL1CHVTjVox3gWkSuQVTqoeP78qlsfaEbWZHX4UujVxZGqQ"
+    }
+  }
+}

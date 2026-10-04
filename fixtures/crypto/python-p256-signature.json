@@ -1,0 +1,16 @@
+{
+  "note": "Synthetic cross-language signature fixture. No private key is stored.",
+  "produced_by": "python cryptography",
+  "public_key_spki_b64": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE5oGZU3h15nJHmHhKAuchfjZY5or+WRtD8keEXo2BOdWKqCR6BPh84np5oaY/UjemkG1XHai+5Go+lj2lkfvaGQ==",
+  "fingerprint": "2f0dad4981e8ca58f20f6739dae555c440ba123a2dd41002023535b10f2b5ccc",
+  "manifest_b64": "eyJidW5kbGVfaWQiOiJidW5kbGUtcHl0aG9uLWZpeHR1cmUiLCJjb250cmFjdCI6ImxsLmJ1bmRsZS8xIiwibm90ZSI6InN5bnRoZXRpYyBtYW5pZmVzdCBieXRlcyBmb3Igc2lnbmF0dXJlIGNvbXBhdGliaWxpdHkgb25seSJ9",
+  "signature_record": {
+    "contract": "ll.signature/1",
+    "signature": {
+      "algorithm": "ES256-P1363",
+      "key_id": "brain-2f0dad4981e8ca58f20f6739",
+      "manifest_sha256": "e54eb0c490a637a5de2be172accb0249b48837df9e425ea27b2a250c8b347e4b",
+      "value": "Y6IGGdWstWL17_HZ5YoHRaIeflXOSpquGtodVeYHEan96axHqktQTQq8nDbyEsR97WqYEGrYaYHCCFviPPTS5A"
+    }
+  }
+}

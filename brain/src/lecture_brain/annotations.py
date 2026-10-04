@@ -149,6 +149,24 @@ class AnnotationStore:
                         raise AnnotationError("outside_recording", f"interval ends at {to['locator']['end_ms']} ms but the recording is {duration} ms long")
                     return
 
+    def _check_identity(self, course_id: str, record: dict) -> None:
+        """A link is between exact versions. An end that names bytes other than the current file is refused."""
+        from .ownerio.inventory import build_inventory
+        from .preparation import current_identity
+
+        root = self._settings.course(course_id).root
+        inventory = build_inventory(self._settings.course(course_id))
+        items = {i["source_id"]: i for i in inventory["other_sources"]}
+        items.update({i["source_id"]: i for s in inventory["sessions"] for i in s["items"]})
+        items.update({i["source_id"]: i for l in inventory["lectures"] for i in [*l["decks"], *l["extra_materials"]]})
+        for end in ("from", "to"):
+            item = items.get(record[end]["source_id"])
+            if item is None or not item.get("path"):
+                continue
+            _, current = current_identity(root, item)
+            if current is not None and current != record[end]["sha256"]:
+                raise AnnotationError("stale_source", f"the link's {end!r} side names a version of {item['filename']} that is not the current file")
+
     def propose(self, course_id: str, record_bytes: bytes) -> dict[str, Any]:
         """Persist a new annotation or the next revision. Returns ``{status, artifact|conflict_id, reason}``."""
         try:
@@ -163,6 +181,7 @@ class AnnotationStore:
         if not _NAME.match(f"{record['annotation_id']}.r1.json"):
             raise AnnotationError("invalid_annotation", "annotation id is not a portable file name")
         self._check_bounds(course_id, record)
+        self._check_identity(course_id, record)
         state = self.load(course_id)
         head = state["current"].get(record["annotation_id"])
         revision = record["revision"]

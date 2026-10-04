@@ -229,3 +229,26 @@ def test_single_file_units_list_no_other_files(projector):
     view = projector.lecture_view("be505", "lecture-01")
     assert view["other_materials"] == []
     assert all(l["other_materials_count"] == 0 for l in projector.course_view("be505")["lectures"])
+
+
+def test_files_the_course_index_has_not_registered_are_identified_by_their_content(projector, settings):
+    """Most real decks and recordings are not in the course's source index. They still need an exact identity, or a
+    slide could not be cited, annotated or linked. It is derived from the bytes and labeled as such (disk-…)."""
+    import hashlib
+
+    root562 = settings.course("be562").root
+    deck_path = root562 / "materials/lectures/lecture-02/Fixture 562 Lecture 02.pdf"
+    digest = hashlib.sha256(deck_path.read_bytes()).hexdigest()
+    deck = projector.lecture_view("be562", "lecture-02")["deck"]
+    assert deck["registration"] == "unregistered" and deck["sha256"] == digest and deck["version_id"] == f"disk-{digest[:12]}"
+
+    view = projector.lecture_view("be505", "lecture-02")
+    recording = next(r for r in view["recordings"] if r["registration"] == "unregistered")
+    wav = next((settings.course("be505").root / "materials/sessions").rglob("Fixture Lec 2 Sep 8.wav"))
+    assert recording["sha256"] == hashlib.sha256(wav.read_bytes()).hexdigest() and recording["version_id"].startswith("disk-")
+    assert all(t["version_id"] and t["sha256"] for t in view["transcripts"])
+    # Registered files keep the version the course index gave them.
+    assert view["deck"]["registration"] == "registered" and view["deck"]["version_id"].startswith("v1-")
+    # A changed file gets a new identity instead of silently keeping the old one.
+    deck_path.write_bytes(deck_path.read_bytes() + b"\n%% changed\n")
+    assert projector.lecture_view("be562", "lecture-02")["deck"]["sha256"] != digest

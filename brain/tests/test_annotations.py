@@ -107,3 +107,42 @@ def test_pipeline_suggestions_never_override_reviewed_links(store):
     assert "ann-pipeline-rerun-s01" not in store.load("be505")["current"]
     with pytest.raises(AnnotationError):
         store.suggest("be505", dict(again, review_state="confirmed", reviewer_ref="pipeline"))  # a pipeline cannot self-confirm
+
+
+def test_learner_can_create_the_first_link_for_a_slide_that_has_no_suggestion(store, settings):
+    """Real transcripts are often untimed, so no interval is suggested. The learner's own first link is a normal
+    revision-1 annotation: confirmed by them, bounded by the recording, and shown like any reviewed link."""
+    from lecture_brain.journal import Journal
+    from lecture_brain.preparation import Preparation
+    from lecture_brain.projections import Projector
+
+    prep = Preparation(settings, converter=None, now=lambda: "2026-10-04T12:00:00Z")
+    prep.prepare_course("be562")
+    journal = Journal.open(settings.journal_path, synced_roots=[])
+    try:
+        projector = Projector(settings, journal, preparation=prep, now=lambda: "2026-10-04T12:00:00Z")
+        before = projector.lecture_view("be562", "lecture-01")
+        slide = before["slides"][0]
+        assert slide["occurrences"] == [] and before["recordings"], "the fixture lecture has a recording but no timed link"
+        deck, recording = before["deck"], before["recordings"][0]
+        assert recording["version_id"] and recording["sha256"] and recording["duration_ms"]
+        record = {"contract": "ll.annotation/1", "annotation_id": "ann-learner-be562-l01-s01-a1", "scope": {"course_id": "be562", "term": "2026-fall"}, "revision": 1, "supersedes": None,
+                  "relation": "displayed_during", "from": {"source_id": deck["source_id"], "version_id": deck["version_id"], "sha256": deck["sha256"], "locator": {"kind": "page", "page": 1, "printed_label": None}},
+                  "to": {"source_id": recording["source_id"], "version_id": recording["version_id"], "sha256": recording["sha256"],
+                         "locator": {"kind": "media", "start_ms": 1000, "end_ms": 4000, "origin": "original_source_start"}},
+                  "review_state": "confirmed", "basis": "manual_review", "support": [recording["artifact"]], "reviewer_ref": "learner", "created_at": "2026-10-04T12:00:00Z"}
+        assert c.validate("annotation", record) == []
+        result = store.propose("be562", c.dump_json(record))
+        assert result["status"] == "saved"
+        after = projector.lecture_view("be562", "lecture-01")
+        (occurrence,) = after["slides"][0]["occurrences"]
+        assert (occurrence["start_ms"], occurrence["end_ms"], occurrence["review_state"], occurrence["basis"], occurrence["revision"]) == (1000, 4000, "confirmed", "manual_review", 1)
+        # Outside the recording, or against bytes that are not the current file, a first link is refused like any other.
+        beyond = dict(record, annotation_id="ann-learner-be562-l01-s01-a2", to=dict(record["to"], locator=dict(record["to"]["locator"], end_ms=recording["duration_ms"] + 60_000)))
+        with pytest.raises(AnnotationError):
+            store.propose("be562", c.dump_json(beyond))
+        stale = dict(record, annotation_id="ann-learner-be562-l01-s01-a3", to=dict(record["to"], sha256="0" * 64))
+        with pytest.raises(AnnotationError):
+            store.propose("be562", c.dump_json(stale))
+    finally:
+        journal.close()

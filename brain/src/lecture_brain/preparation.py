@@ -62,6 +62,26 @@ def file_sha256(path: Path, cache: dict | None = None) -> str:
     return value
 
 
+_SESSION_HASHES: dict[str, str] = {}
+
+
+def current_identity(root: Path, item: dict, cache: dict | None = None) -> tuple[str | None, str | None]:
+    """(version_id, sha256) of the file as it is now. Files registered by the course index keep the owner's
+    version; anything else is identified by its own bytes (``disk-…``), hashed at most once per change."""
+    if item.get("sha256"):
+        return item["version_id"], item["sha256"]
+    if not item.get("path"):
+        return None, None
+    path = root / item["path"]
+    try:
+        if not path.is_file() or path.stat().st_size == 0:
+            return None, None
+        sha = file_sha256(path, _SESSION_HASHES if cache is None else cache)
+    except OSError:
+        return None, None
+    return disk_version_id(sha), sha
+
+
 def source_ref_for(root: Path, item: dict, locator: dict, cache: dict | None = None) -> dict | None:
     """A contract ``source`` for an inventory item, hashing unregistered files on demand."""
     if not item.get("path") or not (root / item["path"]).is_file():
@@ -224,6 +244,14 @@ class Preparation:
 
     def _save_cache(self) -> None:
         replace_atomic(self._hash_cache_path, json.dumps(self._hash_cache).encode("utf-8"))
+
+    def identity_of(self, course_id: str, item: dict) -> tuple[str | None, str | None]:
+        """Exact identity of a course file, remembered across restarts so large recordings are hashed once."""
+        known = len(self._hash_cache)
+        identity = current_identity(self._settings.course(course_id).root, item, self._hash_cache)
+        if len(self._hash_cache) != known:
+            self._save_cache()
+        return identity
 
     def prepared_dir(self, course_id: str, lecture_id: str) -> Path:
         return self._settings.app_area(course_id) / "prepared" / lecture_id

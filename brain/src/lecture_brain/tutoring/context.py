@@ -17,6 +17,7 @@ from ..ownerio import OwnerReadError
 from ..ownerio.attempts import read_attempt_records
 from ..ownerio.catalogs import read_answer_guidance, read_families, read_question_index
 from ..ownerio.inventory import build_inventory
+from ..preparation import current_identity
 
 MAX_SPAN_CHARS = 6000
 
@@ -86,11 +87,17 @@ def select_context(settings: Settings, *, request: dict, sources: list[dict], sk
     instructions, instruction_text = _instruction_artifacts(settings, course_id)
     budget -= len(instruction_text)
 
-    supplied_sources, spans = [], []
+    supplied_sources, spans, source_problems = [], [], []
     for source in sources[: int(policy["default_top_source_spans"])]:
         item = _find_item(inventory, source["source_id"])
         if item is not None and item["disclosure"] == "restricted_solution":
             continue  # answer keys are never shown as ordinary source context
+        if item is not None and item.get("path"):
+            current_version, current_sha = current_identity(root, item)
+            if current_sha is not None and current_sha != source["sha256"]:
+                # Never present today's text under the label of the version the learner cited.
+                source_problems.append(f"{item['filename']} changed since it was cited (cited {source['version_id']}, now {current_version}); it was not used. Open the slide again and re-ask.")
+                continue
         text = read_span(root, item, source["locator"]) if item else None
         if text and budget - len(text) > 0:
             budget -= len(text)
@@ -133,7 +140,8 @@ def select_context(settings: Settings, *, request: dict, sources: list[dict], sk
                            + (" Assessor guidance was supplied to the tutor for grading and withheld from the client." if guidance else "")),
     }
     c.require_valid("context", receipt)
-    return receipt, {"instruction_text": instruction_text, "spans": spans, "attempts": attempt_summaries, "rubric": rubric, "assessor_guidance": guidance}
+    return receipt, {"instruction_text": instruction_text, "spans": spans, "attempts": attempt_summaries, "rubric": rubric, "assessor_guidance": guidance,
+                     "source_problems": source_problems}
 
 
 def question_version_for(settings: Settings, course_id: str, question_id: str | None) -> int | None:

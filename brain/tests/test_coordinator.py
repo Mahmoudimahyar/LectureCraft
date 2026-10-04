@@ -12,6 +12,7 @@ from lecture_brain.journal import Journal, JobState as S
 from lecture_brain.native import UnverifiedNativeAdapter
 from lecture_brain.native.fixture_tutor import BANNER, FixtureTutorAdapter
 from lecture_brain.ownerio.attempts import read_attempt_records
+from lecture_brain.ownerio.inventory import unregistered_source_id
 from lecture_brain.transport import signing
 from lecture_brain.transport.bundles import read_manifest
 from lecture_brain.transport.pairing import PairingRegistry
@@ -489,3 +490,35 @@ def test_capture_correction_of_an_unknown_capture_changes_nothing(env):
     after = env.attempts()
     assert len(after["attempts"]) == len(before["attempts"]) and after["revisions"].keys() == before["revisions"].keys()
     assert env.adapter.calls == 1  # the tutor was not asked to assess against an unverifiable original
+
+
+# ---- sources cited by exact version --------------------------------------------------------------
+def test_an_unregistered_slide_is_usable_as_context_and_a_changed_file_is_not_passed_off_as_the_cited_version(settings, clock):
+    import hashlib
+
+    env = Env(settings, clock)
+    try:
+        root = settings.course("be562").root
+        deck = root / "materials/lectures/lecture-02/Fixture 562 Lecture 02.pdf"
+        digest = hashlib.sha256(deck.read_bytes()).hexdigest()
+        ref = {"source_id": unregistered_source_id(deck.relative_to(root).as_posix()), "version_id": f"disk-{digest[:12]}", "sha256": digest, "locator": {"kind": "page", "page": 1, "printed_label": None}}
+        env.send("req-unreg", "ask", question_message(settings, "req-unreg", "What is on this slide?", [ref], course="be562"), course="be562")
+        env.coordinator.tick()
+        directory = settings.app_area("be562") / "outbox" / "req-unreg" / "g1"
+        context = json.loads((directory / "context.json").read_text(encoding="utf-8"))
+        message = json.loads((directory / "message.json").read_text(encoding="utf-8"))
+        assert [s["sha256"] for s in context["sources"]] == [digest]
+        assert "Bayesian networks" in message["text"]  # the fixture tutor quotes the supplied slide text
+
+        deck.write_bytes(deck.read_bytes() + b"\n%% edited after the question was written\n")
+        env.send("req-stale", "ask", question_message(settings, "req-stale", "And now?", [ref], course="be562"), course="be562")
+        env.coordinator.tick()
+        directory = settings.app_area("be562") / "outbox" / "req-stale" / "g1"
+        context = json.loads((directory / "context.json").read_text(encoding="utf-8"))
+        detail = json.loads((directory / "detail.json").read_text(encoding="utf-8"))
+        message = json.loads((directory / "message.json").read_text(encoding="utf-8"))
+        assert context["sources"] == []  # nothing is supplied under a version label the bytes no longer match
+        assert any("changed since" in p for p in detail["problems"])
+        assert "Bayesian networks" not in message["text"]
+    finally:
+        env.journal.close()

@@ -240,7 +240,8 @@ OTHER_COURSES = {
              "more_decks": [("Fixture 562 Reading A.pdf", ["Reading A: d-separation", "Reading A: worked example"])], "notes": ["Fixture 562 unit notes.txt"]},
         ],
         "sessions": [
-            {"date": "2026-09-04", "transcript": "Fixture 562 Lec 1.txt", "recording": "Fixture 562 Lec 1.wav", "index_transcript": True, "index_recording": True},
+            # Linked to lecture-01 by the course index, with an UNTIMED transcript: like most real sessions, it yields no timed slide link.
+            {"date": "2026-09-04", "transcript": "Fixture 562 Lec 1.txt", "recording": "Fixture 562 Lec 1.wav", "index_transcript": True, "index_recording": True, "lecture": "lecture-01"},
             {"date": "2026-09-09", "transcript": None, "recording": None},  # empty session directory
         ],
         "skills": [("be562.skill.chain-rule-factorization", "derive", "Factor a joint distribution with the chain rule."),

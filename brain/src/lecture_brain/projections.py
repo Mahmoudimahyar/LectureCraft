@@ -217,13 +217,18 @@ class Projector:
                            "concepts": sorted(page_concepts.get(page, {}).values(), key=lambda x: x["label"]), "questions": page_questions.get(page, []),
                            "occurrences": sorted(links["occurrences"], key=lambda o: o["start_ms"]), "transcript_ranges": sorted(links["transcript_ranges"], key=lambda o: o["start"]),
                            "related": links["related"]})
+        deck_identity = self.preparation.identity_of(course_id, deck) if deck else (None, None)
         recordings, transcripts = [], []
         for session in lecture["sessions"]:
             for item in session["items"]:
-                base = {"source_id": item["source_id"], "version_id": item["version_id"], "sha256": item["sha256"], "filename": item["filename"], "media_type": item["media_type"],
+                version_id, sha256 = self.preparation.identity_of(course_id, item)
+                base = {"source_id": item["source_id"], "version_id": version_id, "sha256": sha256, "filename": item["filename"], "media_type": item["media_type"],
                         "state": item["state"], "registration": item["registration"], "session_id": session["session_id"], "bytes": item["bytes"]}
                 if item["kind"] == "lecture_recording" and item["path"]:
-                    recordings.append(dict(base, content=f"sources/{course_id}/{item['source_id']}/content", duration_ms=media_duration_ms(root / item["path"])))
+                    # The file itself as a citable artifact: a link the learner creates names it as its support.
+                    artifact = ({"path": item["path"], "sha256": sha256, "bytes": item["bytes"], "media_type": item["media_type"] or "application/octet-stream"}
+                                if sha256 and item["bytes"] else None)
+                    recordings.append(dict(base, content=f"sources/{course_id}/{item['source_id']}/content", duration_ms=media_duration_ms(root / item["path"]), artifact=artifact))
                 elif item["kind"] == "lecture_transcript" and item["path"] and item["rendition"] == "native_text":
                     try:
                         lines = (root / item["path"]).read_text(encoding="utf-8-sig", errors="replace").splitlines()[:MAX_TRANSCRIPT_LINES]
@@ -233,7 +238,7 @@ class Projector:
                     transcripts.append(dict(base, lines=lines, line_times=times, timing="annotated" if times else "untimed",
                                             timing_note=None if times else "This transcript has no verified timing: line references only, no playback highlight."))
         return {"course_id": course_id, "lecture_id": lecture_id, "title": lecture["title"], "session_link": lecture["session_link"],
-                "deck": ({"source_id": deck["source_id"], "version_id": deck["version_id"], "sha256": deck["sha256"], "filename": deck["filename"], "state": deck["state"],
+                "deck": ({"source_id": deck["source_id"], "version_id": deck_identity[0], "sha256": deck_identity[1], "filename": deck["filename"], "state": deck["state"],
                           "registration": deck["registration"], "rendition": deck["rendition"]} if deck else None),
                 "display": display, "page_count": page_count, "slides": slides, "recordings": recordings, "transcripts": transcripts,
                 "sessions": [{"session_id": s["session_id"], "state": s["state"]} for s in lecture["sessions"]], "preparation": stages,

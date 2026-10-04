@@ -412,11 +412,13 @@ def _build_other(root: Path, cid: str, spec: dict) -> None:
         if session["transcript"]:
             _write(root / directory / session["transcript"], "Synthetic fixture transcript line one.\nSynthetic fixture transcript line two.\n")
             if session.get("index_transcript"):
-                sources.append(_entry(root, f"src-lecture-{i:02d}-transcript", "lecture_transcript", f"{directory}/{session['transcript']}", date=session["date"], origin=f"session:{cid}:{session['date']}-lecture"))
+                sources.append(_entry(root, f"src-lecture-{i:02d}-transcript", "lecture_transcript", f"{directory}/{session['transcript']}", date=session["date"], origin=f"session:{cid}:{session['date']}-lecture",
+                                      related=[f"src-{session['lecture']}-slides"] if session.get("lecture") else None))
         if session["recording"]:
             write_wav(root / directory / session["recording"], [(0, 6)])
             if session.get("index_recording"):
-                sources.append(_entry(root, f"src-lecture-{i:02d}-audio", "lecture_recording", f"{directory}/{session['recording']}", role="reference", date=session["date"], review="not_needed"))
+                sources.append(_entry(root, f"src-lecture-{i:02d}-audio", "lecture_recording", f"{directory}/{session['recording']}", role="reference", date=session["date"], review="not_needed",
+                                      related=[f"src-{session['lecture']}-slides"] if session.get("lecture") else None))
     for placeholder in spec["placeholders"]:
         sources.append(_entry(root, placeholder, "assignment_brief", None))
     if not sources:

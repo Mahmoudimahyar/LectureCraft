@@ -280,7 +280,8 @@ class Coordinator:
         out = parse_tutor_output(text, expect_assessment=False, intended_skill_ids=[], max_sources=len(material["spans"]))
         message, _ = self._tutor_message(request, out, material, reply_to_turn=None, disposition="not_assessed", session_id=session_id)
         publication = self.writer.none_publication(course_id, request["request_id"], self.now(), "Not assessed in this exchange: receiving an answer does not establish understanding. Earlier evidence is unchanged.")
-        return {"publication": publication, "message": message, "native-result": native_result, "context": context}, S.SUCCEEDED, None, {"problems": out.problems, "uncertainty": out.uncertainty}
+        return ({"publication": publication, "message": message, "native-result": native_result, "context": context}, S.SUCCEEDED, None,
+                {"problems": [*out.problems, *material["source_problems"]], "uncertainty": out.uncertainty})
 
     # -- WF05 -------------------------------------------------------------------------------------
     def _attachments(self, directory: Path, submission: dict) -> dict[str, bytes]:
@@ -332,7 +333,7 @@ class Coordinator:
         prompt, _ = build_prompt(action=request["action"], depth=request["depth"], material=material, submission=submission, family=family, policy=self.settings.policy)
         text, native_result, _ = self._native(job, lease, request, prompt=prompt, context=context, session_id=submission["session_id"], prior=prior)
         out = parse_tutor_output(text, expect_assessment=family is not None, intended_skill_ids=skill_ids, max_sources=len(material["spans"]))
-        extra = {"problems": out.problems, "uncertainty": out.uncertainty, "diagnostic": out.diagnostic, "observations": out.observations,
+        extra = {"problems": [*out.problems, *material["source_problems"]], "uncertainty": out.uncertainty, "diagnostic": out.diagnostic, "observations": out.observations,
                  "conditions": submission["conditions"], "criteria": material["rubric"] or ([{"skill_id": r["skill_id"], "observable": r["criterion"]} for r in family["rubric"]] if family else [])}
         if family is None or out.observations is None:
             reason = ("Assessment pending: no reviewed question family/rubric is bound to this response. Your full response is retained." if family is None

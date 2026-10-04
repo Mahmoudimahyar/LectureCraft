@@ -209,6 +209,26 @@ describe("submission and outbox", () => {
     expect((await db.getLocalRequest("req-c"))?.upload).toBe("uploaded");
   });
 
+  it("flush is single-flight: an automatic and a manual flush at the same moment deliver each bundle once", async () => {
+    await setPairing({ state: "paired" });
+    await getOrCreateDevice();
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    }));
+    await submit(args("req-sf", "Retained while offline"));
+    const puts: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      puts.push(String(url).split("/").pop()!);
+      await new Promise((r) => setTimeout(r, 5));
+      return new Response("{}", { status: 200 });
+    }));
+    const [a, b] = await Promise.all([flushOutbox(), flushOutbox()]);
+    expect(a).toEqual({ sent: ["req-sf"], stillHeld: [] });
+    expect(b).toEqual(a); // the second caller joined the first run
+    expect(puts.filter((n) => n === "ready.json")).toHaveLength(1);
+    expect(await flushOutbox()).toEqual({ sent: [], stillHeld: [] }); // and a later flush starts fresh
+  });
+
   it("say plainly when neither delivery nor local storage holds the input", async () => {
     await setPairing({ state: "paired" });
     await getOrCreateDevice();

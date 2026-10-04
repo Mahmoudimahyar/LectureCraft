@@ -122,8 +122,21 @@ export async function submit(args: SubmitArgs): Promise<SubmitOutcome> {
   return deliver(bundle, record);
 }
 
-/** Try again to hand over bundles that were retained while delivery was unavailable. Never rebuilds or re-signs them. */
-export async function flushOutbox(): Promise<{ sent: string[]; stillHeld: string[] }> {
+let flushing: Promise<{ sent: string[]; stillHeld: string[] }> | null = null;
+
+/**
+ * Try again to hand over bundles that were retained while delivery was unavailable. Never rebuilds or
+ * re-signs them. Single-flight: the automatic retry and a manual "Send now" share one run, so a bundle
+ * is uploaded once (and a repeated upload of identical bytes is harmless on the Brain anyway).
+ */
+export function flushOutbox(): Promise<{ sent: string[]; stillHeld: string[] }> {
+  flushing ??= deliverRetained().finally(() => {
+    flushing = null;
+  });
+  return flushing;
+}
+
+async function deliverRetained(): Promise<{ sent: string[]; stillHeld: string[] }> {
   const sent: string[] = [];
   const stillHeld: string[] = [];
   for (const item of await listOutbox()) {

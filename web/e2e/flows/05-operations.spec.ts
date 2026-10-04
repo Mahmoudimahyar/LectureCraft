@@ -142,16 +142,41 @@ test.describe("operations and recovery", () => {
     if (isNarrow(page)) await page.getByRole("tab", { name: "Slide", exact: true }).click();
     await expect(page.getByTestId("slide-canvas")).toBeVisible();
 
-    await page.unroute("**/api/transport/**");
+    // While the Brain is still unreachable the request stays held, visibly, with a manual "Send now".
     await page.goto("/activity");
     const outbox = page.getByRole("region", { name: /^Kept on this device, not sent yet \(1\)/ });
     await expect(outbox).toBeVisible();
+    await page.unroute("**/api/transport/**");
     await outbox.getByRole("button", { name: "Send now" }).click();
     await expect(page.getByRole("status").filter({ hasText: "They count as received only once the Brain admits them." })).toBeVisible();
     await settle(request);
     const jobs = (await jobsOf(request)).filter((j) => j.request_id === requestId);
     expect(jobs, "delivered exactly once").toHaveLength(1);
     expect(jobs[0]!.state).toBe("SUCCEEDED");
+    await expect(page.getByRole("region", { name: /^Kept on this device, not sent yet/ })).toHaveCount(0);
+  });
+
+  test("UI27 a request kept on the device is sent by itself the next time the app is open and the Brain is reachable", async ({ page, request, unique, problems }) => {
+    problems.allow(/Failed to load resource|ERR_FAILED|net::/);
+    await pair(page);
+    await page.route("**/api/transport/**", (route) => route.abort("connectionfailed"));
+    const question = unique("Sent automatically after the Brain came back");
+    const card = await ask(page, question);
+    await expect(card.getByRole("list", { name: "Request status" })).toContainText("Kept on this device · not sent yet");
+    const requestId = (await card.getAttribute("data-request-id"))!;
+    await page.unroute("**/api/transport/**");
+
+    await page.reload(); // "the next time the app is open": no button is pressed
+    await expect.poll(async () => (await jobsOf(request)).filter((j) => j.request_id === requestId).length, { timeout: 20_000 }).toBe(1);
+    await settle(request);
+    const jobs = (await jobsOf(request)).filter((j) => j.request_id === requestId);
+    expect(jobs, "delivered exactly once").toHaveLength(1);
+    expect(jobs[0]!.state).toBe("SUCCEEDED");
+    if (isNarrow(page)) await page.getByRole("tab", { name: "Tutor", exact: true }).click();
+    const after = page.getByTestId("request-card").filter({ hasText: question });
+    await expect(after.getByRole("list", { name: "Request status" })).toContainText("Received by Brain", { timeout: 20_000 });
+    await expect(after.getByTestId("tutor-reply")).toBeVisible({ timeout: 20_000 });
+    await page.goto("/activity");
     await expect(page.getByRole("region", { name: /^Kept on this device, not sent yet/ })).toHaveCount(0);
   });
 
@@ -277,6 +302,14 @@ test.describe("operations and recovery", () => {
 
   test("UI32 a repair is previewed with its exact scope, approved once, and reports a receipt; unsafe repairs are refused", async ({ page, request, unique }, testInfo) => {
     await pair(page);
+    // Independent of earlier tests: one saved attempt makes the course's own summary view stale.
+    await page.goto(`/courses/${COURSE}/questions/BE505-L01-Q02`);
+    const answer = unique("RNA polymerase binds the promoter and transcription of the downstream gene produces RNA.");
+    await page.locator("#practice-answer").fill(answer);
+    await page.getByTestId("submit-answer").click();
+    await expect(page.getByTestId("request-card").filter({ hasText: answer }).getByTestId("feedback").getByRole("list", { name: "Save status" })).toContainText("Saved to course", { timeout: 20_000 });
+    await settle(request);
+
     await setFixtureMode(request, "completion_unknown");
     const question = unique("Leave me uncertain for the repair screen");
     const card = await ask(page, question, 1);

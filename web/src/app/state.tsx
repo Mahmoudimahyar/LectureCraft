@@ -6,6 +6,7 @@ import { apiPost } from "@/lib/api";
 import { onStorageChange, storageProblem } from "@/lib/db";
 import { getOrCreateDevice, getPairing, setBrain, setPairing, type DeviceIdentity, type PairingState } from "@/lib/device";
 import { useWorkspace } from "@/lib/queries";
+import { flushOutbox } from "@/lib/requests";
 import { applyMotion, applyTextScale, applyTheme, getMotionPref, getTextScale, getThemePref, watchSystemTheme, type MotionPref, type ThemePref } from "@/lib/theme";
 import type { BrainPublic, WorkspaceView } from "@/lib/types";
 
@@ -94,6 +95,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setPairingState(next);
     }
   }, [workspace, pairing]);
+
+  // Requests kept on this device are handed over by themselves whenever the Brain answers again (each
+  // successful workspace refresh is such a moment). Nothing is rebuilt or re-signed; nothing is sent twice.
+  const reachableAt = workspace?.generated_at;
+  useEffect(() => {
+    if (!ready || pairing.state !== "paired" || !reachableAt) return;
+    let cancelled = false;
+    void flushOutbox()
+      .then((result) => {
+        if (cancelled || result.sent.length === 0) return;
+        void queryClient.invalidateQueries({ queryKey: ["local-requests"] });
+        void queryClient.invalidateQueries({ queryKey: ["activity"] });
+        setAnnouncement(`${result.sent.length} request${result.sent.length === 1 ? "" : "s"} kept on this device ${result.sent.length === 1 ? "was" : "were"} sent to the Brain.`);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, pairing.state, reachableAt, queryClient]);
 
   const setCourseId = useCallback((id: string) => {
     setCourse(id);

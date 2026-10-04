@@ -9,6 +9,8 @@ const reviewView = async (request: APIRequestContext): Promise<{ items: ReviewRo
 
 const items = (page: Page) => page.getByRole("region", { name: /^Your selected and saved items/ });
 const available = (page: Page) => page.getByRole("region", { name: /^Course questions you can add/ });
+/** The app's own confirmation that the signed request left this device. Only then is it safe to look at the Brain or reload. */
+const sent = (page: Page, text: string) => expect(page.getByRole("status").filter({ hasText: text })).toBeVisible();
 
 test.describe("progress, history and review", () => {
   test.beforeEach(async ({ page }) => {
@@ -72,13 +74,24 @@ test.describe("progress, history and review", () => {
     await page.getByLabel("Active course").selectOption(COURSE);
   });
 
-  test("UI21 history shows the exact response, regrades as revisions of the same attempt, and conversations as delivered", async ({ page }) => {
+  test("UI21 history shows the exact response, regrades as revisions of the same attempt, and conversations as delivered", async ({ page, request, unique }) => {
+    // Independent of earlier tests: one hint request and one answered practice question from this device.
+    await page.goto(`/courses/${COURSE}/questions/BE505-L01-Q02`);
+    await page.getByRole("button", { name: "Request a hint" }).click();
+    await expect(page.getByText("Hint used — recorded")).toBeVisible();
+    const answer = unique("RNA polymerase binds the promoter and transcription of the downstream gene produces RNA.");
+    await page.locator("#practice-answer").fill(answer);
+    await page.getByTestId("submit-answer").click();
+    await expect(page.getByTestId("request-card").filter({ hasText: answer }).getByTestId("feedback")).toBeVisible({ timeout: 20_000 });
+    await settle(request);
+
     await page.goto("/history");
     await expect(page.getByText("Regrades are shown as revisions of the same attempt, never as new answers.")).toBeVisible();
     const attempts = page.getByRole("tabpanel", { name: /^Attempts/ });
     // Older course records only have an excerpt, and the page says so instead of reconstructing text.
     await expect(attempts.getByText("(excerpt only — the full text was not retained)").first()).toBeVisible();
     await expect(attempts.getByText("(full capture)").first()).toBeVisible(); // responses sent from this app are kept whole
+    await expect(attempts.getByRole("listitem").filter({ hasText: answer })).toContainText("(full capture)");
 
     await attempts.getByLabel("Only attempts with corrections").check();
     await expect(attempts.getByRole("listitem").filter({ hasText: "the original assessment is kept" }).first()).toBeVisible();
@@ -122,6 +135,7 @@ test.describe("progress, history and review", () => {
     const own = unique("Why does a low-copy origin reduce metabolic burden?");
     await dialog.getByLabel("Question (include any givens the answer needs)").fill(own);
     await dialog.getByRole("button", { name: "Save only" }).click();
+    await sent(page, "Sent: saved only. It will not get a due date.");
     await settle(request);
     await page.reload();
     const mine = items(page).getByRole("listitem").filter({ hasText: own });
@@ -138,6 +152,7 @@ test.describe("progress, history and review", () => {
     await page.getByRole("button", { name: "Create my own question" }).click();
     await page.getByRole("dialog").getByLabel("Question (include any givens the answer needs)").fill(own);
     await page.getByRole("dialog").getByRole("button", { name: "Save only" }).click();
+    await sent(page, "Sent: saved only. It will not get a due date.");
     await settle(request);
     await page.reload();
     let mine = items(page).getByRole("listitem").filter({ hasText: own });
@@ -158,6 +173,7 @@ test.describe("progress, history and review", () => {
     const offer = available(page).getByRole("listitem").filter({ hasText: "What the origin does" });
     if (await offer.count()) {
       await offer.getByRole("button", { name: "Add to review" }).click();
+      await sent(page, "Sent: added to review.");
       await settle(request);
       await page.reload();
     }
@@ -165,20 +181,24 @@ test.describe("progress, history and review", () => {
     for (const [button, label] of [["Add to review", "In review"], ["Resume", "In review"]] as const) {
       if (await row().getByRole("button", { name: button, exact: true }).count()) {
         await row().getByRole("button", { name: button, exact: true }).click();
+        await sent(page, "Change sent.");
         await settle(request);
         await page.reload();
       }
       await expect(row()).toContainText(label);
     }
     await row().getByRole("button", { name: "Suspend" }).click();
+    await sent(page, "Change sent.");
     await settle(request);
     await page.reload();
     await expect(row()).toContainText("Suspended");
     await row().getByRole("button", { name: "Resume" }).click();
+    await sent(page, "Change sent.");
     await settle(request);
     await page.reload();
     await expect(row()).toContainText("In review");
     await row().getByRole("button", { name: "Remove from review" }).click();
+    await sent(page, "Change sent.");
     await settle(request);
     await page.reload();
     await expect(row()).toContainText("Removed from review");

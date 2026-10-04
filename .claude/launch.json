@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "brain-fixture",
+      "runtimeExecutable": "C:\\Users\\Mahyar\\lecture-learning\\.venv\\Scripts\\python.exe",
+      "runtimeArgs": ["-m", "lecture_brain", "--profile", "fixture", "--state-dir", "C:\\Users\\Mahyar\\lecture-learning\\.local\\state\\dev-fixture", "serve", "--port", "8765", "--static", "C:\\Users\\Mahyar\\lecture-learning\\web\\dist"],
+      "port": 8765
+    }
+  ]
+}

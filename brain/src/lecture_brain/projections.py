@@ -171,7 +171,8 @@ class Projector:
                     if ref.get("source_id") == deck["source_id"]:
                         pages |= _pages_in(ref.get("locator", ""))
                 for page in pages:
-                    page_questions.setdefault(page, []).append({"question_id": question["question_id"], "title": question.get("title"), "family_id": question.get("family_id")})
+                    page_questions.setdefault(page, []).append({"question_id": question["question_id"], "title": question.get("title"), "family_id": question.get("family_id"),
+                                                                "family_revision": question.get("family_revision"), "prompt": question["prompt"]})
                     for criterion in question.get("criteria", []):
                         concept = concepts.get(criterion.get("concept_id"))
                         if concept:
@@ -460,7 +461,7 @@ class Projector:
                 available.append({"question_id": question["question_id"], "title": question.get("title"), "prompt": question["prompt"], "origin": question.get("origin"),
                                   "family_id": question.get("family_id"), "family_revision": question.get("family_revision"), "source_refs": question.get("source_refs", [])})
         return {"course_id": course_id, "items": rows, "due_count": sum(1 for r in rows if r["is_due"]), "available_questions": available[:200],
-                "default_session_size": int(self.settings.policy["review_default_max_items"]),
+                "default_session_size": int(self.settings.policy["review_default_max_items"]), "scheduler_config": self.reviews.scheduler_config(course_id),
                 "note": "Existing course questions are offered first. Saving an item does not schedule it; a due date is a suggestion, not evidence of forgetting."}
 
     # ---- activity ------------------------------------------------------------------------------

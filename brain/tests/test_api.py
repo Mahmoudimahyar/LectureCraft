@@ -165,3 +165,21 @@ def test_acceptance_and_probe_endpoints_report_honestly(client):
     assert client.post("/api/acceptance/run").json()["overall"] != "READY"
     probe = client.post("/api/probe-native").json()
     assert probe["status"] == "INSPECT_ONLY" and probe["checks"]["executable_present"] == "FAIL"
+
+
+def test_built_app_is_served_with_browser_safe_types_and_policy(runtime, tmp_path):
+    """Module scripts and workers must not be served as text/plain (Windows maps .mjs/.js unpredictably)."""
+    static = tmp_path / "dist"
+    (static / "assets").mkdir(parents=True)
+    (static / "index.html").write_text("<!doctype html><title>app</title>", encoding="utf-8")
+    (static / "assets" / "pdf.worker.min-abc.mjs").write_text("export {};", encoding="utf-8")
+    (static / "assets" / "index-abc.js").write_text("export {};", encoding="utf-8")
+    (static / "theme-boot.js").write_text("void 0;", encoding="utf-8")
+    app_client = TestClient(create_app(runtime, extra_hosts={"testserver"}, static_dir=static))
+    for path in ("/assets/pdf.worker.min-abc.mjs", "/assets/index-abc.js", "/theme-boot.js"):
+        response = app_client.get(path)
+        assert response.status_code == 200 and response.headers["content-type"].split(";")[0] == "text/javascript", path
+        assert response.headers["x-content-type-options"] == "nosniff"
+    page = app_client.get("/courses/be505/lectures/lecture-02")  # client-side route falls back to the app shell
+    assert page.status_code == 200 and "font-src 'self' data:" in page.headers["content-security-policy"]
+    assert app_client.get("/api/not-a-route").status_code == 404

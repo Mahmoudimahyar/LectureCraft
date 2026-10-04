@@ -1,0 +1,40 @@
+import { defineConfig, devices } from "@playwright/test";
+
+// Real-browser checks against a real fixture-profile Brain on loopback (see e2e/serve-brain.mjs).
+// One worker: every test shares one journal, exactly like one learner with one always-on PC.
+// These are LOCAL checks with a labeled test-double tutor; they are not live acceptance.
+const PORT = Number(process.env.LL_E2E_PORT ?? 8791);
+const baseURL = `http://127.0.0.1:${PORT}`;
+const chrome = devices["Desktop Chrome"];
+
+const viewport = (name: string, width: number, height: number, colorScheme: "light" | "dark", extra: Record<string, unknown> = {}) => ({
+  name,
+  use: { ...chrome, viewport: { width, height }, colorScheme, ...extra },
+});
+
+export default defineConfig({
+  testDir: "./e2e",
+  outputDir: "../.local/e2e-results/artifacts",
+  fullyParallel: false,
+  workers: 1,
+  retries: 0,
+  forbidOnly: !!process.env.CI,
+  timeout: 60_000,
+  expect: { timeout: 10_000 },
+  reporter: [["list"], ["json", { outputFile: "../.local/e2e-results/report.json" }]],
+  use: { baseURL, trace: "retain-on-failure", screenshot: "only-on-failure", actionTimeout: 10_000, launchOptions: { args: ["--autoplay-policy=no-user-gesture-required"] } },
+  webServer: { command: "node e2e/serve-brain.mjs", url: `${baseURL}/api/health`, reuseExistingServer: false, timeout: 120_000, stdout: "pipe", stderr: "pipe" },
+  projects: [
+    // Flows: every journey in a wide Light layout and a narrow Dark layout.
+    { ...viewport("flows-desktop-light", 1280, 800, "light"), testMatch: /flows\/.*\.spec\.ts/ },
+    { ...viewport("flows-phone-dark", 390, 844, "dark", { hasTouch: true }), testMatch: /flows\/.*\.spec\.ts/, dependencies: ["flows-desktop-light"] },
+    // Sweep: every screen at each required viewport in both themes (layout, contrast, accessibility, source fidelity).
+    ...(["light", "dark"] as const).flatMap((scheme) => [
+      viewport(`sweep-360-${scheme}`, 360, 800, scheme, { hasTouch: true }),
+      viewport(`sweep-390-${scheme}`, 390, 844, scheme, { hasTouch: true }),
+      viewport(`sweep-768-${scheme}`, 768, 1024, scheme),
+      viewport(`sweep-1280-${scheme}`, 1280, 800, scheme),
+      viewport(`sweep-1440-${scheme}`, 1440, 900, scheme),
+    ]).map((p) => ({ ...p, testMatch: /sweep\/.*\.spec\.ts/, dependencies: ["flows-phone-dark"] })),
+  ],
+});

@@ -24,7 +24,6 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
-from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from . import contracts as c
@@ -162,6 +161,19 @@ def create_app(runtime: Runtime, *, extra_hosts: set[str] | None = None, static_
         if data is None:
             raise HTTPException(404, "Draft bytes are not available on the Brain")
         return Response(data, media_type="text/plain; charset=utf-8")
+
+    @app.post("/api/courses/{course_id}/resume/resolve")
+    async def resume_resolve(course_id: str, request: Request):
+        """Operator choice between competing checkpoints. The set-aside draft is kept, not deleted."""
+        course(course_id)
+        body = await request.json()
+        state = runtime.coordinator.resume.state(course_id)
+        heads = {h["checkpoint_id"] for h in (state["conflict"] or {}).get("heads", [])}
+        chosen, aside = body.get("chosen"), list(body.get("set_aside") or [])
+        if chosen not in heads or not aside or not set(aside) <= heads - {chosen}:
+            raise HTTPException(400, "Choose one of the competing checkpoints and name the others to set aside")
+        runtime.coordinator.resume.resolve(course_id, chosen_checkpoint_id=chosen, set_aside=aside, resolution_id=f"res-{secrets.token_hex(6)}", at=runtime.now())
+        return runtime.coordinator.resume.state(course_id)
 
     @app.get("/api/courses/{course_id}/notes")
     def notes(course_id: str):
@@ -433,13 +445,12 @@ def create_app(runtime: Runtime, *, extra_hosts: set[str] | None = None, static_
 
     if static_dir is not None and (static_dir / "index.html").is_file():
         index = static_dir / "index.html"
-        app.mount("/assets", StaticFiles(directory=static_dir / "assets"), name="assets")
-
         @app.get("/{full_path:path}")
         def spa(full_path: str):
             candidate = static_dir / full_path
             if full_path and c.safe_relative(full_path) and candidate.is_file():
-                return FileResponse(candidate)
+                # Explicit types: the platform registry may map .js/.mjs to text/plain, which browsers refuse for modules.
+                return FileResponse(candidate, media_type=_STATIC_TYPES.get(candidate.suffix.lower()))
             if full_path.startswith("api/"):
                 raise HTTPException(404, "Unknown API route")
             return FileResponse(index, headers={"Content-Security-Policy": CSP})
@@ -447,5 +458,8 @@ def create_app(runtime: Runtime, *, extra_hosts: set[str] | None = None, static_
     return app
 
 
-CSP = ("default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; worker-src 'self' blob:; "
+_STATIC_TYPES = {".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".html": "text/html", ".json": "application/json", ".map": "application/json",
+                 ".svg": "image/svg+xml", ".png": "image/png", ".woff": "font/woff", ".woff2": "font/woff2", ".ttf": "font/ttf", ".wasm": "application/wasm", ".ico": "image/x-icon"}
+
+CSP = ("default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' blob:; worker-src 'self' blob:; "
        "connect-src 'self' https://www.googleapis.com https://accounts.google.com; frame-src https://accounts.google.com; object-src 'none'; base-uri 'none'; form-action 'none'")

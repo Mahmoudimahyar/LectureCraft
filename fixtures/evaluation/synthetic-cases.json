@@ -1,0 +1,55 @@
+{
+  "case_set": "synthetic-mechanics-v1",
+  "label_source": "synthetic",
+  "note": "Invented cases that exercise the evaluation mechanics only. They are not reviewed course material and can never justify a quality claim or a promotion.",
+  "cases": [
+    {
+      "id": "align-train-1", "task": "alignment", "split": "train", "course_id": "be505",
+      "slides": ["Enzyme kinetics\nMichaelis constant and maximum velocity", "Membrane transport\nChannels pumps and gradients"],
+      "lines": ["Enzyme kinetics start with the Michaelis constant.", "Maximum velocity is reached when the enzyme is saturated.", "Membrane transport uses channels and pumps.", "Gradients drive transport across the membrane."],
+      "truth_line_to_page": {"1": 1, "2": 1, "3": 2, "4": 2}
+    },
+    {
+      "id": "align-heldout-1", "task": "alignment", "split": "heldout", "course_id": "be562",
+      "slides": ["Chain rule for probabilities\nFactor a joint distribution step by step", "Conditional independence\nA factor drops a variable when it is independent given another", "Bayesian networks\nNodes are variables and edges are direct dependencies"],
+      "lines": ["The chain rule lets us factor any joint distribution.", "We factor the joint one variable at a time.", "Conditional independence lets a factor drop a variable.", "Given another variable the dependence disappears.", "A Bayesian network draws variables as nodes.", "Edges show the direct dependencies between nodes."],
+      "truth_line_to_page": {"1": 1, "2": 1, "3": 2, "4": 2, "5": 3, "6": 3}
+    },
+    {
+      "id": "assess-train-1", "task": "assessment", "split": "train", "course_id": "be505", "kind": "direct",
+      "question": "Explain what the origin of replication does.",
+      "rubric": [{"skill_id": "s.origin", "observable": "States that plasmid replication starts at the origin and it does not control gene expression."}],
+      "response": "Plasmid replication starts at the origin; it does not control gene expression.",
+      "expected": {"s.origin": "demonstrated"}, "sources": ["DNA replication of the plasmid begins at the origin."]
+    },
+    {
+      "id": "assess-heldout-direct", "task": "assessment", "split": "heldout", "course_id": "be505", "kind": "direct",
+      "question": "Explain the role of the promoter.",
+      "rubric": [{"skill_id": "s.promoter", "observable": "States that RNA polymerase binds the promoter and transcription of the downstream gene produces RNA."}],
+      "response": "RNA polymerase binds the promoter and transcription of the downstream gene produces RNA.",
+      "expected": {"s.promoter": "demonstrated"}, "sources": ["RNA polymerase binds at the promoter."],
+      "assessor_guidance": "RNA polymerase binds at the promoter and transcribes the downstream gene into messenger RNA."
+    },
+    {
+      "id": "assess-heldout-wrong", "task": "assessment", "split": "heldout", "course_id": "cs542", "kind": "counterexample",
+      "question": "Explain what maximum likelihood estimation chooses.",
+      "rubric": [{"skill_id": "s.mle", "observable": "States that the parameters chosen make the observed data most probable under the model."}],
+      "response": "It picks the average of all the inputs every time regardless of anything else.",
+      "expected": {"s.mle": "not_demonstrated"}, "sources": []
+    },
+    {
+      "id": "assess-heldout-alternative", "task": "assessment", "split": "heldout", "course_id": "be562", "kind": "valid_alternative",
+      "question": "Explain when a conditional independence simplifies a factor.",
+      "rubric": [{"skill_id": "s.ci", "observable": "States that a variable can be dropped from a factor when it is independent of the target given the remaining variables."}],
+      "response": "If knowing B already tells you everything A could tell you about C, then A adds nothing and you can leave A out of that term.",
+      "expected": {"s.ci": "demonstrated"}, "sources": []
+    },
+    {
+      "id": "assess-heldout-ambiguous", "task": "assessment", "split": "heldout", "course_id": "ds551", "kind": "ambiguous",
+      "question": "Describe how you would find the failing stage of a pipeline.",
+      "rubric": [{"skill_id": "s.debug", "observable": "Describes checking the output of each stage in order to isolate the first stage with a wrong result."}],
+      "response": "idk",
+      "expected": {"s.debug": "uncertain"}, "sources": []
+    }
+  ]
+}

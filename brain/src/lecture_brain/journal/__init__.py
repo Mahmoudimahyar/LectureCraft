@@ -360,7 +360,7 @@ class Journal:
             if to_state not in _LEGAL.get(job["state"], frozenset()):
                 raise JournalError(f"Illegal transition {job['state']} → {to_state}")
             values: dict[str, Any] = {"state": to_state, "updated_at": self.now(), "waiting_reason": waiting_reason}
-            if to_state in TERMINAL or to_state in WAITING or to_state in {S.READY, S.FAILED_RETRYABLE}:
+            if to_state in TERMINAL or to_state in WAITING or to_state in {S.READY, S.FAILED_RETRYABLE, S.UNCERTAIN_COMPLETION}:
                 values.update(lease_owner=None, lease_expires_at=None)
             if detail:
                 values["detail"] = json.dumps({**job["detail"], **detail}, sort_keys=True)

@@ -76,6 +76,10 @@ class CaptureStore:
             raise CaptureError("identity_mismatch", "submission belongs to another course")
         run = self.run_rel(record["session_id"])
         provided = attachments or {}
+        if not self._settings.policy.get("raw_teachback_audio_persistent_retention", False):
+            # Raw voice is not kept as evidence unless the user changed that policy: the corrected transcript is the response.
+            if any(a["media_type"].lower().startswith("audio/") for a in record["response"]["attachments"]):
+                raise CaptureError("audio_retention_not_permitted", "raw teach-back audio is not retained under the current policy; submit the reviewed transcript")
         for artifact in [*record["question"]["attachments"], *record["response"]["attachments"]]:
             data = provided.get(artifact["path"])
             if data is None:

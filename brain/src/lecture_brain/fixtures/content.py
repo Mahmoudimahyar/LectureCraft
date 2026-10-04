@@ -88,6 +88,7 @@ BE505_LECTURES = [
         "recording": "Fixture Lec 2 Sep 8.wav",
         "transcript": "Fixture Lec 2 Sep 8.txt",
         "indexed": {"slides": True, "transcript": True, "recording": False},
+        "cue_file": True,
         "slides": [
             {
                 "title": "Inducible promoters",

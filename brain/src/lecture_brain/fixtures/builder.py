@@ -25,7 +25,7 @@ from ..ownerio.attempts import learning_input_digest
 from ..ownerio.inventory import disk_version_id, unregistered_source_id
 from . import content as c
 
-FIXTURE_VERSION = "5"
+FIXTURE_VERSION = "6"
 MARKER = ".ll-synthetic-fixture"
 TERM = "2026-fall"
 FIXED_TIME = "2026-09-12T12:00:00Z"
@@ -103,6 +103,20 @@ def write_wav(path: Path, segments: list[tuple[float, float]], rate: int = 8000)
         out.setframerate(rate)
         out.writeframes(bytes(frames))
     return int(total * 1000)
+
+
+def _vtt(lecture: dict) -> str:
+    """A cue file with one cue per transcript line (synthetic timing spread evenly over each slide's interval)."""
+    def stamp(ms: int) -> str:
+        return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d}.{ms % 1000:03d}"
+
+    out = ["WEBVTT", ""]
+    for slide in lecture["slides"]:
+        start, end = slide["seconds"][0] * 1000, slide["seconds"][1] * 1000
+        step = (end - start) // len(slide["lines"])
+        for i, line in enumerate(slide["lines"]):
+            out += [f"{stamp(start + i * step)} --> {stamp(start + (i + 1) * step)}", line, ""]
+    return "\n".join(out)
 
 
 def _write(path: Path, data: bytes | str) -> None:
@@ -257,6 +271,8 @@ def _build_be505(root: Path) -> None:
             write_wav(root / session_dir / lecture["recording"], segments)
             lines = [line for s in lecture["slides"] for line in s["lines"]] + [line for r in lecture["revisits"] for line in r["lines"]]
             _write(root / session_dir / lecture["transcript"], "\n".join(lines) + "\n")
+            if lecture.get("cue_file"):
+                _write(root / session_dir / Path(lecture["transcript"]).with_suffix(".vtt").name, _vtt(lecture))
             if lecture["indexed"]["transcript"]:
                 related.append(f"src-lecture-{nn}-transcript")
                 sources.append(_entry(root, f"src-lecture-{nn}-transcript", "lecture_transcript", f"{session_dir}/{lecture['transcript']}", date=lecture["session"],
@@ -364,13 +380,8 @@ def _build_be505(root: Path) -> None:
                 state="suggested", basis="transcript_only", support=support, reviewer=None)
     _annotation(root, "ann-l01-s04-ps01", "practiced_by", slide4, _source_ref(root, index, "src-ps-01-brief", {"kind": "page", "page": 1, "printed_label": None}),
                 state="confirmed", basis="manual_review", support=support, reviewer="fixture-reviewer")
-    # Lecture 02: pipeline suggestions only (recording is on disk but not registered in the owner index).
-    rec2_rel = f"materials/sessions/{l2['session']}-lecture/{l2['recording']}"
-    support2 = _artifact(root, f"materials/sessions/{l2['session']}-lecture/{l2['transcript']}", "text/plain")
-    for i, s in enumerate(l2["slides"][:2], start=1):
-        page = _source_ref(root, index, "src-lecture-02-slides", {"kind": "page", "page": i, "printed_label": None})
-        media = _disk_ref(root, rec2_rel, {"kind": "media", "start_ms": s["seconds"][0] * 1000, "end_ms": s["seconds"][1] * 1000, "origin": "original_source_start"})
-        _annotation(root, f"ann-l02-s{i:02d}-o1-displayed", "displayed_during", page, media, state="suggested", basis="transcript_only", support=support2, reviewer=None)
+    # Lecture 02 carries no seeded links: its suggestions are produced by the preparation pipeline from the cue file.
+    del l2
 
 
 # ---- lighter courses ----------------------------------------------------------------------------

@@ -27,7 +27,7 @@ def _revise(entry, **changes):
 
 def test_fixture_links_load_with_typed_precision(store):
     state = store.load("be505")
-    assert len(state["current"]) == 20 and state["problems"] == [] and state["conflicts"] == []
+    assert len(state["current"]) == 18 and state["problems"] == [] and state["conflicts"] == []
     textbook = state["current"]["ann-l01-s03-textbook"]["record"]
     chapter = state["current"]["ann-l01-s02-textbook-chapter"]["record"]
     assert precision_of(textbook) == "exact_page" and textbook["to"]["locator"]["printed_label"] == "34"

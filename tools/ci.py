@@ -9,6 +9,7 @@ reported by `lecture-brain acceptance` instead.
     python tools/ci.py                     # all stages
     python tools/ci.py --only brain web-unit
     python tools/ci.py --only brain -- brain/tests/test_contracts.py
+    python tools/ci.py --task LL013        # the checks declared for one task in config/task-checks.json
 """
 from __future__ import annotations
 
@@ -69,9 +70,24 @@ def stages(extra: list[str]) -> dict[str, list[tuple[list[str], Path]]]:
     }
 
 
+def task_plan(task: str) -> list[tuple[str, list[str]]]:
+    """The declared checks for one task: [(stage, extra args)]. '@flows' expands to the two flow projects."""
+    declared = json.loads((ROOT / "config" / "task-checks.json").read_text(encoding="utf-8"))
+    if task not in declared["tasks"]:
+        raise SystemExit(f"No checks are declared for {task} in config/task-checks.json")
+    plan = []
+    for stage, extra in declared["tasks"][task]:
+        expanded: list[str] = []
+        for arg in extra:
+            expanded.extend(declared["flow_projects"] if arg == "@flows" else [arg])
+        plan.append((stage, expanded))
+    return plan
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--only", nargs="+", help="Stage names to run (default: all)")
+    parser.add_argument("--task", help="Run the checks declared for this task id (config/task-checks.json)")
     parser.add_argument("--list", action="store_true")
     parser.add_argument("extra", nargs=argparse.REMAINDER, help="Arguments after -- go to the single selected stage")
     args = parser.parse_args()
@@ -80,19 +96,27 @@ def main() -> int:
     if args.list:
         print(json.dumps(sorted(table), indent=2))
         return 0
-    selected = args.only or list(table)
-    unknown = [s for s in selected if s not in table]
-    if unknown:
-        print(f"Unknown stage(s): {unknown}; available: {sorted(table)}", file=sys.stderr)
-        return 2
-    if extra and len(selected) != 1:
-        print("Extra arguments require exactly one --only stage", file=sys.stderr)
-        return 2
-    env = dict(os.environ, PYTHONIOENCODING="utf-8", CI="1", FORCE_COLOR="0", NO_COLOR="1")
+    if args.task:
+        if args.only or extra:
+            print("--task cannot be combined with --only or extra arguments", file=sys.stderr)
+            return 2
+        runs = [(stage, stages(stage_extra)[stage]) for stage, stage_extra in task_plan(args.task)]
+    else:
+        selected = args.only or list(table)
+        unknown = [s for s in selected if s not in table]
+        if unknown:
+            print(f"Unknown stage(s): {unknown}; available: {sorted(table)}", file=sys.stderr)
+            return 2
+        if extra and len(selected) != 1:
+            print("Extra arguments require exactly one --only stage", file=sys.stderr)
+            return 2
+        runs = [(name, table[name]) for name in selected]
+    env = dict(os.environ, PYTHONIOENCODING="utf-8", CI="1", NO_COLOR="1")
+    env.pop("FORCE_COLOR", None)
     summary = []
     failed = False
-    for name in selected:
-        for argv, cwd in table[name]:
+    for name, commands in runs:
+        for argv, cwd in commands:
             start = time.monotonic()
             print(f"\n=== [{name}] {' '.join(argv[1:] if argv[0] in (sys.executable, _node()) else argv)}", flush=True)
             code = subprocess.run(argv, cwd=cwd, env=env, check=False).returncode
@@ -102,7 +126,7 @@ def main() -> int:
                 break
         if failed:
             break
-    print("\n" + json.dumps({"status": "FAIL" if failed else "PASS", "stages": summary,
+    print("\n" + json.dumps({"status": "FAIL" if failed else "PASS", **({"task": args.task} if args.task else {}), "stages": summary,
                              "scope": "Local application checks only. Not live native/Drive/writer/device acceptance."}, indent=2))
     return 1 if failed else 0
 

@@ -45,6 +45,12 @@ export function SessionWrapUp() {
     void Promise.all([listDrafts(courseId), listOutbox()]).then(([d, o]) => setDevice({ drafts: d.filter((x) => x.text.trim()).length, outbox: o.length }));
   }, [courseId, local.dataUpdatedAt]);
 
+  // The checkpoint written by "Finish session" is processed by the Brain a moment later: follow it.
+  useEffect(() => {
+    void resume.refetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activity.dataUpdatedAt]);
+
   const mine = useMemo(() => (local.data ?? []).filter((r) => r.sessionId === sessionId).sort((a, b) => a.createdAt.localeCompare(b.createdAt)), [local.data, sessionId]);
   const jobs = useMemo(() => new Map((activity.data?.jobs ?? []).filter((j) => j.request_id).map((j) => [j.request_id!, j])), [activity.data]);
 

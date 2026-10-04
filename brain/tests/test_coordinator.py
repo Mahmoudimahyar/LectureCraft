@@ -522,3 +522,54 @@ def test_an_unregistered_slide_is_usable_as_context_and_a_changed_file_is_not_pa
         assert "Bayesian networks" not in message["text"]
     finally:
         env.journal.close()
+
+
+# ---- real-roots profile: complete local capture, zero course writes, no invented record ---------------
+def test_read_only_profile_keeps_a_complete_submission_locally_and_writes_nothing_into_the_course(workspace, tmp_path, clock):
+    """`local` is the profile used on real course folders. Everything the learner submits must be kept in full in the
+    private state folder; the course folder must stay byte-for-byte as it was; nothing may be recorded as an attempt
+    while no tutor has assessed it; and no other provider may be substituted."""
+    import hashlib
+
+    from lecture_brain.native import select_adapter
+
+    settings = load_settings("local", env={}, planner_config=workspace / "University" / "Fixture Brain" / "planner-config.yaml", state_dir=tmp_path / "private-state")
+    assert settings.course_writes_enabled is False and settings.native_dispatch_enabled is False
+    assert isinstance(select_adapter(settings), UnverifiedNativeAdapter)
+
+    def tree(root):
+        return {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(root.rglob("*")) if p.is_file()}
+
+    roots = {cid: b.root for cid, b in settings.courses.items()}
+    before = {cid: tree(root) for cid, root in roots.items()}
+    planner_before = tree(settings.planner_root)
+    env = Env(settings, clock, adapter_cls=UnverifiedNativeAdapter)
+    try:
+        answer = "Replication starts at the origin; it does not decide whether the gene is expressed. " + "Detail. " * 400  # a long, complete answer
+        env.explain("req-local-explain", text=answer)
+        env.ask("req-local-ask", text="And what does the promoter add?")
+        env.send("req-local-note", "save_note", {"contract": "ll.control/1", "event_id": "evt-req-local-note", "request_id": "req-local-note", "scope": {"course_id": "be505", "term": "2026-fall"},
+                                                 "created_at": "2026-10-04T10:00:00Z", "command": {"kind": "save_note", "text": "My own note.", "sources": [], "attachments": []}})
+        for _ in range(4):
+            env.coordinator.tick()
+
+        # 1. The complete submission is preserved, verbatim, under the private state folder only.
+        frozen = list((tmp_path / "private-state").rglob("turns/turn-req-local-explain.json"))
+        assert len(frozen) == 1 and json.loads(frozen[0].read_text(encoding="utf-8"))["response"]["text"] == answer
+        assert any("And what does the promoter add?" in p.read_text(encoding="utf-8") for p in (tmp_path / "private-state").rglob("messages/*.json"))
+        assert all(p.is_relative_to(tmp_path / "private-state") for p in frozen)
+        # 2. Not one byte changed in any course folder or in the planner folder.
+        assert {cid: tree(root) for cid, root in roots.items()} == before
+        assert tree(settings.planner_root) == planner_before
+        # 3. Nothing was assessed, so nothing claims to be an attempt — in the course or in staging.
+        assert env.job("req-local-explain")["state"] == S.AUTH_REQUIRED and "not enabled" in env.job("req-local-explain")["waiting_reason"]
+        assert env.job("req-local-ask")["state"] == S.AUTH_REQUIRED
+        assert not list((tmp_path / "private-state").rglob("*.candidate")) and not list((tmp_path / "private-state").rglob("learning/attempts/*/*.json"))
+        assert len(read_attempt_records(roots["be505"], "be505")["attempts"]) == 4  # the course's own earlier records, untouched
+        # 4. No tutor turn was sent anywhere and no answer was fabricated.
+        assert env.journal.counts()["dispatches"] == 0 and env.result("req-local-ask") is None and env.result("req-local-explain") is None
+        # 5. The learner's own note needs no tutor: it is kept (staged locally), still outside the course.
+        assert env.job("req-local-note")["state"] == S.SUCCEEDED
+        assert any("My own note." in p.read_text(encoding="utf-8") for p in (tmp_path / "private-state").rglob("notes/*.json"))
+    finally:
+        env.journal.close()

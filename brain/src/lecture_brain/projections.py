@@ -149,6 +149,15 @@ class Projector:
             texts = c.parse_json((self.preparation.prepared_dir(course_id, lecture_id) / "slides-text.json").read_bytes())["pages"]
         except (OSError, c.ContractError, KeyError):
             texts = None
+        prepared = texts is not None
+        if texts is None and display["kind"] == "original_pdf":
+            # Not prepared yet: the deck can still be read. Count its pages so navigation works; text arrives with preparation.
+            try:
+                from pypdf import PdfReader
+
+                texts = [""] * len(PdfReader(str(root / deck["path"])).pages)
+            except Exception:  # noqa: BLE001 - an unreadable PDF is shown as unavailable text, not a crash
+                texts = None
         catalogs = self._catalogs(course_id)
         questions = (catalogs["questions"] or {}).get("questions", {})
         concepts = (catalogs["questions"] or {}).get("concepts", {})
@@ -201,7 +210,8 @@ class Projector:
         for page in pages:
             links = slides_links.get(page, {"occurrences": [], "transcript_ranges": [], "related": []})
             text = texts[page - 1] if texts else None
-            slides.append({"page": page, "title": (text or "").splitlines()[0][:120] if text else None, "text": text, "text_status": "extracted" if text else "no_text_layer",
+            slides.append({"page": page, "title": (text or "").splitlines()[0][:120] if text else None, "text": text or None,
+                           "text_status": "extracted" if text else ("no_text_layer" if prepared else "not_prepared"),
                            "concepts": sorted(page_concepts.get(page, {}).values(), key=lambda x: x["label"]), "questions": page_questions.get(page, []),
                            "occurrences": sorted(links["occurrences"], key=lambda o: o["start_ms"]), "transcript_ranges": sorted(links["transcript_ranges"], key=lambda o: o["start"]),
                            "related": links["related"]})

@@ -392,9 +392,11 @@ export function RepairPreview() {
   const preview = useQuery<RepairPreviewData, Error>({ queryKey: ["repair", operationId], queryFn: () => apiGet(`maintenance/preview?issue_id=${encodeURIComponent(operationId)}`), retry: false });
   const [result, setResult] = useState<{ status: string; reason?: string; wrote?: string[]; job_state?: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  // Once approved, keep showing what was approved next to its receipt even though the issue itself is now gone.
+  const [approved, setApproved] = useState<RepairPreviewData | null>(null);
   if (preview.isLoading) return <LoadingState />;
-  if (preview.isError || !preview.data) return <ErrorState error={preview.error} />;
-  const p = preview.data;
+  if (!approved && (preview.isError || !preview.data)) return <ErrorState error={preview.error} />;
+  const p = approved ?? preview.data!;
   return (
     <div className="mx-auto max-w-3xl">
       <Link to="/settings/maintenance" className="ll-btn ll-btn-sm mb-3">← Maintenance</Link>
@@ -409,17 +411,18 @@ export function RepairPreview() {
             {p.expected_writes && <><dt className="text-muted">Would write</dt><dd>{p.expected_writes.join("; ")}</dd></>}
             {p.unchanged && <><dt className="text-muted">Stays unchanged</dt><dd>{p.unchanged.join("; ")}</dd></>}
           </dl>
-          {p.allowed ? (
+          {p.allowed && !result ? (
             <div><Button variant="primary" busy={busy} onClick={async () => {
               setBusy(true);
               try {
+                setApproved(p);
                 setResult(await apiPost("maintenance/apply", { issue_id: operationId }));
                 await queryClient.invalidateQueries();
               } finally {
                 setBusy(false);
               }
             }}>Approve this repair only</Button></div>
-          ) : <Callout tone="caution" title="Not something this app does">{p.blocked_reason}</Callout>}
+          ) : !p.allowed ? <Callout tone="caution" title="Not something this app does">{p.blocked_reason}</Callout> : null}
           {result && <Callout tone={result.status === "done" ? "success" : "caution"} role="status" title={result.status === "done" ? "Repair receipt" : "Not completed"}>
             {result.status === "done" ? `Done.${result.wrote ? ` Wrote: ${result.wrote.join(", ")}.` : ""}${result.job_state ? ` Request is now ${result.job_state.toLowerCase().replace(/_/g, " ")}.` : ""} Nothing else was changed.` : result.reason ?? `Still pending${result.job_state ? ` (${result.job_state})` : ""}.`}
           </Callout>}

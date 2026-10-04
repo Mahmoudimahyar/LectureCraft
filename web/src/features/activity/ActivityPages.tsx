@@ -3,7 +3,7 @@
 // the one action that is actually possible. Unknown outcomes are checked, never blindly re-sent; a
 // conflict keeps both versions until the learner chooses.
 import { useEffect, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useApp } from "@/app/state";
 import { Button, Callout, EmptyState, ErrorState, formatMs, formatWhen, LoadingState, PageHeader, StatusChip } from "@/components/ui";
@@ -184,6 +184,7 @@ export function ConflictResolution() {
 function ResumeConflict({ courseId }: { courseId: string }) {
   const resume = useResume(courseId);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -222,6 +223,7 @@ function ResumeConflict({ courseId }: { courseId: string }) {
                 try {
                   await apiPost(`courses/${courseId}/resume/resolve`, { chosen: head.checkpoint_id, set_aside: heads.filter((h) => h.checkpoint_id !== head.checkpoint_id).map((h) => h.checkpoint_id) });
                   await queryClient.invalidateQueries({ queryKey: ["resume", courseId] });
+                  navigate(`/courses/${courseId}/lectures/${head.cursor.lecture_id}?page=${page}`); // opens paused; the other draft stays kept
                 } catch (e) {
                   setError((e as Error).message);
                 } finally {

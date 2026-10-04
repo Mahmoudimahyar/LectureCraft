@@ -105,3 +105,15 @@ def test_manifest_pins_what_a_release_must_name(tree, tmp_path):
     assert len(manifest["contracts_sha256"]) == 64
     assert manifest["static_built"] is True
     assert manifest["residual_blockers"]  # every uncleared gate is named with what it requires
+
+
+def test_board_summary_uses_the_ledgers_own_words_for_a_current_receipt():
+    """The build board reports a receipt on the unchanged tree as CURRENT (not FRESH); only that counts as complete."""
+    def status(freshness: str, state: str = "LOCAL_TESTED") -> dict:
+        return {"counts": {"LOCAL_TESTED": 2}, "tasks": {"LL001": {"state": "LOCAL_TESTED", "test_freshness": "CURRENT"}, "LL002": {"state": state, "test_freshness": freshness}}}
+
+    assert pc.summarize_board(status("CURRENT")) == {"complete": True, "counts": {"LOCAL_TESTED": 2}, "stale_or_missing": []}
+    for freshness in ("STALE", "NOT_RUN", "INVALID"):
+        assert pc.summarize_board(status(freshness))["complete"] is False
+        assert pc.summarize_board(status(freshness))["stale_or_missing"] == ["LL002"]
+    assert pc.summarize_board(status("CURRENT", state="IN_PROGRESS"))["complete"] is False

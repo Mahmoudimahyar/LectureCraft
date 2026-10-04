@@ -60,16 +60,20 @@ def gate_summary(root: Path) -> dict:
             "blockers": [{"gate": g["id"], "state": g["state"], "requires": g["required"]} for g in sorted(gates, key=lambda g: g["id"]) if g["state"] != "CLEARED"]}
 
 
+def summarize_board(status: dict) -> dict:
+    """Complete only when every task is LOCAL_TESTED with a receipt recorded on the present tree (the ledger's CURRENT)."""
+    tasks = status["tasks"]
+    behind = sorted(k for k, t in tasks.items() if t["state"] != "LOCAL_TESTED" or t["test_freshness"] != "CURRENT")
+    return {"complete": not behind, "counts": status["counts"], "stale_or_missing": behind}
+
+
 def board_summary(root: Path) -> dict:
-    """What the local build ledger says. Fresh LOCAL_TESTED for every task is necessary, never sufficient."""
+    """What the local build ledger says. Current LOCAL_TESTED receipts for every task are necessary, never sufficient."""
     result = subprocess.run([sys.executable, str(root / "tools/build_board.py"), "status"], cwd=root, capture_output=True, text=True, check=False)
     try:
-        status = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        return {"complete": False, "counts": {}, "problem": "build board status unavailable"}
-    tasks = status["tasks"]
-    complete = all(t["state"] == "LOCAL_TESTED" and t["test_freshness"] == "FRESH" for t in tasks.values())
-    return {"complete": complete, "counts": status["counts"], "stale_or_missing": sorted(k for k, t in tasks.items() if t["state"] != "LOCAL_TESTED" or t["test_freshness"] != "FRESH")}
+        return summarize_board(json.loads(result.stdout))
+    except (json.JSONDecodeError, KeyError):
+        return {"complete": False, "counts": {}, "stale_or_missing": [], "problem": "build board status unavailable"}
 
 
 def label_for(gates: dict, *, dirty: bool, board: dict) -> str:

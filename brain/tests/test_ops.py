@@ -372,6 +372,31 @@ def test_drafted_unreviewed_cases_are_accepted_as_a_case_set_but_never_count_as_
     assert any("not human-reviewed" in reason for reason in report["promotion"]["reasons"])
     # Mixing one reviewed file with a drafted one never yields "reviewed".
     reviewed = tmp_path / "reviewed.json"
-    reviewed.write_text(json.dumps(dict(drafted, case_set="rev", label_source="reviewed")), encoding="utf-8")
+    signed = [dict(case, review={"status": "reviewed", "reviewer": "course owner", "reviewed_at": "2026-10-05"}) for case in drafted["cases"]]
+    reviewed.write_text(json.dumps(dict(drafted, case_set="rev", label_source="reviewed", cases=signed)), encoding="utf-8")
     mixed = run_evaluation([reviewed, path], ScriptedReplyAdapter([path]), policy=settings.policy, out_dir=tmp_path / "eval2", rubric_digest="r1")
     assert mixed["label_source"] != "reviewed" and mixed["promotion"]["promote"] is False
+
+
+def test_a_case_file_cannot_be_called_reviewed_unless_every_case_was_reviewed_by_a_named_person(repo, tmp_path):
+    """Changing one word at the top of a drafted file must not turn drafts into reviewed labels. Each case carries its
+    own review record; a file claiming "reviewed" with any case still awaiting review, or reviewed by its own author
+    the development assistant, is refused."""
+    drafted = json.loads((repo / "fixtures/evaluation/case-kinds.json").read_text(encoding="utf-8"))
+    path = tmp_path / "claimed.json"
+
+    def claim(cases):
+        path.write_text(json.dumps(dict(drafted, case_set="claimed", label_source="reviewed", cases=cases)), encoding="utf-8")
+        return load_cases(path)
+
+    with pytest.raises(ValueError, match="not reviewed case by case"):
+        claim(drafted["cases"])  # no review record at all
+    waiting = [dict(case, review={"status": "awaiting_owner_review", "drafted_by": "development assistant"}) for case in drafted["cases"]]
+    with pytest.raises(ValueError, match="not reviewed case by case"):
+        claim(waiting)
+    signed = [dict(case, review={"status": "reviewed", "reviewer": "course owner", "reviewed_at": "2026-10-05"}) for case in drafted["cases"]]
+    with pytest.raises(ValueError, match="not reviewed case by case"):
+        claim(signed[:-1] + [waiting[-1]])  # one left over is enough
+    with pytest.raises(ValueError, match="not reviewed case by case"):
+        claim([dict(case, review={"status": "reviewed", "reviewer": "development assistant", "reviewed_at": "2026-10-05"}) for case in drafted["cases"]])
+    assert claim(signed)["label_source"] == "reviewed"

@@ -46,6 +46,13 @@ def load_cases(path: Path) -> dict[str, Any]:
             raise ValueError(f"case file lacks {key}")
     if data["label_source"] not in {"synthetic", "drafted_unreviewed", "reviewed"}:
         raise ValueError("label_source must be 'synthetic', 'drafted_unreviewed' or 'reviewed'")
+    if data["label_source"] == "reviewed":
+        # "Reviewed" is a statement about every case, made by a named person who is not the drafter.
+        unreviewed = [str(case.get("id")) for case in data["cases"]
+                      if (case.get("review") or {}).get("status") != "reviewed" or not str((case.get("review") or {}).get("reviewer") or "").strip()
+                      or not (case.get("review") or {}).get("reviewed_at") or "assistant" in str((case.get("review") or {}).get("reviewer")).lower()]
+        if unreviewed:
+            raise ValueError(f"case file claims 'reviewed' but is not reviewed case by case (a named reviewer and date on each): {', '.join(unreviewed[:8])}")
     data["digest"] = hashlib.sha256(path.read_bytes()).hexdigest()
     return data
 

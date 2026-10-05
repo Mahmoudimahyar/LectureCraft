@@ -28,7 +28,8 @@ from typing import Any
 from . import NativeBlocked, NativeObservation, NativeSubmission
 
 SANDBOX_POLICY = {"read-only": {"type": "readOnly"}, "workspace-write": {"type": "workspaceWrite"}}
-APPROVAL_POLICY = {"never": "never", "on-request": "onRequest", "unless-trusted": "unlessTrusted"}
+# Wire values follow the installed app-server's own generated schema (AskForApproval: untrusted | on-request | never).
+APPROVAL_POLICY = {"never": "never", "on-request": "on-request", "untrusted": "untrusted"}
 CLIENT_INFO = {"name": "lecture-learning-brain", "title": "Lecture Learning Brain", "version": "0.1.0"}
 
 

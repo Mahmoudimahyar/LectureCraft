@@ -89,7 +89,8 @@ def test_roundtrip_uses_explicit_thread_and_policies(tmp_path):
     assert [c["method"] for c in calls] == ["initialize", "initialized", "thread/resume", "turn/start"]
     assert calls[2]["params"] == {"threadId": THREAD}
     start = calls[3]["params"]
-    assert start["sandboxPolicy"] == {"type": "readOnly"} and start["approvalPolicy"] == "onRequest" and start["threadId"] == THREAD
+    # Wire values as the installed app-server's own generated schema declares them (AskForApproval: untrusted | on-request | never).
+    assert start["sandboxPolicy"] == {"type": "readOnly"} and start["approvalPolicy"] == "on-request" and start["threadId"] == THREAD
     assert not any("list" in c["method"] for c in calls)  # never list-and-pick
 
 
@@ -215,3 +216,89 @@ def test_assessment_must_cover_exactly_the_intended_skills():
 def test_malformed_reply_is_kept_as_text_without_invented_structure():
     out = parse_tutor_output("Just some prose, not JSON.", expect_assessment=True, intended_skill_ids=["a"], max_sources=0)
     assert out.structured is False and out.reply_markdown == "Just some prose, not JSON." and out.observations is None
+
+
+# ---- the single-request proof on a new disposable thread -----------------------------------------------------------
+from lecture_brain.native.disposable_proof import DISABLED_FEATURES, proof_report_path, run_disposable_proof  # noqa: E402
+
+
+def _disposable(settings, **native):
+    _live(settings, purpose="disposable-proof", proof_target="new-disposable-thread", **native)
+    settings.native_binding.setdefault("approval_policy", "never")
+    if "approval_policy" not in native:
+        settings.native_binding["approval_policy"] = "never"
+    return settings
+
+
+def _calls(log):
+    return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()] if log.exists() else []
+
+
+def _run(settings, tmp_path, mode="normal", execute=True, budget=15.0):
+    log = tmp_path / f"rpc-{mode}.log"
+    log.unlink(missing_ok=True)
+    report = run_disposable_proof(settings, execute=execute, argv_prefix=[sys.executable, str(FAKE), mode, str(log)], budget_seconds=budget, rpc_timeout=15.0)
+    return report, _calls(log)
+
+
+def test_disposable_proof_sends_exactly_one_request_after_reading_back_a_safe_scope(settings, tmp_path):
+    report, calls = _run(_disposable(settings), tmp_path)
+    assert report["classification"] == "SEPARATE_WORKER_ONLY", report["findings"]  # never "verified": this process cannot see the desktop app
+    assert set(report["checks"].values()) == {"PASS"} and report["turns_sent"] == 1
+    methods = [c["method"] for c in calls]
+    assert methods.count("turn/start") == 1 and methods.count("thread/start") == 1 and "thread/resume" not in methods
+    # Scope is read back from the process before the thread exists, and the thread before the request.
+    second = methods[methods.index("initialize", 1):]
+    assert second.index("account/read") < second.index("config/read") < second.index("thread/start") < second.index("turn/start") < len(second) - 1
+    turn = next(c["params"] for c in calls if c["method"] == "turn/start")
+    assert turn["sandboxPolicy"] == {"type": "readOnly"} and turn["approvalPolicy"] == "never" and turn["threadId"] == report["target"]["thread_id"]
+    nonce = report["request"]["nonce"]
+    assert turn["input"] == [{"type": "text", "text": report["request"]["prompt"]}] and nonce in report["request"]["prompt"] and report["request"]["request_id"] in report["request"]["prompt"]
+    assert report["result"]["terminal_status"] == "completed" and report["result"]["visible_answer"] == f"LL-PROOF {nonce}"
+    assert report["effective"]["sandbox_mode"] == "read-only" and report["effective"]["mcp_servers_enabled"] == [] and report["effective"]["notify"] == [] and report["effective"]["web_search"] == "disabled"
+    assert all(feature in report["launch_arguments"] for feature in DISABLED_FEATURES) and "mcp_servers.node_repl.enabled=false" in report["launch_arguments"]
+    # It is recorded apart from the adapter proof and can never make tutoring selectable.
+    assert proof_report_path(settings).is_file() and load_proof(settings) is None
+    settings.native_binding["course_targets_confirmed"] = True
+    assert isinstance(select_adapter(settings), UnverifiedNativeAdapter)
+
+
+def test_disposable_proof_inspection_creates_no_thread_and_sends_nothing(settings, tmp_path):
+    report, calls = _run(_disposable(settings), tmp_path, execute=False)
+    methods = [c["method"] for c in calls]
+    assert report["ready_to_execute"] is True and report["turns_sent"] == 0 and report["target"] is None
+    assert "thread/start" not in methods and "turn/start" not in methods and not proof_report_path(settings).exists()
+
+
+@pytest.mark.parametrize("mode,failed", [("apikey", "managed_chatgpt_signin"), ("ignores-sandbox", "effective_sandbox_read_only"), ("tools-stay", "no_enabled_tool_servers"),
+                                         ("hooks", "no_hooks_or_notify_program")])
+def test_disposable_proof_blocks_before_any_thread_when_the_effective_scope_is_not_safe(settings, tmp_path, mode, failed):
+    report, calls = _run(_disposable(settings), tmp_path, mode)
+    methods = [c["method"] for c in calls]
+    assert report["classification"] == "BLOCKED" and report["checks"][failed] == "FAIL" and report["turns_sent"] == 0
+    assert "thread/start" not in methods and "turn/start" not in methods
+
+
+@pytest.mark.parametrize("mode,failed", [("instructions", "thread_has_no_instruction_files"), ("thread-full-access", "thread_sandbox_read_only")])
+def test_disposable_proof_blocks_before_the_request_when_the_new_thread_has_the_wrong_scope(settings, tmp_path, mode, failed):
+    report, calls = _run(_disposable(settings), tmp_path, mode)
+    assert report["classification"] == "BLOCKED" and report["checks"][failed] == "FAIL" and report["turns_sent"] == 0
+    assert "turn/start" not in [c["method"] for c in calls]
+
+
+def test_disposable_proof_refuses_an_unsuitable_binding_without_starting_anything(settings, tmp_path):
+    for native in ({"sandbox": "danger-full-access"}, {"approval_policy": "on-request"}, {"purpose": "tutoring"}, {"proof_target": None}, {"executable": str(tmp_path / "missing.exe")}):
+        _disposable(settings)
+        settings.native_binding.update(native)
+        report, calls = _run(settings, tmp_path, "normal")
+        assert report["classification"] == "BLOCKED" and report["turns_sent"] == 0 and calls == [], native
+
+
+def test_disposable_proof_never_resends_and_never_upgrades_an_unclear_outcome(settings, tmp_path):
+    report, calls = _run(_disposable(settings), tmp_path, "silent", budget=1.5)
+    assert report["classification"] == "UNCERTAIN_COMPLETION" and report["turns_sent"] == 1
+    assert [c["method"] for c in calls].count("turn/start") == 1
+    for mode, expected in (("wrong-answer", "PARTIAL"), ("fail", "BLOCKED"), ("tool-activity", "PARTIAL")):
+        report, calls = _run(_disposable(settings), tmp_path, mode)
+        assert report["classification"] == expected, (mode, report["classification"], report["findings"])
+        assert [c["method"] for c in calls].count("turn/start") == 1

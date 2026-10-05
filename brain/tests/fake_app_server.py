@@ -5,6 +5,8 @@ resume by explicit id, turn start with explicit policies, terminal notifications
 requests, interruption and silence. Mode is argv[1]; a turn log is appended to argv[2].
 """
 import json
+import os
+import re
 import sys
 import time
 
@@ -32,6 +34,23 @@ for flag, value in zip(launch, launch[1:]):
             effective[key] = parsed
 
 
+# Optional memory across processes (LL_FAKE_STATE): a thread created by one process can be resumed by the next,
+# with its turns and whatever it was asked to remember — or without the latter in mode "forgets".
+STATE = os.environ.get("LL_FAKE_STATE")
+memory = {"thread": None, "marker": None}
+if STATE and os.path.exists(STATE):
+    with open(STATE, encoding="utf-8") as handle:
+        saved = json.load(handle)
+    turns, memory = saved["turns"], saved["memory"]
+    KNOWN_THREAD = memory["thread"] or KNOWN_THREAD
+
+
+def save():
+    if STATE:
+        with open(STATE, "w", encoding="utf-8") as handle:
+            json.dump({"turns": turns, "memory": memory}, handle)
+
+
 def send(obj):
     sys.stdout.write(json.dumps(obj) + "\n")
     sys.stdout.flush()
@@ -52,10 +71,13 @@ for raw in sys.stdin:
     elif method == "initialized":
         pass
     elif method == "thread/resume":
-        if params.get("threadId") != KNOWN_THREAD:
+        if params.get("threadId") != KNOWN_THREAD or mode == "resume-fails":
             send({"id": mid, "error": {"code": -32000, "message": "thread not found"}})
         else:
-            send({"id": mid, "result": {"thread": {"id": KNOWN_THREAD}}})
+            send({"id": mid, "result": {"thread": {"id": "thread-some-other" if mode == "resumes-other" else KNOWN_THREAD, "turns": list(turns.values())}, "cwd": params.get("cwd"),
+                                        "sandbox": {"type": "dangerFullAccess"} if mode == "thread-full-access" else {"type": "readOnly", "networkAccess": False},
+                                        "approvalPolicy": params.get("approvalPolicy"), "instructionSources": ["C:/somewhere/AGENTS.md"] if mode == "instructions" else [],
+                                        "model": "double-model", "modelProvider": "double"}})
     elif method == "turn/start":
         if params.get("sandboxPolicy", {}).get("type") == "dangerFullAccess":
             send({"id": mid, "error": {"code": -32001, "message": "test double refuses full access"}})
@@ -63,7 +85,12 @@ for raw in sys.stdin:
         turn_id = f"turn-{len(turns) + 1}"
         text = params["input"][0]["text"]
         turns[turn_id] = {"id": turn_id, "status": "inProgress", "items": []}
+        save()
         send({"id": mid, "result": {"turn": {"id": turn_id, "status": "inProgress"}}})
+        remembered = re.search(r"LL-MARK [0-9a-f]+", text)
+        if remembered and "next message" in text:
+            memory["marker"] = remembered.group(0)
+            save()
         if mode == "silent" or "interrupt test" in text:
             continue  # never completes on its own
         if mode == "approval":
@@ -78,9 +105,11 @@ for raw in sys.stdin:
             continue
         if mode == "tool-activity":
             send({"method": "item/completed", "params": {"item": {"type": "commandExecution", "id": "item-0", "command": "dir"}}})
-        reply = "LL-PROOF 0000000000000000" if mode == "wrong-answer" else text.split("nothing else: ", 1)[1] if "nothing else: " in text else json.dumps({"reply_markdown": "double reply", "sources_used": [], "uncertainty": None, "assessment": None, "diagnostic": None})
+        asks_for_marker = "previous message" in text and "nothing else: " not in text
+        reply = "LL-PROOF 0000000000000000" if mode == "wrong-answer" else ("I have no earlier message from you." if mode == "forgets" or not memory["marker"] else memory["marker"]) if asks_for_marker else text.split("nothing else: ", 1)[1] if "nothing else: " in text else json.dumps({"reply_markdown": "double reply", "sources_used": [], "uncertainty": None, "assessment": None, "diagnostic": None})
         item = {"type": "agentMessage", "id": "item-1", "text": reply}
         turns[turn_id].update(status="completed", items=[item])
+        save()
         send({"method": "item/completed", "params": {"item": item}})
         send({"method": "turn/completed", "params": {"turn": {"id": turn_id, "status": "completed"}}})
     elif method == "turn/interrupt":
@@ -101,6 +130,8 @@ for raw in sys.stdin:
         send({"id": mid, "result": {"data": [{"cwd": (params.get("cwds") or [None])[0], "hooks": [{"name": "h"}] if mode == "hooks" else [], "warnings": [], "errors": []}]}})
     elif method == "thread/start":
         KNOWN_THREAD = NEW_THREAD
+        memory["thread"] = NEW_THREAD
+        save()
         send({"id": mid, "result": {"thread": {"id": NEW_THREAD, "ephemeral": bool(params.get("ephemeral")), "cliVersion": "0.0-test-double"}, "cwd": params.get("cwd"),
                                     "sandbox": {"type": "dangerFullAccess"} if mode == "thread-full-access" else {"type": "readOnly", "networkAccess": False},
                                     "approvalPolicy": params.get("approvalPolicy"), "instructionSources": ["C:/somewhere/AGENTS.md"] if mode == "instructions" else [],

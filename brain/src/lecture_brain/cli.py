@@ -33,6 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     prepare.add_argument("--max-units", type=int, default=8)
     probe = sub.add_parser("probe-native", help="Inspect (default) or prove the native connection on a disposable target")
     probe.add_argument("--execute", action="store_true", help="Send the bounded proof to the bound DISPOSABLE thread (never a course thread)")
+    probe.add_argument("--continuity", action="store_true", help="Continuity on the EXISTING disposable proof thread: inspect by default; with --execute at most two synthetic turns across a reconnect, once")
     probe.add_argument("--disposable", action="store_true", help="Single-request proof on a NEW disposable thread: reads the effective scope back first; with --execute sends exactly one synthetic request")
     sub.add_parser("acceptance", help="Run the fail-closed live-acceptance report")
     backup = sub.add_parser("backup", help="Consistent backup of the local journal")
@@ -83,6 +84,12 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "probe-native":
             from .native.probe import probe_native
 
+            if args.continuity:
+                from .native.continuity_proof import run_continuity_proof
+
+                report = run_continuity_proof(settings, execute=args.execute)
+                _print(report)
+                return 0 if report.get("ready_to_execute") or report["classification"]["process_roundtrip"] == "VERIFIED" else 1
             if args.disposable:
                 from .native.disposable_proof import run_disposable_proof
 

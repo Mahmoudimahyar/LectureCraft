@@ -332,3 +332,100 @@ def test_disposable_proof_never_resends_and_never_upgrades_an_unclear_outcome(se
         report, calls = _run(_disposable(settings), tmp_path, mode)
         assert report["classification"] == expected, (mode, report["classification"], report["findings"])
         assert [c["method"] for c in calls].count("turn/start") == 1
+
+
+# ---- continuity on the existing disposable proof thread: at most two turns, across a reconnect ---------------------
+from lecture_brain.native.continuity_proof import continuity_report_path, run_continuity_proof  # noqa: E402
+
+
+@pytest.fixture()
+def proven(settings, tmp_path, monkeypatch):
+    """A disposable proof thread that already exists (created by the single-request proof against the double)."""
+    monkeypatch.setenv("LL_FAKE_STATE", str(tmp_path / "double-state.json"))
+    report, _ = _run(_disposable(settings), tmp_path)
+    assert report["classification"] == "SEPARATE_WORKER_ONLY"
+    return settings, report["target"]["thread_id"]
+
+
+def _continuity(settings, tmp_path, modes=("normal", "normal"), execute=True, budget=15.0):
+    logs = [tmp_path / f"cont-{n}.log" for n in (1, 2)]
+    for log in logs:
+        log.unlink(missing_ok=True)
+    report = run_continuity_proof(settings, execute=execute, argv_prefix=lambda n: [sys.executable, str(FAKE), modes[n - 1], str(logs[n - 1])], budget_seconds=budget, rpc_timeout=15.0)
+    return report, [_calls(log) for log in logs]
+
+
+def test_continuity_proof_sets_a_marker_reconnects_and_gets_it_back_without_resupplying_it(proven, tmp_path):
+    settings, thread_id = proven
+    report, (first, second) = _continuity(settings, tmp_path)
+    assert report["thread_id"] == thread_id and report["turns_sent"] == 2, report["findings"]
+    c = report["classification"]
+    assert c == {"process_roundtrip": "VERIFIED", "resumed_thread_history": "VERIFIED", "exact_terminal_response_retrieval": "VERIFIED", "desktop_visibility": "UNCONFIRMED",
+                 "desktop_thread_control": "NOT_RUN", "course_context_loading": "NOT_TESTED", "production_activation": "NOT_ACTIVATED"}
+    # Two separate client processes; each reads the scope back and resumes the SAME thread before its single turn.
+    for calls in (first, second):
+        methods = [x["method"] for x in calls]
+        used = methods[len(methods) - 1 - methods[::-1].index("initialize"):]
+        assert used.index("account/read") < used.index("config/read") < used.index("thread/resume") < used.index("turn/start")
+        assert methods.count("turn/start") == 1 and "thread/start" not in methods
+        resume = next(x["params"] for x in calls if x["method"] == "thread/resume")
+        assert resume["threadId"] == thread_id and resume["sandbox"] == "read-only" and resume["approvalPolicy"] == "never"
+    marker = report["marker"]
+    one = next(x["params"] for x in first if x["method"] == "turn/start")["input"][0]["text"]
+    two = next(x["params"] for x in second if x["method"] == "turn/start")["input"][0]["text"]
+    assert marker in one and marker not in two and marker.split()[-1] not in two  # the second request does not carry the marker in any form
+    assert "LL-PROOF" not in two and len(next(x["params"] for x in second if x["method"] == "turn/start")["input"]) == 1  # no history replayed by the app
+    assert report["turns"][1]["visible_answer"] == marker and report["turns"][0]["terminal_status"] == "completed"
+    # After the reconnect, the first turn's answer is read again by its turn id.
+    assert report["sessions"][1]["checks"]["earlier_answers_readable_by_turn_id"] == "PASS"
+    # It is a separate record; tutoring stays off and nothing becomes selectable.
+    assert continuity_report_path(settings).is_file() and load_proof(settings) is None
+    assert isinstance(select_adapter(settings), UnverifiedNativeAdapter)
+
+
+def test_continuity_proof_is_spent_after_one_use_and_never_sends_again(proven, tmp_path):
+    settings, _ = proven
+    first, _ = _continuity(settings, tmp_path)
+    assert first["turns_sent"] == 2
+    again, (a, b) = _continuity(settings, tmp_path)
+    assert again["turns_sent"] == 0 and "already used" in " ".join(again["findings"])
+    assert not [x for x in a + b if x["method"] == "turn/start"]
+
+
+def test_continuity_inspection_resumes_and_reads_the_old_answer_but_sends_nothing(proven, tmp_path):
+    settings, thread_id = proven
+    report, (first, second) = _continuity(settings, tmp_path, execute=False)
+    assert report["ready_to_execute"] is True and report["turns_sent"] == 0 and second == []
+    assert report["sessions"][0]["checks"]["earlier_answers_readable_by_turn_id"] == "PASS"
+    assert "turn/start" not in [x["method"] for x in first] and not continuity_report_path(settings).exists()
+
+
+@pytest.mark.parametrize("mode,failed", [("ignores-sandbox", "effective_sandbox_read_only"), ("tools-stay", "no_enabled_tool_servers"), ("hooks", "no_hooks_or_notify_program"),
+                                         ("resume-fails", "same_thread_resumed"), ("resumes-other", "same_thread_resumed"), ("instructions", "thread_has_no_instruction_files"),
+                                         ("thread-full-access", "thread_sandbox_read_only")])
+def test_continuity_proof_sends_nothing_when_scope_or_thread_cannot_be_verified(proven, tmp_path, mode, failed):
+    settings, _ = proven
+    report, (first, second) = _continuity(settings, tmp_path, modes=(mode, "normal"))
+    assert report["turns_sent"] == 0 and report["sessions"][0]["checks"][failed] == "FAIL" and second == []
+    assert "turn/start" not in [x["method"] for x in first] and "thread/start" not in [x["method"] for x in first]
+    assert report["classification"]["process_roundtrip"] == "BLOCKED" and report["classification"]["resumed_thread_history"] == "NOT_ESTABLISHED"
+
+
+def test_continuity_proof_stops_after_an_unclear_first_turn_and_reports_a_forgotten_marker_honestly(proven, tmp_path):
+    settings, _ = proven
+    report, (first, second) = _continuity(settings, tmp_path, modes=("silent", "normal"), budget=1.5)
+    assert report["turns_sent"] == 1 and second == [] and report["classification"]["process_roundtrip"] == "UNCERTAIN_COMPLETION"
+    continuity_report_path(settings).unlink()  # a separate authorization, for the second scenario only
+    report, (first, second) = _continuity(settings, tmp_path, modes=("normal", "forgets"))
+    assert report["turns_sent"] == 2 and report["classification"]["process_roundtrip"] == "VERIFIED"
+    assert report["classification"]["resumed_thread_history"] == "NOT_ESTABLISHED" and report["turns"][1]["visible_answer"] != report["marker"]
+    continuity_report_path(settings).unlink()
+    report, (first, second) = _continuity(settings, tmp_path, modes=("normal", "tools-stay"))
+    assert report["turns_sent"] == 1 and "turn/start" not in [x["method"] for x in second]  # scope is verified again before the second turn
+    assert report["classification"]["resumed_thread_history"] == "NOT_ESTABLISHED"
+
+
+def test_continuity_proof_needs_the_existing_proof_thread_and_never_creates_another(settings, tmp_path):
+    _disposable(settings)
+    report, (first, second) = _continuity(settings, tmp_path)
+    assert report["turns_sent"] == 0 and first == [] and second == [] and "no saved single-request proof" in " ".join(report["findings"]).lower()

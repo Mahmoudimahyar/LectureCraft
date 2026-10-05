@@ -39,6 +39,7 @@ def main(argv: list[str] | None = None) -> int:
     backup.add_argument("--dest", type=Path, required=True)
     evaluate = sub.add_parser("evaluate", help="Run the evaluation harness on labelled case files")
     evaluate.add_argument("cases", nargs="+", type=Path)
+    evaluate.add_argument("--scripted", action="store_true", help="Offline mechanics only: use the replies written in the case files (labeled double, no tutor, can never promote)")
     sub.add_parser("devices", help="List paired and pending devices")
     approve = sub.add_parser("pair-approve", help="Approve a pending device after reviewing its fingerprint")
     approve.add_argument("key_id")
@@ -100,9 +101,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "backup":
             _print(runtime.maintenance.backup_journal(args.dest))
         elif args.command == "evaluate":
-            from .evaluation import run_evaluation
+            from .evaluation import ScriptedReplyAdapter, run_evaluation
 
-            report = run_evaluation(args.cases, runtime.adapter, policy=settings.policy, out_dir=settings.state_dir / "reports" / "evaluation", rubric_digest=settings.policy_revision)
+            report = run_evaluation(args.cases, ScriptedReplyAdapter(args.cases) if args.scripted else runtime.adapter, policy=settings.policy, out_dir=settings.state_dir / "reports" / "evaluation", rubric_digest=settings.policy_revision)
             _print(report)
             return 0 if report["promotion"]["promote"] else 1
         elif args.command == "devices":

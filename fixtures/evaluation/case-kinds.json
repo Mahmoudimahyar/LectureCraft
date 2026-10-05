@@ -1,0 +1,63 @@
+{
+  "case_set": "synthetic-case-kinds-v1",
+  "label_source": "synthetic",
+  "note": "Invented cases, one per kind the harness must keep apart. Each carries a scripted reply so the mechanics run offline with no tutor. They are not reviewed course material and can never justify a quality claim or a promotion.",
+  "cases": [
+    {
+      "id": "kind-valid-alternative", "task": "assessment", "split": "heldout", "course_id": "be505", "kind": "valid_alternative",
+      "question": "Explain what the origin of replication does.",
+      "rubric": [{"skill_id": "s.origin", "observable": "States that plasmid replication starts at the origin and that it does not control expression."}],
+      "response": "It is where the copying machinery gets on; whether the gene is read is a separate matter decided elsewhere.",
+      "expected": {"s.origin": "demonstrated"},
+      "scripted_reply": {"reply_markdown": "Correct, in your own words.", "sources_used": [], "uncertainty": null, "assessment": {"observations": [{"skill_id": "s.origin", "outcome": "demonstrated", "evidence": "copying machinery gets on"}]}, "diagnostic": null}
+    },
+    {
+      "id": "kind-partial", "task": "assessment", "split": "heldout", "course_id": "be562", "kind": "partial",
+      "question": "State the chain rule and when a factor simplifies.",
+      "rubric": [{"skill_id": "s.chain", "observable": "States the chain rule factorisation."}, {"skill_id": "s.ci", "observable": "States when conditional independence removes a variable from a factor."}],
+      "response": "Any joint factors one variable at a time given the earlier ones.",
+      "expected": {"s.chain": "demonstrated", "s.ci": "not_observed"},
+      "scripted_reply": {"reply_markdown": "The factorisation is right; you did not say when a factor simplifies.", "sources_used": [], "uncertainty": null, "assessment": {"observations": [{"skill_id": "s.chain", "outcome": "demonstrated", "evidence": "factors one variable at a time"}, {"skill_id": "s.ci", "outcome": "not_observed", "evidence": "not addressed"}]}, "diagnostic": null}
+    },
+    {
+      "id": "kind-transcription-ambiguity", "task": "assessment", "split": "heldout", "course_id": "ds551", "kind": "ambiguous",
+      "question": "Describe how you would find the failing stage of a pipeline.",
+      "rubric": [{"skill_id": "s.debug", "observable": "Describes checking the output of each stage in order."}],
+      "response": "I would check each [inaudible] in order until the [unclear: output / outlet] is wrong.",
+      "expected": {"s.debug": "uncertain"},
+      "scripted_reply": {"reply_markdown": "The transcript is unclear at the decisive words; please confirm what you said.", "sources_used": [], "uncertainty": "Two readings of the transcript differ on the key term.", "assessment": {"observations": [{"skill_id": "s.debug", "outcome": "uncertain", "evidence": "unclear transcript"}]}, "diagnostic": null}
+    },
+    {
+      "id": "kind-false-prerequisite", "task": "assessment", "split": "heldout", "course_id": "cs542", "kind": "false_prerequisite",
+      "question": "Explain what maximum likelihood estimation chooses.",
+      "rubric": [{"skill_id": "s.mle", "observable": "States that the chosen parameters make the observed data most probable."}],
+      "response": "It picks the average of the inputs.",
+      "expected": {"s.mle": "not_demonstrated"},
+      "scripted_reply": {"reply_markdown": "Not quite. You may also be missing logarithms.", "sources_used": [], "uncertainty": null, "assessment": {"observations": [{"skill_id": "s.mle", "outcome": "not_demonstrated", "evidence": "average of the inputs"}, {"skill_id": "s.logarithms", "outcome": "not_demonstrated", "evidence": "inferred, never asked"}]}, "diagnostic": null}
+    },
+    {
+      "id": "kind-assisted", "task": "assessment", "split": "heldout", "course_id": "be572", "kind": "assisted",
+      "conditions": {"assistance_before_answer": "hint", "reference_access": "notes", "prior_exposure": "unknown"},
+      "question": "Explain why a strong promoter on a high-copy plasmid burdens the host.",
+      "rubric": [{"skill_id": "s.burden", "observable": "Links expression load to diverted cellular resources."}],
+      "response": "Resources go to making the product instead of growth.",
+      "expected": {"s.burden": "demonstrated"},
+      "scripted_reply": {"reply_markdown": "Correct, noting this was after a hint with notes open.", "sources_used": [], "uncertainty": null, "assessment": {"observations": [{"skill_id": "s.burden", "outcome": "demonstrated", "evidence": "resources go to making the product"}]}, "diagnostic": null}
+    },
+    {
+      "id": "kind-disputed", "task": "assessment", "split": "heldout", "course_id": "be505", "kind": "disputed",
+      "adjudication": "pending", "acceptable": {"s.promoter": ["demonstrated", "partial"]},
+      "question": "Explain the role of the promoter.",
+      "rubric": [{"skill_id": "s.promoter", "observable": "States that RNA polymerase binds the promoter and transcribes the downstream gene."}],
+      "response": "Polymerase lands there and reading starts.",
+      "expected": {"s.promoter": "demonstrated"},
+      "scripted_reply": {"reply_markdown": "Mostly there; 'downstream gene' was not stated.", "sources_used": [], "uncertainty": null, "assessment": {"observations": [{"skill_id": "s.promoter", "outcome": "partial", "evidence": "reading starts"}]}, "diagnostic": null}
+    },
+    {
+      "id": "kind-unmatched-source", "task": "alignment", "split": "heldout", "course_id": "be572", "kind": "untimed_unmatched",
+      "slides": ["Thermodynamics of ideal gases", "Entropy and the second law"],
+      "lines": ["Let me start with an announcement about the exam room.", "Please also fill in the survey.", "The office hours move to Thursday."],
+      "truth_line_to_page": {}
+    }
+  ]
+}

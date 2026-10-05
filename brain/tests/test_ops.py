@@ -323,3 +323,55 @@ def test_capabilities_say_plainly_which_optional_tools_this_pc_lacks(env, monkey
     monkeypatch.setattr(maintenance, "find_converter", lambda: soffice)
     caps = Maintenance(env.settings, env.journal).capabilities(env.adapter)
     assert caps["office_converter"]["status"] == "available" and caps["office_converter"]["label"] == "PowerPoint decks can be shown as PDF renditions"
+
+
+def test_evaluation_keeps_each_kind_of_hard_case_apart_and_runs_offline(repo, settings, tmp_path):
+    """Valid alternative, partial answer, unclear transcript, an unasked prerequisite, an assisted answer, a disputed
+    grade and an unmatched source are different questions. One blended agreement figure would hide them. The mechanics
+    run offline against scripted replies; that run is labeled as a double and can never promote."""
+    from lecture_brain.evaluation import ScriptedReplyAdapter
+
+    cases = repo / "fixtures/evaluation/case-kinds.json"
+    adapter = ScriptedReplyAdapter([cases])
+    assert adapter.is_test_double is True and "scripted" in adapter.label.lower()
+    report = run_evaluation([cases], adapter, policy=settings.policy, out_dir=tmp_path / "eval", rubric_digest="r1")
+    a = report["assessment"]
+    assert a["by_kind"] == {"valid_alternative": 1, "partial": 1, "ambiguous": 1, "false_prerequisite": 1, "assisted": 1, "disputed": 1}
+    # A disputed label is not ground truth: it is held out of the agreement figure until a person adjudicates it.
+    assert a["disputed_awaiting_adjudication"] == {"cases": 1, "reply_within_acceptable_outcomes": 1}
+    assert a["grade_agreement"]["n"] == 5 and a["grade_agreement"]["successes"] == 5  # 2 skills in the partial case + 3 single-skill cases; ambiguous and disputed are not in it
+    assert a["false_rejection_of_valid_alternatives"] == wilson(0, 1) and a["useful_abstention_on_ambiguous"] == wilson(1, 1)
+    # A reply that grades a skill nobody asked about is counted, and that extra judgment is never accepted.
+    assert a["prerequisite_overreach"] == {"cases": 1, "replies_judging_unasked_skills": 1, "unasked_judgments_accepted": 0}
+    # Assisted answers are told to the tutor as assisted and reported apart from independent ones.
+    assert a["assisted"] == {"cases": 1, "conditions_stated_to_tutor": 1, "agreement": wilson(1, 1)}
+    assert a["independent_agreement"]["n"] == 4
+    # Unmatched material: proposing nothing is the right answer and is reported as such, not as missing coverage.
+    assert report["alignment"]["unmatched_cases"] == {"cases": 1, "abstained": 1}
+    decision = report["promotion"]
+    assert decision["promote"] is False and "scripted" in " ".join(decision["reasons"]).lower() and "synthetic" in " ".join(decision["reasons"])
+    # The scripted adapter answers only the cases it was given and never anything else.
+    from lecture_brain.native import NativeSubmission, NativeTarget
+
+    other = adapter.submit(NativeSubmission("x", "x", NativeTarget("evaluation", "evaluation", "0" * 64, "t", "read-only", "never"), "an unrelated prompt", 5.0))
+    assert other.state == "failed" and other.failure_code == "no_scripted_reply"
+
+
+def test_drafted_unreviewed_cases_are_accepted_as_a_case_set_but_never_count_as_reviewed(repo, settings, tmp_path):
+    """Cases grounded in real questions but written by a developer or a model are neither synthetic nor reviewed.
+    They get their own label, run through the mechanics, and can no more promote than synthetic ones."""
+    from lecture_brain.evaluation import ScriptedReplyAdapter
+
+    drafted = json.loads((repo / "fixtures/evaluation/case-kinds.json").read_text(encoding="utf-8"))
+    drafted.update(case_set="drafted-v1", label_source="drafted_unreviewed")
+    path = tmp_path / "drafted.json"
+    path.write_text(json.dumps(drafted), encoding="utf-8")
+    assert load_cases(path)["label_source"] == "drafted_unreviewed"
+    report = run_evaluation([path], ScriptedReplyAdapter([path]), policy=settings.policy, out_dir=tmp_path / "eval", rubric_digest="r1")
+    assert report["label_source"] == "drafted_unreviewed" and report["promotion"]["promote"] is False
+    assert any("not human-reviewed" in reason for reason in report["promotion"]["reasons"])
+    # Mixing one reviewed file with a drafted one never yields "reviewed".
+    reviewed = tmp_path / "reviewed.json"
+    reviewed.write_text(json.dumps(dict(drafted, case_set="rev", label_source="reviewed")), encoding="utf-8")
+    mixed = run_evaluation([reviewed, path], ScriptedReplyAdapter([path]), policy=settings.policy, out_dir=tmp_path / "eval2", rubric_digest="r1")
+    assert mixed["label_source"] != "reviewed" and mixed["promotion"]["promote"] is False

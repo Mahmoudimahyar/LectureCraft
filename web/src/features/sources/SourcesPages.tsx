@@ -224,7 +224,7 @@ export function SourceDetail() {
       ) : isMedia ? (
         item.media_type!.startsWith("video/") ? <video controls preload="metadata" src={url} className="w-full" /> : <audio controls preload="metadata" src={url} className="w-full" />
       ) : item.media_type?.startsWith("text/") ? (
-        <TextSource url={url} />
+        <TextSource url={url} line={Number(params.get("line")) || null} />
       ) : (
         <Callout tone="unassessed" title="This file type is not displayed in the app">It stays in the course folder unchanged. {item.rendition === "needs_rendition" ? "A labelled PDF rendition can be produced when an approved converter is installed." : ""}</Callout>
       )}
@@ -232,13 +232,18 @@ export function SourceDetail() {
   );
 }
 
-function TextSource({ url }: { url: string }) {
+function TextSource({ url, line: wanted }: { url: string; line: number | null }) {
   const text = useQuery<string, Error>({ queryKey: ["text-source", url], queryFn: async () => (await fetch(url)).text(), retry: false });
   if (text.isLoading) return <LoadingState />;
   if (text.isError) return <ErrorState error={text.error} />;
   return (
     <ol className="ll-card max-h-[70dvh] overflow-auto p-3 text-sm" aria-label="Text source, numbered lines">
-      {(text.data ?? "").split(/\r?\n/).map((line, i) => <li key={i} className="flex gap-3"><span className="w-10 shrink-0 text-right tabular-nums text-muted">{i + 1}</span><span className="whitespace-pre-wrap">{line}</span></li>)}
+      {(text.data ?? "").split(/\r?\n/).map((line, i) => (
+        <li key={i} className={`flex gap-3 ${wanted === i + 1 ? "rounded bg-raised font-medium outline outline-2 outline-focus" : ""}`} aria-current={wanted === i + 1 ? "location" : undefined}
+          ref={wanted === i + 1 ? (el) => el?.scrollIntoView({ block: "center" }) : undefined}>
+          <span className="w-10 shrink-0 text-right tabular-nums text-muted">{i + 1}</span><span className="whitespace-pre-wrap">{line}</span>
+        </li>
+      ))}
     </ol>
   );
 }

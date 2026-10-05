@@ -93,6 +93,29 @@ test.describe("workspace access", () => {
     await expect(page.getByTestId("lecture-media")).toHaveJSProperty("paused", true);
   });
 
+  test("UI04 search also reaches a unit's further files by page and transcripts of sessions linked to no lecture", async ({ page }) => {
+    await pair(page);
+    await page.goto("/courses/be562");
+    // Opened by address, not by clicking through: the header and the search scope still follow the page.
+    await expect(page.getByLabel("Active course")).toHaveValue("be562");
+    await page.keyboard.press("Control+k");
+    const dialog = page.getByRole("dialog", { name: "Search" });
+    await dialog.getByLabel("Search query").fill("worked example reading");
+    const results = dialog.getByRole("list", { name: "Search results" }).getByRole("link");
+    await results.filter({ hasText: "Fixture 562 Reading A.pdf — page 2" }).first().click();
+    await expect(page).toHaveURL(/\/sources\/[^?]+\?page=2/);
+    await expect(page.getByText("PDF page 2 of 2")).toBeVisible();  // the original file, at that page — not a slide of the unit's main deck
+
+    await page.goto("/courses/be572");
+    await page.keyboard.press("Control+k");
+    await dialog.getByLabel("Search query").fill("transcript line two");
+    await results.filter({ hasText: "Session 2026-09-05 transcript — line 2" }).first().click();
+    await expect(page).toHaveURL(/\/sources\/[^?]+\?line=2/);
+    const current = page.getByRole("list", { name: "Text source, numbered lines" }).locator('[aria-current="location"]');
+    await expect(current).toContainText("Synthetic fixture transcript line two.");
+    await expect(page).not.toHaveURL(/\/lectures\//);  // never attached to a guessed lecture
+  });
+
   test("UI04 scoped search finds slide and transcript text, jumps there and offers the way back", async ({ page }) => {
     await pair(page);
     await page.goto(`/courses/${COURSE}/lectures/lecture-01?page=2`);

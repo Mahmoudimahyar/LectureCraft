@@ -38,7 +38,7 @@ from .config import Settings
 from .fsutil import replace_atomic
 from .ownerio.inventory import build_inventory, disk_version_id, primary_deck
 
-TOOL_VERSION = "prep-2"
+TOOL_VERSION = "prep-3"
 _WORD = re.compile(r"[a-z][a-z0-9'-]{2,}")
 _STOP = frozenset("the and that this with for are was not but you can has have its from one each will our out about into than then them they their there what when which who how why does did had been were would could should also just more most some such only very much many may might must shall over under between both few any all per via".split())
 _CUE_TIME = re.compile(r"(?:(\d+):)?(\d{2}):(\d{2})[.,](\d{3})\s*-->\s*(?:(\d+):)?(\d{2}):(\d{2})[.,](\d{3})")
@@ -300,8 +300,11 @@ class Preparation:
         deck = primary_deck(lecture)
         transcripts = [i for s in lecture["sessions"] for i in s["items"] if i["kind"] == "lecture_transcript" and i["path"] and i["rendition"] == "native_text"]
         recordings = [i for s in lecture["sessions"] for i in s["items"] if i["kind"] == "lecture_recording" and i["path"]]
+        others = [i for i in [*lecture["decks"], *lecture["extra_materials"]] if deck is None or i["source_id"] != deck["source_id"]]
+        paged = [i for i in others if i["state"] in {"registered_readable", "present_unindexed"} and i["rendition"] == "native_pdf" and i["disclosure"] != "restricted_solution"]
         fingerprint = c.sha256_hex(c.dump_json({"v": TOOL_VERSION, "deck": [deck["path"], deck["bytes"], deck["sha256"]] if deck else None,
                                                 "t": [[t["path"], t["bytes"]] for t in transcripts], "r": [[r["path"], r["bytes"]] for r in recordings],
+                                                "o": [[i["path"], i["bytes"], current_identity(root, i, self._hash_cache)[1]] for i in paged],
                                                 "converter": bool(self._converter)}))
         previous = self.state(course_id, lecture_id)
         if previous and previous.get("fingerprint") == fingerprint:
@@ -322,6 +325,7 @@ class Preparation:
                 except Exception as exc:  # noqa: BLE001 - an unreadable PDF is a reported state, not a crash
                     stages["slide_text"] = {"status": "blocked", "reason": f"The PDF text layer could not be read: {exc}"[:300]}
         stages.setdefault("slide_text", {"status": "not_applicable", "reason": "No displayable deck."})
+        stages["other_files"] = self._prepare_other_files(course_id, lecture_id, root, others, paged)
 
         if not lecture["sessions"]:
             stages["transcript"] = {"status": "no_source", "reason": "No session is linked to this lecture by the owner; correspondence is not guessed."}
@@ -373,6 +377,32 @@ class Preparation:
         replace_atomic(self.prepared_dir(course_id, lecture_id) / "state.json", c.dump_json(result))
         self._save_cache()
         return result
+
+    def _prepare_other_files(self, course_id: str, lecture_id: str, root: Path, others: list[dict], paged: list[dict]) -> dict[str, Any]:
+        """Page text of every further readable PDF of the unit, stored privately and keyed to the exact bytes it came from.
+        Files that are not paged documents (or cannot be displayed) are counted, never dropped."""
+        directory = self.prepared_dir(course_id, lecture_id) / "other"
+        kept, pages_total, failed = set(), 0, []
+        for item in paged:
+            version_id, sha256 = current_identity(root, item, self._hash_cache)
+            try:
+                texts = extract_slide_texts(root / item["path"])
+            except Exception as exc:  # noqa: BLE001 - an unreadable PDF is a reported state, not a crash
+                failed.append({"filename": item["filename"], "reason": f"The PDF text layer could not be read: {exc}"[:240]})
+                continue
+            name = f"{item['source_id']}.json"
+            replace_atomic(directory / name, c.dump_json({"source_id": item["source_id"], "version_id": version_id, "sha256": sha256, "filename": item["filename"], "tool_version": TOOL_VERSION,
+                                                         "pages": texts}))
+            kept.add(name)
+            pages_total += len(texts)
+        if directory.is_dir():
+            for stale in directory.glob("*.json"):
+                if stale.name not in kept:
+                    stale.unlink()  # derived text of a file that left the unit or changed kind; rebuilt on demand, never an original
+        if not others:
+            return {"status": "not_applicable", "reason": "The unit holds one file.", "prepared": 0, "pages": 0, "not_paged": 0, "failed": []}
+        return {"status": "done", "prepared": len(kept), "pages": pages_total, "not_paged": len(others) - len(paged), "failed": failed,
+                "note": "Further files of the unit are searchable by page and open as originals. Slide-to-recording links exist only for the unit's main deck."}
 
     # ---- course / archive ----------------------------------------------------------------------------
     def prepare_course(self, course_id: str, *, max_units: int | None = None) -> dict[str, Any]:

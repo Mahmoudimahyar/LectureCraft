@@ -270,3 +270,46 @@ def test_a_question_without_wording_in_the_index_is_usable_and_points_to_its_ori
     offered = next(q for q in projector.review_view("be505")["available_questions"] if q["question_id"] == "BE505-PS01-Q02")
     assert isinstance(offered["prompt"], str) and offered["prompt_in_index"] is False
     assert all(isinstance(q["prompt"], str) for q in projector.review_view("be505")["available_questions"])
+
+
+# ---- whole-inventory preparation: every readable file of a unit, and sessions the index links to no lecture ----------
+def test_every_readable_pdf_of_a_unit_is_prepared_and_searchable_by_page(projector, settings):
+    """A unit's further files (papers, a second deck) are course material too: their text is prepared privately, keyed to
+    the exact bytes, and a search hit opens the original at that page — not only the unit's main deck."""
+    view = projector.lecture_view("be562", "lecture-02")
+    reading = next(m for m in view["other_materials"] if m["filename"] == "Fixture 562 Reading A.pdf")
+    prep = projector.preparation
+    stored = json.loads((prep.prepared_dir("be562", "lecture-02") / "other" / f"{reading['source_id']}.json").read_text(encoding="utf-8"))
+    assert stored["filename"] == "Fixture 562 Reading A.pdf" and len(stored["sha256"]) == 64 and stored["pages"] and any(stored["pages"])
+    state = prep.state("be562", "lecture-02")
+    assert state["stages"]["other_files"]["prepared"] == 1 and state["stages"]["other_files"]["pages"] == len(stored["pages"])
+    hits = [e for e in projector.search_index("be562")["entries"] if e["ref"].get("source_id") == reading["source_id"] and "page" in e["ref"]]
+    assert [h["ref"]["page"] for h in hits] == [n for n, text in enumerate(stored["pages"], start=1) if text]
+    assert all(h["type"] == "source" and h["title"] == f"Fixture 562 Reading A.pdf — page {h['ref']['page']}" and "lecture_id" not in h["ref"] for h in hits)
+    assert hits[0]["text"] == stored["pages"][hits[0]["ref"]["page"] - 1][:1500]
+    # The text file that sits in the unit is listed but is not a paged document.
+    assert state["stages"]["other_files"]["not_paged"] == 1
+    # Changing the file re-prepares it: the stored text always belongs to the bytes on disk.
+    path = settings.course("be562").root / "materials" / "lectures" / "lecture-02" / "Fixture 562 Reading A.pdf"
+    replacement = next((settings.course("be505").root / "materials" / "lectures" / "lecture-01").glob("*.pdf")).read_bytes()
+    path.write_bytes(replacement)
+    prep.prepare_course("be562")
+    again = json.loads((prep.prepared_dir("be562", "lecture-02") / "other" / f"{reading['source_id']}.json").read_text(encoding="utf-8"))
+    assert again["sha256"] != stored["sha256"] and again["sha256"] == c.sha256_hex(replacement)
+
+
+def test_transcripts_of_sessions_not_linked_to_a_lecture_are_searchable_and_open_as_sources(projector):
+    """The course index links many real sessions to no lecture. Their transcripts are still the learner's material:
+    searchable by line, opened as the source itself — never attached to a guessed lecture."""
+    course = projector.course_view("be572")
+    session = next(s for s in course["unlinked_sessions"] if s["state"] != "empty_unrecorded")
+    entries = projector.search_index("be572")["entries"]
+    hits = [e for e in entries if e["type"] == "source" and "line" in e["ref"]]
+    assert hits and all("lecture_id" not in h["ref"] for h in hits)
+    assert all(h["title"].startswith(f"Session {session['date']} transcript — line ") for h in hits)
+    assert [h["ref"]["line"] for h in hits] == sorted(h["ref"]["line"] for h in hits) and hits[0]["text"].strip()
+    # A linked session's transcript keeps its lecture context; it is not duplicated as a bare source.
+    be505 = projector.search_index("be505")["entries"]
+    assert not [e for e in be505 if e["type"] == "source" and "line" in e["ref"]] and any(e["type"] == "transcript" for e in be505)
+    # Answer material never becomes searchable through this path either.
+    assert not [e for e in entries + be505 if "solution" in e["title"].lower()]

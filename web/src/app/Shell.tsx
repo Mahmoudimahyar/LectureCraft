@@ -37,6 +37,14 @@ export function Shell() {
   const open = (activity.data?.jobs ?? []).filter((j) => j.request_id && OPEN_STATES.has(j.state)).length;
   const focusMode = new URLSearchParams(location.search).get("focus") === "1";
 
+  // The page you are on decides the active course: opened by link, address bar, reload or Back alike. Search scope,
+  // Review, Progress and Sources then all refer to the course on screen.
+  const routeCourse = /^[/]courses[/]([^/]+)/.exec(location.pathname)?.[1];
+  const { workspace, courseId: activeCourse, setCourseId } = app;
+  useEffect(() => {
+    if (routeCourse && routeCourse !== activeCourse && workspace?.courses.some((c) => c.course_id === routeCourse)) setCourseId(routeCourse);
+  }, [routeCourse, activeCourse, workspace, setCourseId]);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;

@@ -318,3 +318,14 @@ describe("theme", () => {
     expect(resolveTheme("light")).toBe("light");
   });
 });
+
+describe("where a search hit opens", () => {
+  it("opens a further file of a unit at its page and an unlinked transcript at its line, never inside a guessed lecture", async () => {
+    const { hitHref } = await import("@/lib/search");
+    const hit = (type: string, ref: Record<string, unknown>) => ({ courseId: "be572", courseName: "BE 572", score: 1, snippet: "", entry: { type, title: "t", text: "x", ref } }) as never;
+    expect(hitHref(hit("source", { source_id: "unreg-ab/c", page: 7 }))).toBe("/courses/be572/sources/unreg-ab%2Fc?page=7");
+    expect(hitHref(hit("source", { source_id: "src-t1", line: 120 }))).toBe("/courses/be572/sources/src-t1?line=120");
+    expect(hitHref(hit("source", { source_id: "src-file" }))).toBe("/courses/be572/sources/src-file");
+    expect(hitHref(hit("slide", { lecture_id: "lecture-02", page: 3 }))).toBe("/courses/be572/lectures/lecture-02?page=3");
+  });
+});

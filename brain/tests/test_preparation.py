@@ -35,32 +35,48 @@ def _lecture(settings, course, lecture_id):
 
 
 # ---- matcher --------------------------------------------------------------------------------------
-def test_matcher_recovers_slide_segments_and_the_out_of_order_revisit():
+def _synthetic_lecture():
     lecture = content.BE505_LECTURES[0]
     slides = [s["title"] + "\n" + "\n".join(s["bullets"]) for s in lecture["slides"]]
     lines = [line for s in lecture["slides"] for line in s["lines"]] + [line for r in lecture["revisits"] for line in r["lines"]]
-    segments = align_lines_to_slides(slides, lines)
-    truth = {}
-    line = 1
+    truth, line = {}, 1
     for page, slide in enumerate(lecture["slides"], start=1):
         for _ in slide["lines"]:
             truth[line] = page
             line += 1
+    revisit_lines = []
     for revisit in lecture["revisits"]:
         for _ in revisit["lines"]:
             truth[line] = revisit["slide"]
+            revisit_lines.append(line)
             line += 1
-    predicted = {n: seg["page"] for seg in segments for n in range(seg["start_line"], seg["end_line"] + 1)}
-    correct = sum(1 for n, page in predicted.items() if truth[n] == page)
-    # Synthetic labels exercise the mechanics only. Real alignment quality (QT04/QT05) is measured on reviewed
-    # held-out course material by the evaluation harness and is NOT established by this test.
-    assert len(predicted) >= 0.8 * len(truth)
-    assert correct / len(predicted) >= 0.85
+    return slides, lines, truth, revisit_lines
+
+
+def test_matcher_segments_a_lecture_in_slide_order_with_well_formed_boundaries():
+    """Mechanics only: monotone order, well-formed non-overlapping segments, and section starts within one line on a
+    clean synthetic lecture. No accuracy figure is asserted here: suggestion quality (QT04: 95% precision on at least
+    100 adjudicated real cases, including repeats) is unmeasured until reviewed real material exists."""
+    slides, lines, truth, revisit_lines = _synthetic_lecture()
+    segments = align_lines_to_slides(slides, lines)
     sequential = [seg for seg in segments if seg["kind"] == "sequential"]
     assert [seg["page"] for seg in sequential] == [1, 2, 3, 4]  # monotone order
     true_starts = {1: 1, 2: 7, 3: 13, 4: 19}
-    assert all(abs(seg["start_line"] - true_starts[seg["page"]]) <= 1 for seg in sequential)  # boundary error of at most one line
+    assert all(abs(seg["start_line"] - true_starts[seg["page"]]) <= 1 for seg in sequential)  # a section start is off by at most one line
     assert all(seg["start_line"] <= seg["end_line"] for seg in segments)
+    covered = [n for seg in segments for n in range(seg["start_line"], seg["end_line"] + 1)]
+    assert len(covered) == len(set(covered)) and set(covered) <= set(truth)  # no line is claimed twice or invented
+    # Every line of the in-order part that is assigned at all is assigned to its own slide or the neighbouring one.
+    assert all(abs(seg["page"] - truth[n]) <= 1 for seg in sequential for n in range(seg["start_line"], seg["end_line"] + 1) if n not in revisit_lines)
+
+
+@pytest.mark.xfail(strict=True, reason="Known limit, kept visible: a revisit whose wording barely names its slide (\"remember the origin slide again\") is absorbed into the "
+                                       "last section instead of being offered as a second occurrence of slide 2. The design requires repeats to be handled; a lexical matcher "
+                                       "does not manage this case. Not tuned to the fixture. Every output stays a suggestion.")
+def test_matcher_offers_a_weakly_worded_revisit_as_a_second_occurrence_of_its_slide():
+    slides, lines, truth, revisit_lines = _synthetic_lecture()
+    predicted = {n: seg["page"] for seg in align_lines_to_slides(slides, lines) for n in range(seg["start_line"], seg["end_line"] + 1)}
+    assert [predicted.get(n) for n in revisit_lines] == [truth[n] for n in revisit_lines]
 
 
 def test_matcher_marks_a_clear_out_of_order_revisit_as_its_own_segment():

@@ -70,7 +70,10 @@ export function hitHref(hit: SearchHit): string {
     case "concept":
     case "skill":
       return `${base}/concepts/${encodeURIComponent(ref.node_id ?? "")}`;
-    default:
-      return `${base}/sources/${encodeURIComponent(ref.source_id ?? "")}`;
+    default: {
+      // A further file of a unit opens at its page; a transcript the course links to no lecture opens at its line.
+      const where = ref.page ? `?page=${ref.page}` : ref.line ? `?line=${ref.line}` : "";
+      return `${base}/sources/${encodeURIComponent(ref.source_id ?? "")}${where}`;
+    }
   }
 }

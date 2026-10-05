@@ -524,6 +524,20 @@ class Projector:
                 for page, text in enumerate(texts, start=1):
                     if text:
                         entries.append({"type": "slide", "title": f"{lecture['title']} — slide {page}", "text": text[:1500], "ref": {"lecture_id": lecture["lecture_id"], "page": page}})
+            other_dir = self.preparation.prepared_dir(course_id, lecture["lecture_id"]) / "other"
+            for item in [*lecture["decks"], *lecture["extra_materials"]] if other_dir.is_dir() else []:
+                if item["disclosure"] == "restricted_solution":
+                    continue
+                try:
+                    stored = c.parse_json((other_dir / f"{item['source_id']}.json").read_bytes())
+                except (OSError, c.ContractError):
+                    continue
+                if stored.get("sha256") != self.preparation.identity_of(course_id, item)[1]:
+                    unindexed.append({"what": item["filename"], "reason": "the file changed since its text was prepared"})
+                    continue
+                for page, text in enumerate(stored.get("pages") or [], start=1):
+                    if text:
+                        entries.append({"type": "source", "title": f"{item['filename']} — page {page}", "text": text[:1500], "ref": {"source_id": item["source_id"], "page": page}})
             for session in lecture["sessions"]:
                 for item in session["items"]:
                     if item["kind"] == "lecture_transcript" and item["path"] and item["rendition"] == "native_text":
@@ -535,6 +549,19 @@ class Projector:
                             if line.strip():
                                 entries.append({"type": "transcript", "title": f"{lecture['title']} — transcript line {number}", "text": line[:500],
                                                 "ref": {"lecture_id": lecture["lecture_id"], "source_id": item["source_id"], "line": number}})
+        # Sessions the course index links to no lecture: searchable as the source itself, never attached to a guessed lecture.
+        for session in inventory["unlinked_sessions"]:
+            for item in session["items"]:
+                if item["kind"] != "lecture_transcript" or not item["path"] or item["rendition"] != "native_text" or item["disclosure"] == "restricted_solution":
+                    continue
+                try:
+                    lines = (binding.root / item["path"]).read_text(encoding="utf-8-sig", errors="replace").splitlines()[:MAX_TRANSCRIPT_LINES]
+                except OSError:
+                    continue
+                for number, line in enumerate(lines, start=1):
+                    if line.strip():
+                        entries.append({"type": "source", "title": f"Session {session['date']} transcript — line {number}", "text": line[:500],
+                                        "ref": {"source_id": item["source_id"], "line": number}})
         catalogs = self._catalogs(course_id)
         index = catalogs["questions"] or {"questions": {}, "concepts": {}}
         for question in index["questions"].values():

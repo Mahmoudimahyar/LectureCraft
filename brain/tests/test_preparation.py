@@ -70,13 +70,76 @@ def test_matcher_segments_a_lecture_in_slide_order_with_well_formed_boundaries()
     assert all(abs(seg["page"] - truth[n]) <= 1 for seg in sequential for n in range(seg["start_line"], seg["end_line"] + 1) if n not in revisit_lines)
 
 
-@pytest.mark.xfail(strict=True, reason="Known limit, kept visible: a revisit whose wording barely names its slide (\"remember the origin slide again\") is absorbed into the "
-                                       "last section instead of being offered as a second occurrence of slide 2. The design requires repeats to be handled; a lexical matcher "
-                                       "does not manage this case. Not tuned to the fixture. Every output stays a suggestion.")
 def test_matcher_offers_a_weakly_worded_revisit_as_a_second_occurrence_of_its_slide():
+    """The lecturer says "remember the origin slide again" and goes on in words that barely overlap that slide. The
+    spoken reference to an earlier slide by its title is the evidence: the lines are offered as a second occurrence of
+    that slide, and the last section no longer swallows them."""
     slides, lines, truth, revisit_lines = _synthetic_lecture()
-    predicted = {n: seg["page"] for seg in align_lines_to_slides(slides, lines) for n in range(seg["start_line"], seg["end_line"] + 1)}
+    segments = align_lines_to_slides(slides, lines)
+    predicted = {n: seg["page"] for seg in segments for n in range(seg["start_line"], seg["end_line"] + 1)}
     assert [predicted.get(n) for n in revisit_lines] == [truth[n] for n in revisit_lines]
+    revisit = [seg for seg in segments if seg["kind"] == "revisit"]
+    assert [(seg["page"], seg["start_line"], seg["end_line"], seg["basis"]) for seg in revisit] == [(2, revisit_lines[0], revisit_lines[-1], "title_reference")]
+    last = [seg for seg in segments if seg["kind"] == "sequential"][-1]
+    assert (last["page"], last["end_line"]) == (4, revisit_lines[0] - 1)  # the last section ends where the lecturer left it
+    covered = [n for seg in segments for n in range(seg["start_line"], seg["end_line"] + 1)]
+    assert len(covered) == len(set(covered))
+
+
+THREE_SLIDES = ["Enzyme kinetics\nMichaelis constant and maximum velocity", "Membrane transport\nChannels pumps and gradients", "Signal cascades\nKinase phosphorylation amplification"]
+IN_ORDER = ["Enzyme kinetics start with the Michaelis constant.", "Maximum velocity is reached when the enzyme is saturated.",
+            "Membrane transport uses channels and pumps.", "Gradients drive transport across the membrane.",
+            "Signal cascades amplify through kinase phosphorylation.", "Each kinase phosphorylation step amplifies the signal."]
+
+
+def _pages(slides, lines):
+    segments = align_lines_to_slides(slides, lines)
+    return segments, {n: (seg["page"], seg["kind"], seg.get("basis")) for seg in segments for n in range(seg["start_line"], seg["end_line"] + 1)}
+
+
+def test_a_spoken_reference_back_to_an_earlier_slide_starts_a_revisit_in_other_material_too():
+    """Not the fixture's wording: another subject, another phrasing, and a follow-up line with no word of the slide."""
+    lines = IN_ORDER + ["Let us go back to the membrane slide for a moment.", "This is the part people usually get wrong in the exam."]
+    segments, pages = _pages(THREE_SLIDES, lines)
+    assert pages[7] == (2, "revisit", "title_reference") and pages[8] == (2, "revisit", "title_reference")
+    assert [seg["page"] for seg in segments if seg["kind"] == "sequential"] == [1, 2, 3] and pages[6][0] == 3
+    # A revisit found by wording alone, with no spoken reference, still says which kind of evidence it rests on.
+    clear = IN_ORDER + ["Enzyme kinetics and the Michaelis constant matter here too.", "The enzyme maximum velocity and Michaelis constant once more."]
+    assert _pages(THREE_SLIDES, clear)[1][7] == (1, "revisit", "similarity") and _pages(THREE_SLIDES, clear)[1][8] == (1, "revisit", "similarity")
+
+
+def test_a_title_word_alone_a_cue_alone_or_a_look_ahead_never_starts_a_revisit():
+    """The reference needs both a back-pointing cue and a title word of exactly one EARLIER slide. Anything less stays
+    with the section being taught, or stays unresolved."""
+    cases = {
+        "title word, no cue": IN_ORDER + ["Membrane proteins also matter for signalling here.", "Each kinase step amplifies the signal further."],
+        "cue, no title word": IN_ORDER + ["Let us go back for a moment to what I said.", "Each kinase step amplifies the signal further."],
+        "the current slide's own title": IN_ORDER + ["Again, signal cascades are the point of this slide.", "Each kinase step amplifies the signal further."],
+        "a word shared by two titles": (["Membrane transport\nChannels and pumps", "Membrane potential\nIons and voltage", "Signal cascades\nKinase phosphorylation amplification"],
+                                        ["Membrane transport uses channels and pumps.", "Pumps and channels move solutes.", "The membrane potential comes from ions and voltage.", "Voltage follows the ion gradients.",
+                                         "Signal cascades amplify through kinase phosphorylation.", "Each kinase phosphorylation step amplifies the signal.", "Go back to the membrane slide again.", "This part is examined."]),
+    }
+    for name, value in cases.items():
+        slides, lines = value if isinstance(value, tuple) else (THREE_SLIDES, value)
+        segments, _ = _pages(slides, lines)
+        assert not [seg for seg in segments if seg.get("basis") == "title_reference"], name
+    # A promise to return later names an earlier slide but does not go there.
+    promise = IN_ORDER + ["We will return to enzyme kinetics later in the course.", "Each kinase step amplifies the signal further."]
+    assert not [seg for seg in _pages(THREE_SLIDES, promise)[0] if seg.get("basis") == "title_reference"]
+    # When two titles share a word, the word that only one of them has still identifies the slide.
+    slides, lines = cases["a word shared by two titles"]
+    lines = lines[:6] + ["Go back to the membrane transport slide again.", "This part is examined."]
+    assert _pages(slides, lines)[1][7] == (1, "revisit", "title_reference")
+    # A look ahead ("we will come back to… later", before that slide was shown) is not a revisit either.
+    ahead = [IN_ORDER[0], "We will come back to signal cascades later again.", IN_ORDER[1], *IN_ORDER[2:]]
+    assert not [seg for seg in _pages(THREE_SLIDES, ahead)[0] if seg["kind"] == "revisit"]
+
+
+def test_a_title_reference_ends_when_the_lecture_returns_to_its_section():
+    lines = IN_ORDER[:4] + ["Remember the enzyme slide again.", "Signal cascades amplify through kinase phosphorylation.", "Each kinase phosphorylation step amplifies the signal."]
+    segments, pages = _pages(THREE_SLIDES, lines)
+    assert pages[5] == (1, "revisit", "title_reference")
+    assert pages[6][:2] == (3, "sequential") and pages[7][:2] == (3, "sequential")
 
 
 def test_matcher_marks_a_clear_out_of_order_revisit_as_its_own_segment():
@@ -87,7 +150,8 @@ def test_matcher_marks_a_clear_out_of_order_revisit_as_its_own_segment():
              "Back to enzyme kinetics: the Michaelis constant again.", "The enzyme maximum velocity and Michaelis constant once more."]
     segments = align_lines_to_slides(slides, lines)
     revisit = [seg for seg in segments if seg["kind"] == "revisit"]
-    assert revisit == [{"page": 1, "start_line": 7, "end_line": 8, "score": revisit[0]["score"], "margin": revisit[0]["margin"], "kind": "revisit"}]
+    # "Back to enzyme kinetics … again" names the slide outright, so that is the evidence reported.
+    assert revisit == [{"page": 1, "start_line": 7, "end_line": 8, "score": revisit[0]["score"], "margin": revisit[0]["margin"], "kind": "revisit", "basis": "title_reference"}]
 
 
 def test_matcher_abstains_on_unrelated_text_instead_of_guessing():

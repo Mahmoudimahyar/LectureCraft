@@ -38,12 +38,16 @@ from .config import Settings
 from .fsutil import replace_atomic
 from .ownerio.inventory import build_inventory, disk_version_id, primary_deck
 
-TOOL_VERSION = "prep-3"
+TOOL_VERSION = "prep-4"
 _WORD = re.compile(r"[a-z][a-z0-9'-]{2,}")
 _STOP = frozenset("the and that this with for are was not but you can has have its from one each will our out about into than then them they their there what when which who how why does did had been were would could should also just more most some such only very much many may might must shall over under between both few any all per via".split())
 _CUE_TIME = re.compile(r"(?:(\d+):)?(\d{2}):(\d{2})[.,](\d{3})\s*-->\s*(?:(\d+):)?(\d{2}):(\d{2})[.,](\d{3})")
 MIN_SEGMENT_SCORE = 0.10
 MIN_MARGIN = 0.02
+# A spoken reference back to an earlier slide ("go back to the membrane slide", "remember the origin slide again").
+# It counts only together with a title word that belongs to exactly one earlier slide; a look ahead never counts.
+_BACK_CUES = frozenset({"back", "again", "return", "returning", "revisit", "revisiting", "recall", "remember", "earlier", "previous", "previously"})
+_AHEAD_CUES = frozenset({"later", "next", "soon", "upcoming"})
 
 
 # ---- hashing with a small persistent cache (large recordings are hashed at most once per change) ----
@@ -172,14 +176,47 @@ def align_lines_to_slides(slide_texts: list[str], lines: list[str]) -> list[dict
         assigned[i] = s
         s = back[i][s]
 
-    # Out-of-order revisits: a run of ≥2 lines whose best slide is clearly a different, earlier slide.
     kinds = ["sequential"] * n_lines
+    bases = ["similarity"] * n_lines
+
+    # Revisits announced in words: a back-pointing cue plus a title word of exactly one EARLIER slide. The reference is
+    # the evidence, so the lines that follow belong to the revisit for as long as that slide explains them at least as
+    # well as the section being taught. Thresholds for wording-only matches are untouched.
+    titles = [set(tokens(text.split("\n", 1)[0])) for text in slide_texts]
+    own_title_words = [words - set().union(*(other for k, other in enumerate(titles) if k != s)) for s, words in enumerate(titles)]
+    raw = [set(_WORD.findall(line.lower())) for line in lines]
+
+    def referenced_earlier_slide(i: int) -> int | None:
+        if not raw[i] & _BACK_CUES or raw[i] & _AHEAD_CUES:
+            return None
+        named = [s for s in range(n_slides) if own_title_words[s] & raw[i]]
+        if len(named) != 1 or named[0] >= assigned[i]:
+            return None
+        # The line's own words must not point more strongly at another slide than at the one it names.
+        own = [_cos(single_v[i], slides_v[s]) for s in range(n_slides)]
+        return named[0] if own[named[0]] >= max(own) else None
+
+    i = 0
+    while i < n_lines:
+        target = referenced_earlier_slide(i)
+        if target is None:
+            i += 1
+            continue
+        j = i
+        while j + 1 < n_lines and referenced_earlier_slide(j + 1) in {None, target} and sim[j + 1][target] >= sim[j + 1][assigned[j + 1]]:
+            j += 1
+        for k in range(i, j + 1):
+            assigned[k], kinds[k], bases[k] = target, "revisit", "title_reference"
+        i = j + 1
+
+    # Out-of-order revisits by wording alone: a run of ≥2 lines whose best slide is clearly a different, earlier slide.
     i = 0
     while i < n_lines:
         best = max(range(n_slides), key=lambda k: sim[i][k])
-        if best != assigned[i] and sim[i][best] - sim[i][assigned[i]] > 0.10:
+        if kinds[i] == "sequential" and best != assigned[i] and sim[i][best] - sim[i][assigned[i]] > 0.10:
             j = i
-            while j + 1 < n_lines and max(range(n_slides), key=lambda k: sim[j + 1][k]) == best and sim[j + 1][best] - sim[j + 1][assigned[j + 1]] > 0.10:
+            while (j + 1 < n_lines and kinds[j + 1] == "sequential" and max(range(n_slides), key=lambda k: sim[j + 1][k]) == best
+                   and sim[j + 1][best] - sim[j + 1][assigned[j + 1]] > 0.10):
                 j += 1
             if j > i:
                 for k in range(i, j + 1):
@@ -190,14 +227,18 @@ def align_lines_to_slides(slide_texts: list[str], lines: list[str]) -> list[dict
 
     segments, start = [], 0
     for i in range(1, n_lines + 1):
-        if i == n_lines or assigned[i] != assigned[start] or kinds[i] != kinds[start]:
+        if i == n_lines or assigned[i] != assigned[start] or kinds[i] != kinds[start] or bases[i] != bases[start]:
             page = assigned[start]
             span = range(start, i)
             score = sum(sim[k][page] for k in span) / len(span)
             others = [sum(sim[k][o] for k in span) / len(span) for o in range(n_slides) if o != page]
             margin = score - (max(others) if others else 0.0)
-            if len(span) >= 2 and score >= MIN_SEGMENT_SCORE and margin >= MIN_MARGIN:
-                segments.append({"page": page + 1, "start_line": start + 1, "end_line": i, "score": round(score, 4), "margin": round(margin, 4), "kind": kinds[start]})
+            # Wording-only segments need length, score and margin exactly as before. A spoken title reference was already
+            # required to be unambiguous when it was detected; it is evidence of a different kind and is reported as such.
+            accepted = bases[start] == "title_reference" or (len(span) >= 2 and score >= MIN_SEGMENT_SCORE and margin >= MIN_MARGIN)
+            if accepted:
+                segments.append({"page": page + 1, "start_line": start + 1, "end_line": i, "score": round(score, 4), "margin": round(margin, 4), "kind": kinds[start],
+                                 "basis": bases[start]})
             start = i
     return segments
 

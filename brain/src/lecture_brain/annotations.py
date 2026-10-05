@@ -23,6 +23,7 @@ from typing import Any
 from . import contracts as c
 from .config import Settings
 from .fsutil import ExclusiveConflict, publish_exclusive, replace_atomic
+from .ownerio.inventory import is_provisional_ref
 
 _NAME = re.compile(r"^(?P<id>[A-Za-z0-9][A-Za-z0-9._-]{0,100})\.r(?P<rev>\d+)\.json$")
 AREA_REL = "work/lecture-review/source-links"
@@ -292,7 +293,9 @@ class AnnotationStore:
         for entry in sorted(state["current"].values(), key=lambda e: e["record"]["annotation_id"]):
             record = entry["record"]
             links.append({"annotation_id": record["annotation_id"], "revision": record["revision"], "relation": record["relation"], "review_state": record["review_state"],
-                          "basis": record["basis"], "precision": precision_of(record), "from": record["from"], "to": record["to"], "artifact": entry["artifact"]})
-        view = {"course_id": course_id, "generated_from": "source-link sidecar revisions", "links": links, "unresolved_conflicts": len(state["conflicts"]), "problems": state["problems"]}
+                          "basis": record["basis"], "precision": precision_of(record), "from": record["from"], "to": record["to"], "artifact": entry["artifact"],
+                          "identity": "provisional" if is_provisional_ref(record["from"]) or is_provisional_ref(record["to"]) else "registered"})
+        view = {"course_id": course_id, "generated_from": "source-link sidecar revisions", "links": links,
+                "identity_note": "Links marked provisional cite a file the course index has not registered; that identity is this app's own, not a course source id.", "unresolved_conflicts": len(state["conflicts"]), "problems": state["problems"]}
         replace_atomic(self._settings.exports_area(course_id) / "alignment.json", c.dump_json(view))
         return view

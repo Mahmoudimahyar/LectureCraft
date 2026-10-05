@@ -196,12 +196,15 @@ test.describe("lecture workspace", () => {
     await page.getByRole("button", { name: "2 other files in this lecture unit" }).click();
     const others = page.getByRole("region", { name: "Other files in this lecture unit" });
     await expect(others.getByRole("listitem")).toHaveCount(2);
-    await expect(others).toContainText("Only the unit's main slides are prepared for search and slide links.");
+    await expect(others).toContainText("Slide-to-recording links exist for the unit's main slides only. Other PDF files are searchable by page and open as originals.");
     const reading = others.getByRole("listitem").filter({ hasText: "Fixture 562 Reading A.pdf" });
     await expect(reading).toContainText("not registered by the course updater");
     await expect(others.getByRole("listitem").filter({ hasText: "Fixture 562 unit notes.txt" }).getByRole("link", { name: "Open" })).toBeVisible();
     await reading.getByRole("link", { name: "Open" }).click();
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Fixture 562 Reading A.pdf");
+    // Its identity was derived by the app, and the page says so instead of presenting it as a course source id.
+    await expect(page.getByTestId("identity-note")).toContainText("Provisional");
+    await expect(page.getByTestId("identity-note")).toContainText("not in the course index");
     await expect(page.getByTestId("slide-canvas")).toHaveAttribute("data-rendered", "1"); // the original, as its own document
     await page.getByRole("link", { name: "← Return to slide" }).click();
     await expect(page).toHaveURL(/courses\/be562\/lectures\/lecture-02/);

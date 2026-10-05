@@ -48,6 +48,18 @@ def disk_version_id(sha256: str) -> str:
 
 
 _OPENABLE = {"registered_readable", "present_unindexed"}
+PROVISIONAL_NOTE = ("Provisional identity: this file is not in the course index, so the id and version shown were derived by this app from the file's path and bytes. "
+                    "They are not course source ids and may change when the course registers the file.")
+
+
+def identity_status(item: dict) -> str:
+    """"registered" when the course index names this file; otherwise "provisional" (an identity derived by this app)."""
+    return "registered" if item.get("registration") == "registered" else "provisional"
+
+
+def is_provisional_ref(ref: dict | None) -> bool:
+    """A source reference whose id or version was derived by this app rather than taken from the course index."""
+    return bool(ref) and (str(ref.get("source_id") or "").startswith("unreg-") or str(ref.get("version_id") or "").startswith("disk-"))
 
 
 def primary_deck(lecture: dict) -> dict | None:

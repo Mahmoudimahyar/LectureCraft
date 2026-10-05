@@ -312,3 +312,37 @@ def test_course_documents_are_served_as_inert_data_and_answer_material_stays_clo
     answer = (root / restricted["path"]).read_bytes()[:4000].decode("utf-8", "ignore")
     for line in [l.strip() for l in answer.splitlines() if len(l.strip()) > 30][:5]:
         assert line not in index and line not in history
+
+
+# ---- identities of files the course index has not registered are provisional, and say so --------------------------------
+def test_an_unregistered_file_has_a_provisional_identity_that_never_enters_a_course_owned_record(runtime, settings):
+    """The app must be able to cite, link and prepare a file the course has not registered, so it derives an identity
+    from the file's bytes. That identity is this app's own: it is labelled provisional wherever it is shown or exported,
+    and it never appears in a record the course owns (an attempt), where it would pass for a course source id."""
+    from lecture_brain.annotations import AnnotationStore
+    from lecture_brain.ownerio.inventory import identity_status, is_provisional_ref
+
+    client = TestClient(create_app(runtime, extra_hosts={"testserver"}))
+    inventory = build_inventory(settings.course("be562"))
+    items = [i for l in inventory["lectures"] for i in [*l["decks"], *l["extra_materials"]]] + [i for s in inventory["sessions"] for i in s["items"]]
+    unregistered = next(i for i in items if i["registration"] == "unregistered" and i["bytes"])
+    registered = next(i for i in items if i["registration"] == "registered" and i["state"] == "registered_readable")
+    assert identity_status(unregistered) == "provisional" and identity_status(registered) == "registered"
+    shown = client.get(f"/api/sources/be562/{unregistered['source_id']}").json()
+    assert shown["identity"] == "provisional" and "not in the course index" in shown["identity_note"] and "may change" in shown["identity_note"]
+    assert client.get(f"/api/sources/be562/{registered['source_id']}").json()["identity"] == "registered"
+    # Reference-level rule used by every exporter: either the id or the version marks it.
+    assert is_provisional_ref({"source_id": unregistered["source_id"], "version_id": "disk-0123456789ab"})
+    assert is_provisional_ref({"source_id": "src-lecture-01-slides", "version_id": "disk-0123456789ab"}) and not is_provisional_ref({"source_id": "src-lecture-01-slides", "version_id": "v1-78f85d4c0657"})
+    # Every exported link states which kind of identity its ends have.
+    for course_id in settings.courses:
+        runtime.preparation.prepare_course(course_id)
+        for link in AnnotationStore(settings).export_alignment(course_id)["links"]:
+            assert link["identity"] == ("provisional" if is_provisional_ref(link["from"]) or is_provisional_ref(link["to"]) else "registered")
+    exported = [link for course_id in settings.courses for link in AnnotationStore(settings).export_alignment(course_id)["links"]]
+    assert {link["identity"] for link in exported} == {"provisional", "registered"}  # the synthetic courses contain both kinds
+    # Course-owned records: no attempt file anywhere carries a provisional id.
+    for binding in settings.courses.values():
+        for attempt in (binding.root / "learning" / "attempts").glob("*/*.json"):
+            text = attempt.read_text(encoding="utf-8")
+            assert "unreg-" not in text and '"disk-' not in text, attempt

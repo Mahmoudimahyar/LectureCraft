@@ -128,7 +128,7 @@ function OtherFiles({ courseId, others, back }: { courseId: string; others: Othe
           );
         })}
       </ul>
-      <p className="mt-1 text-xs text-muted">Only the unit's main slides are prepared for search and slide links. These files open as their originals.</p>
+      <p className="mt-1 text-xs text-muted">Slide-to-recording links exist for the unit's main slides only. Other PDF files are searchable by page and open as originals.</p>
     </section>
   );
 }

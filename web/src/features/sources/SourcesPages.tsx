@@ -98,7 +98,7 @@ export function SourcesPage() {
                   <dt className="text-muted">Slides</dt>
                   <dd>{lecture.deck ? `${lecture.deck.filename} — ${SOURCE_STATE[lecture.deck.state]?.label ?? lecture.deck.state}${lecture.deck.rendition === "needs_rendition" ? " · needs a PDF rendition to display" : ""}` : "No slide file in this unit"}</dd>
                   <dt className="text-muted">Slide links</dt>
-                  <dd>{lecture.pages ? `${lecture.pages_confirmed} reviewed · ${lecture.pages_suggested} suggested · ${lecture.pages_unresolved ?? 0} unresolved of ${lecture.pages} slides` : "not prepared"}</dd>
+                  <dd>{lecture.pages ? `${lecture.pages_confirmed} reviewed · ${lecture.pages_suggested} suggested by transcript wording (no recording times) · ${lecture.pages_unresolved ?? 0} unresolved of ${lecture.pages} slides` : "not prepared"}</dd>
                   {lecture.other_materials_count > 0 && <><dt className="text-muted">Other files</dt><dd>{lecture.other_materials_count} more in this unit — listed under Sources when the lecture is open</dd></>}
                   <dt className="text-muted">Sessions</dt>
                   <dd>{lecture.sessions.length ? lecture.sessions.map((s) => `${s.date}: ${SESSION_STATE[s.state]?.label ?? s.state}`).join(" · ") : "none linked by the course records"}</dd>
@@ -162,6 +162,8 @@ interface SourceDetailView extends InventoryItem {
   version_id: string | null;
   sha256: string | null;
   kind_basis: string;
+  identity?: "registered" | "provisional";
+  identity_note?: string | null;
   role: string | null;
   historical_versions: Array<{ version_id: string; sha256: string | null; availability: string; bytes_available: boolean }>;
 }
@@ -192,6 +194,9 @@ export function SourceDetail() {
       <dl className="ll-card mb-4 grid gap-x-4 gap-y-1 p-3 text-sm sm:grid-cols-[auto_1fr]">
         <dt className="text-muted">State</dt><dd><StatusChip tone={state.tone}>{state.label}</StatusChip> <span className="text-muted">{state.detail}</span></dd>
         <dt className="text-muted">Source id</dt><dd className="break-all font-mono">{item.source_id}</dd>
+        {item.identity === "provisional" && (
+          <><dt className="text-muted">Identity</dt><dd data-testid="identity-note"><StatusChip tone="caution">Provisional</StatusChip> <span className="text-muted">{item.identity_note}</span></dd></>
+        )}
         <dt className="text-muted">Version</dt><dd className="break-all font-mono">{item.version_id ?? "not identified (file has not been hashed)"}</dd>
         <dt className="text-muted">Size / type</dt><dd>{bytes(item.bytes)} · {item.media_type ?? "unknown type"}</dd>
         {item.historical_versions.length > 0 && (

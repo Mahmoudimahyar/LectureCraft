@@ -32,7 +32,7 @@ from .fsutil import ExclusiveConflict, publish_exclusive
 from .journal import JournalError
 from .native.fixture_tutor import MODES
 from .native.probe import probe_native
-from .ownerio.inventory import build_inventory
+from .ownerio.inventory import PROVISIONAL_NOTE, build_inventory, identity_status
 from .projections import Projector
 from .runtime import Runtime
 from .transport.bundles import MANIFEST, SIGNATURE, read_manifest
@@ -243,8 +243,13 @@ def create_app(runtime: Runtime, *, extra_hosts: set[str] | None = None, static_
     @app.get("/api/sources/{course_id}/{source_id}")
     def source_detail(course_id: str, source_id: str):
         item = _item(course_id, source_id)
-        return {k: item[k] for k in ("source_id", "version_id", "sha256", "kind", "kind_basis", "role", "filename", "media_type", "bytes", "state", "registration", "rendition", "disclosure",
-                                     "source_date", "historical_versions")}
+        detail = {k: item[k] for k in ("source_id", "version_id", "sha256", "kind", "kind_basis", "role", "filename", "media_type", "bytes", "state", "registration", "rendition", "disclosure",
+                                       "source_date", "historical_versions")}
+        detail["identity"] = identity_status(item)
+        detail["identity_note"] = PROVISIONAL_NOTE if detail["identity"] == "provisional" else None
+        if detail["identity"] == "provisional" and item.get("path") and item["state"] == "present_unindexed":
+            detail["version_id"], detail["sha256"] = runtime.preparation.identity_of(course_id, item)  # shown, and labelled provisional
+        return detail
 
     @app.post("/api/reveal")
     async def reveal(request: Request):

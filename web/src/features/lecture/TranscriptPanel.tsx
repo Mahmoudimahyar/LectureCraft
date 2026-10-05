@@ -81,6 +81,24 @@ export function TranscriptPanel({ transcripts, slideRanges, positionMs, playing,
         <input type="search" className="ll-input min-w-[9rem] flex-1" placeholder="Search this transcript…" aria-label="Search this transcript" value={filter} onChange={(e) => setFilter(e.target.value)} />
       </div>
       <p className="text-xs text-muted">{transcript.filename} · {transcript.lines.length} lines · version {transcript.version_id ?? "not yet identified (file not hashed)"}{transcript.timing_note ? ` · ${transcript.timing_note}` : ""}</p>
+      {/* What the marked lines mean for the slide on screen: reviewed, or only a text match awaiting review. Never a time. */}
+      <p className="text-sm" data-testid="slide-lines-note" role="note">
+        {(() => {
+          const mine = slideRanges.filter((r) => r.source.source_id === transcript.source_id).sort((a, b) => a.start - b.start);
+          if (!mine.length) return <span className="text-muted">No transcript lines are linked to this slide. Nothing is inferred for it.</span>;
+          const span = (r: TranscriptRange) => (r.start === r.end ? `${r.start}` : `${r.start}–${r.end}`);
+          const reviewed = mine.filter((r) => r.review_state === "confirmed");
+          const suggested = mine.filter((r) => r.review_state !== "confirmed");
+          return (
+            <>
+              {reviewed.length > 0 && <span>Lines {reviewed.map(span).join(", ")} are linked to this slide (reviewed). </span>}
+              {suggested.length > 0 && (
+                <span>Lines {suggested.map(span).join(", ")} are a suggested match for this slide: found by comparing words, not reviewed, and not a time in the recording.</span>
+              )}
+            </>
+          );
+        })()}
+      </p>
       {!follow && transcript.timing === "annotated" && (
         <div><Button size="sm" onClick={() => setFollow(true)}>Follow playback</Button> <span className="text-sm text-muted">Following paused because you scrolled.</span></div>
       )}

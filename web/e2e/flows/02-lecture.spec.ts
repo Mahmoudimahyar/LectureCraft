@@ -250,6 +250,28 @@ test.describe("lecture workspace", () => {
     await page.keyboard.press("Escape");
   });
 
+  test("UI09 on an untimed transcript the lines matched to a slide are labelled as an unreviewed suggestion, not as a time", async ({ page }) => {
+    // BE 562 lecture 01: an untimed transcript whose lines 1-2 were matched to slide 2 by text similarity only.
+    await page.goto("/courses/be562/lectures/lecture-01?page=2");
+    await expect(page.getByTestId("slide-canvas")).toHaveAttribute("data-rendered", "2");
+    await page.getByRole("tab", { name: "Transcript", exact: true }).click();
+    await expect(page.getByText("Untimed: line references only")).toBeVisible();
+    const note = page.getByTestId("slide-lines-note");
+    await expect(note).toContainText("Lines 1–2 are a suggested match for this slide");
+    await expect(note).toContainText("not reviewed");
+    await expect(note).toContainText("not a time in the recording");
+    // Slide 1 has no match: nothing is claimed for it.
+    await page.goto("/courses/be562/lectures/lecture-01?page=1");
+    await expect(page.getByTestId("slide-canvas")).toHaveAttribute("data-rendered", "1");
+    await page.getByRole("tab", { name: "Transcript", exact: true }).click();
+    await expect(page.getByTestId("slide-lines-note")).toContainText("No transcript lines are linked to this slide");
+    // A reviewed link is called reviewed (BE 505 lecture 01, slide 3).
+    await page.goto("/courses/be505/lectures/lecture-01?page=3");
+    await expect(page.getByTestId("slide-canvas")).toHaveAttribute("data-rendered", "3");
+    await page.getByRole("tab", { name: "Transcript", exact: true }).click();
+    await expect(page.getByTestId("slide-lines-note")).toContainText("Lines 13–18 are linked to this slide (reviewed)");
+  });
+
   test("UI10 a slide with no suggested link (an untimed transcript) can be linked to the recording by the learner", async ({ page, request }, testInfo) => {
     // BE 562 lecture 01 mirrors most real sessions: a recording and an untimed transcript, so nothing is suggested.
     const slide = testInfo.project.name.includes("desktop") ? 1 : 2;

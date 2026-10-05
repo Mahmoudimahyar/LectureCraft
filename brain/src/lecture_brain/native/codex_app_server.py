@@ -32,6 +32,51 @@ SANDBOX_POLICY = {"read-only": {"type": "readOnly"}, "workspace-write": {"type":
 APPROVAL_POLICY = {"never": "never", "on-request": "on-request", "untrusted": "untrusted"}
 CLIENT_INFO = {"name": "lecture-learning-brain", "title": "Lecture Learning Brain", "version": "0.1.0"}
 
+# Per-process restrictions. A user default such as danger-full-access is never inherited.
+BASE_OVERRIDES = ['sandbox_mode="read-only"', 'approval_policy="never"', 'web_search="disabled"', "notify=[]", "project_doc_max_bytes=0"]
+DISABLED_FEATURES = ["daemon_auto_start", "computer_use", "browser_use", "browser_use_external", "browser_use_full_cdp_access", "in_app_browser", "apps", "plugins",
+                     "remote_plugin", "plugin_sharing", "hooks", "memories", "multi_agent", "goals", "image_generation", "shell_tool", "unified_exec", "tool_suggest",
+                     "skill_search", "realtime_conversation"]
+MUST_BE_OFF = ["computer_use", "browser_use", "apps", "plugins", "hooks", "memories", "multi_agent", "shell_tool", "unified_exec", "image_generation"]
+
+def launch_args(mcp_servers: list[str]) -> list[str]:
+    args: list[str] = []
+    for override in [*BASE_OVERRIDES, *(f"mcp_servers.{name}.enabled=false" for name in sorted(mcp_servers))]:
+        args += ["-c", override]
+    for feature in DISABLED_FEATURES:
+        args += ["--disable", feature]
+    return args
+
+
+def read_scope(session: "_Session", cwd: Path, timeout: float) -> tuple[dict[str, str], dict[str, Any]]:
+    """Read the effective scope back from the running process. Every check is PASS or FAIL; unknown is FAIL."""
+    account = (session.request("account/read", {"refreshToken": False}, timeout=timeout) or {}).get("account") or {}
+    config = (session.request("config/read", {"cwd": str(cwd), "includeLayers": False}, timeout=timeout) or {}).get("config") or {}
+    servers = (session.request("mcpServerStatus/list", {}, timeout=timeout) or {}).get("data") or []
+    hooks = [h for row in (session.request("hooks/list", {"cwds": [str(cwd)]}, timeout=timeout) or {}).get("data") or [] for h in row.get("hooks") or []]
+    configured = config.get("mcp_servers") or {}
+    live_tools = {s.get("name"): len(s.get("tools") or {}) for s in servers}
+    enabled = sorted(name for name, entry in configured.items() if (entry or {}).get("enabled") is not False) + sorted(n for n, count in live_tools.items() if count and n not in configured)
+    features = config.get("features") or {}
+    observed = {"auth_type": account.get("type"), "plan_type": account.get("planType"), "sandbox_mode": config.get("sandbox_mode"), "approval_policy": config.get("approval_policy"),
+                "model": config.get("model"), "reasoning_effort": config.get("model_reasoning_effort"), "project_doc_max_bytes": config.get("project_doc_max_bytes"),
+                "notify": config.get("notify"), "web_search": config.get("web_search"), "mcp_servers_configured": sorted(configured), "mcp_servers_enabled": enabled, "mcp_tools_exposed": sum(live_tools.values()),
+                "hooks": len(hooks), "features_still_on": sorted(f for f in MUST_BE_OFF if features.get(f) is not False),
+                "developer_instructions_set": bool(config.get("developer_instructions") or config.get("instructions"))}
+    checks = {
+        "managed_chatgpt_signin": "PASS" if account.get("type") == "chatgpt" else "FAIL",  # an API-key login would mean metered billing
+        "effective_sandbox_read_only": "PASS" if config.get("sandbox_mode") == "read-only" else "FAIL",
+        "effective_approval_never": "PASS" if config.get("approval_policy") == "never" else "FAIL",
+        "no_enabled_tool_servers": "PASS" if not enabled and not observed["mcp_tools_exposed"] else "FAIL",
+        "no_hooks_or_notify_program": "PASS" if not hooks and not config.get("notify") else "FAIL",
+        "web_search_disabled": "PASS" if config.get("web_search") == "disabled" else "FAIL",
+        "tool_features_off": "PASS" if not observed["features_still_on"] else "FAIL",
+        "no_inherited_instruction_files": "PASS" if config.get("project_doc_max_bytes") == 0 and not observed["developer_instructions_set"] else "FAIL",
+    }
+    return checks, observed
+
+
+
 
 class AppServerError(RuntimeError):
     pass
@@ -118,30 +163,65 @@ class CodexAppServerAdapter:
     label = "Codex App Server (stdio)"
     is_test_double = False
 
-    def __init__(self, executable: Path, *, extra_args: list[str] | None = None, handshake_timeout: float = 30.0):
+    def __init__(self, executable: Path, *, extra_args: list[str] | None = None, handshake_timeout: float = 30.0, cwd: Path | None = None):
         self._argv = [str(executable), *(extra_args if extra_args is not None else ["app-server"])]
         self._handshake_timeout = handshake_timeout
+        self._cwd = cwd
+        self._tool_servers: list[str] | None = None  # names found in the user's configuration; each is disabled per process
+        self.last_scope: dict[str, Any] | None = None
 
     def capabilities(self) -> dict[str, Any]:
         return {"adapter": self.name, "transport": "stdio", "methods": ["initialize", "thread/resume", "turn/start", "turn/interrupt", "thread/read"],
-                "verified": "only while a current connection proof is recorded", "tool_restrictions": "sandbox/approval policy sent per turn; effective tool set is reported by the proof, not assumed"}
+                "verified": "only while a current connection proof is recorded",
+                "tool_restrictions": "restricted per process (read-only sandbox, no tool servers, plugins, hooks, shell or web search) and read back before every turn; an unsafe effective scope blocks"}
 
     def _open(self, submission: NativeSubmission) -> _Session:
         if submission.target.sandbox not in SANDBOX_POLICY:
             raise NativeBlocked("unsafe_sandbox", f"Sandbox {submission.target.sandbox!r} is not an allowed tutor sandbox.")
         if submission.target.approval_policy not in APPROVAL_POLICY:
             raise NativeBlocked("approval_policy_unset", "Unsupported approval policy for the tutor target.")
+        session = self._scoped_session()
         try:
-            session = _Session(self._argv)
+            session.request("thread/resume", {"threadId": submission.target.native_thread_id}, timeout=self._handshake_timeout)
+        except (AppServerError, TimeoutError) as exc:
+            session.close()
+            raise NativeBlocked("wrong_thread", f"The bound native thread could not be resumed: {exc or 'timeout'}. No other thread is tried.") from exc
+        return session
+
+    def _start(self, tool_servers: list[str]) -> "_Session":
+        try:
+            session = _Session([*self._argv, *launch_args(tool_servers)], cwd=self._cwd)
         except OSError as exc:
             raise NativeBlocked("native_unavailable", f"The native executable could not be started: {exc}") from exc
         try:
             session.request("initialize", {"clientInfo": CLIENT_INFO}, timeout=self._handshake_timeout)
             session.notify("initialized")
-            session.request("thread/resume", {"threadId": submission.target.native_thread_id}, timeout=self._handshake_timeout)
         except (AppServerError, TimeoutError) as exc:
             session.close()
-            raise NativeBlocked("wrong_thread", f"The bound native thread could not be resumed: {exc or 'timeout'}. No other thread is tried.") from exc
+            raise NativeBlocked("native_unavailable", f"The app-server did not complete its handshake: {exc or 'timeout'}") from exc
+        return session
+
+    def _scoped_session(self) -> "_Session":
+        """A child process whose EFFECTIVE scope was read back and found safe. The user's own defaults (full access,
+        tool servers, plugins, hooks, a notify program) are never inherited by a turn this app starts."""
+        cwd = self._cwd or Path.cwd()
+        session = self._start(self._tool_servers or [])
+        try:
+            if self._tool_servers is None:
+                config = (session.request("config/read", {"cwd": str(cwd), "includeLayers": False}, timeout=self._handshake_timeout) or {}).get("config") or {}
+                self._tool_servers = sorted(config.get("mcp_servers") or {})
+                if self._tool_servers:  # relaunch with each configured tool server disabled
+                    session.close()
+                    session = self._start(self._tool_servers)
+            checks, observed = read_scope(session, cwd, self._handshake_timeout)
+        except (AppServerError, TimeoutError) as exc:
+            session.close()
+            raise NativeBlocked("unsafe_scope", f"The effective native configuration could not be read back ({exc or 'timeout'}); no turn is sent without it.") from exc
+        self.last_scope = {"checks": checks, "observed": observed}
+        failed = sorted(name for name, result in checks.items() if result != "PASS")
+        if failed:
+            session.close()
+            raise NativeBlocked("unsafe_scope", "The native runtime's effective scope is not the restricted one this app requires: " + ", ".join(failed) + ". No turn was sent.")
         return session
 
     @staticmethod

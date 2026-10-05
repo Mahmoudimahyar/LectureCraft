@@ -19,7 +19,7 @@ THREAD = "thread-disposable-0001"
 
 
 def _adapter(mode="normal", log=None, timeout=20.0):
-    args = [str(FAKE), mode] + ([str(log)] if log else [])
+    args = [str(FAKE), mode, str(log) if log else "-"]
     return CodexAppServerAdapter(Path(sys.executable), extra_args=args, handshake_timeout=timeout)
 
 
@@ -86,12 +86,29 @@ def test_roundtrip_uses_explicit_thread_and_policies(tmp_path):
     result = _adapter(log=log).submit(_sub())
     assert result.state == "completed" and result.terminal and result.text == "LL-PROOF abc" and result.native_turn_id == "turn-1"
     calls = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
-    assert [c["method"] for c in calls] == ["initialize", "initialized", "thread/resume", "turn/start"]
-    assert calls[2]["params"] == {"threadId": THREAD}
-    start = calls[3]["params"]
+    methods = [c["method"] for c in calls]
+    # Two starts: the first finds the user's tool servers, the second runs with each of them disabled and is the one that is used.
+    assert methods == ["initialize", "initialized", "config/read", "initialize", "initialized", "account/read", "config/read", "mcpServerStatus/list", "hooks/list", "thread/resume", "turn/start"]
+    resume, start = calls[-2]["params"], calls[-1]["params"]
+    assert resume == {"threadId": THREAD}
     # Wire values as the installed app-server's own generated schema declares them (AskForApproval: untrusted | on-request | never).
     assert start["sandboxPolicy"] == {"type": "readOnly"} and start["approvalPolicy"] == "on-request" and start["threadId"] == THREAD
-    assert not any("list" in c["method"] for c in calls)  # never list-and-pick
+    assert not any(c["method"].startswith("thread/list") for c in calls)  # never list-and-pick a thread
+
+
+@pytest.mark.parametrize("mode,failed", [("ignores-sandbox", "effective_sandbox_read_only"), ("tools-stay", "no_enabled_tool_servers"), ("apikey", "managed_chatgpt_signin"),
+                                         ("hooks", "no_hooks_or_notify_program")])
+def test_a_tutor_turn_is_never_sent_into_an_unrestricted_runtime(tmp_path, mode, failed):
+    """The user's own defaults may be full access with tool servers and hooks. A turn this app starts must run in the
+    restricted scope, verified from the running process — otherwise it is blocked, not sent."""
+    log = tmp_path / "rpc.log"
+    adapter = _adapter(mode, log=log)
+    with pytest.raises(NativeBlocked) as err:
+        adapter.submit(_sub())
+    assert err.value.code == "unsafe_scope" and failed in err.value.message
+    methods = [json.loads(line)["method"] for line in log.read_text(encoding="utf-8").splitlines()]
+    assert "thread/resume" not in methods and "turn/start" not in methods
+    assert adapter.last_scope["checks"][failed] == "FAIL"
 
 
 def test_unknown_thread_blocks_and_no_other_thread_is_tried(tmp_path):

@@ -9,7 +9,7 @@ import sys
 import time
 
 mode = sys.argv[1] if len(sys.argv) > 1 else "normal"
-log_path = sys.argv[2] if len(sys.argv) > 2 else None
+log_path = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] != "-" else None  # "-" keeps the launch arguments in place
 KNOWN_THREAD = "thread-disposable-0001"
 NEW_THREAD = "thread-new-disposable-0001"
 turns = {}

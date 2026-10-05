@@ -94,6 +94,24 @@ for (const course of workspace.courses) {
     await page.getByRole("heading", { level: 1 }).first().waitFor({ timeout: 30_000 }).then(() => (entry.concepts_checked += 1)).catch(() => problems.push({ where: `concept ${node.id}`, kind: "render", text: "concept page did not render" }));
     await page.waitForTimeout(300);
   }
+  // Search: the index must be served for every course, and the overlay must answer a query without error.
+  const indexResponse = await context.request.get(`${base}/api/courses/${course.course_id}/search-index`);
+  entry.search_index_status = indexResponse.status();
+  if (indexResponse.ok()) {
+    const index = await indexResponse.json();
+    entry.search_entries = index.entries.length;
+    entry.search_unindexed = index.unindexed.length;
+  } else {
+    problems.push({ where: `search-index ${course.course_id}`, kind: `http ${indexResponse.status()}`, text: "search index not served" });
+  }
+  await page.goto(`${base}/study`);
+  await page.getByLabel("Active course").selectOption(course.course_id);
+  await page.getByRole("button", { name: /^Search / }).click();
+  const search = page.getByRole("dialog", { name: "Search" });
+  await search.getByLabel("Search query").fill("lecture");
+  entry.search_answered = await search.getByRole("status").or(search.getByText("No matches in the indexed material")).first().waitFor({ timeout: 30_000 }).then(() => true).catch(() => false);
+  if (!entry.search_answered) problems.push({ where: `search ${course.course_id}`, kind: "render", text: "search overlay did not answer" });
+  await page.keyboard.press("Escape");
   for (const path of ["/sources", "/progress", "/history", "/review"]) {
     await page.goto(`${base}/study`);
     await page.getByLabel("Active course").selectOption(course.course_id);

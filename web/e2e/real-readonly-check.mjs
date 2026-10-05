@@ -59,7 +59,7 @@ for (const course of workspace.courses) {
     await lines.first().or(none).waitFor({ timeout: 20_000 }).catch(() => undefined);
     row.transcript_lines = await lines.count();
     if (!row.transcript_lines) row.transcript = (await none.count()) ? "none (explained)" : "missing without explanation";
-    await page.getByRole("tab", { name: "Sources", exact: true }).click();
+    await page.getByRole("tab", { name: "This slide", exact: true }).click();
     row.other_files_expected = lecture.other_materials_count ?? null;
     const others = page.getByRole("region", { name: "Other files in this lecture unit" }).getByRole("listitem");
     if (row.other_files_expected) await others.first().waitFor({ timeout: 15_000 }).catch(() => undefined);

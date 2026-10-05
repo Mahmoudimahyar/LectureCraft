@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.lecture-learning.invalid/v1/derived-segments.schema.json",
+  "title": "Lecture Learning derived-segments v1 (new adapter contract; generated speech text with clip-relative times; not the course transcript)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "course_id",
+    "source_id",
+    "generation",
+    "time_base",
+    "clip_offset_ms",
+    "text_origin",
+    "review_state",
+    "establishes",
+    "segments"
+  ],
+  "properties": {
+    "contract": {
+      "const": "ll.derived-segments/1"
+    },
+    "course_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/course"
+    },
+    "source_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "generation": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+    },
+    "time_base": {
+      "const": "clip_relative"
+    },
+    "clip_offset_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 86400000
+    },
+    "text_origin": {
+      "const": "generated_speech_text"
+    },
+    "review_state": {
+      "const": "generated_unreviewed"
+    },
+    "establishes": {
+      "type": "array",
+      "maxItems": 0
+    },
+    "segments": {
+      "type": "array",
+      "maxItems": 20000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "index",
+          "clip_start_ms",
+          "clip_end_ms",
+          "text"
+        ],
+        "dependentRequired": {
+          "start_ms": [
+            "end_ms"
+          ],
+          "end_ms": [
+            "start_ms"
+          ]
+        },
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "clip_start_ms": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 86400000
+          },
+          "clip_end_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 86400000
+          },
+          "start_ms": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 172800000
+          },
+          "end_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 172800000
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "words": {
+            "type": "array",
+            "maxItems": 2000,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "clip_start_ms",
+                "clip_end_ms",
+                "text"
+              ],
+              "dependentRequired": {
+                "start_ms": [
+                  "end_ms"
+                ],
+                "end_ms": [
+                  "start_ms"
+                ]
+              },
+              "properties": {
+                "clip_start_ms": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 86400000
+                },
+                "clip_end_ms": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 86400000
+                },
+                "start_ms": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 172800000
+                },
+                "end_ms": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 172800000
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "probability": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

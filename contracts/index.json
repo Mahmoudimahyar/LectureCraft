@@ -57,6 +57,14 @@
     {
       "name": "control",
       "path": "contracts/v1/control.schema.json"
+    },
+    {
+      "name": "derived-manifest",
+      "path": "contracts/v1/derived-manifest.schema.json"
+    },
+    {
+      "name": "derived-segments",
+      "path": "contracts/v1/derived-segments.schema.json"
     }
   ],
   "shared": "contracts/v1/common.schema.json",

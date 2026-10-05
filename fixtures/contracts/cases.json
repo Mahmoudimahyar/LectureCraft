@@ -592,6 +592,99 @@
       "schema": "control",
       "fixture": "fixtures/contracts/control.dispute.valid.json",
       "expected_valid": true
+    },
+    {
+      "id": "derived-manifest-valid",
+      "schema": "derived-manifest",
+      "fixture": "fixtures/contracts/derived-manifest.valid.json",
+      "expected_valid": true,
+      "layer": "schema-and-semantic",
+      "note": "Synthetic payload. Digests are shapes, not real verification evidence; no speech run produced it."
+    },
+    {
+      "id": "derived-manifest-unknown-field",
+      "schema": "derived-manifest",
+      "fixture": "fixtures/contracts/derived-manifest.unknown-field.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "derived-manifest-wrong-version",
+      "schema": "derived-manifest",
+      "fixture": "fixtures/contracts/derived-manifest.wrong-version.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "derived-manifest-required-missing",
+      "schema": "derived-manifest",
+      "fixture": "fixtures/contracts/derived-manifest.required-missing.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "derived-manifest-incomplete-status",
+      "schema": "derived-manifest",
+      "fixture": "fixtures/contracts/derived-manifest.incomplete-status.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "derived-manifest-path-traversal",
+      "schema": "derived-manifest",
+      "fixture": "fixtures/contracts/derived-manifest.path-traversal.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "derived-manifest-claims-review",
+      "schema": "derived-manifest",
+      "fixture": "fixtures/contracts/derived-manifest.claims-review.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "derived-segments-valid",
+      "schema": "derived-segments",
+      "fixture": "fixtures/contracts/derived-segments.valid.json",
+      "expected_valid": true,
+      "layer": "schema-and-semantic",
+      "note": "Synthetic payload. Digests are shapes, not real verification evidence; no speech run produced it."
+    },
+    {
+      "id": "derived-segments-unknown-field",
+      "schema": "derived-segments",
+      "fixture": "fixtures/contracts/derived-segments.unknown-field.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "derived-segments-wrong-version",
+      "schema": "derived-segments",
+      "fixture": "fixtures/contracts/derived-segments.wrong-version.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "derived-segments-required-missing",
+      "schema": "derived-segments",
+      "fixture": "fixtures/contracts/derived-segments.required-missing.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "derived-segments-absolute-time-base",
+      "schema": "derived-segments",
+      "fixture": "fixtures/contracts/derived-segments.absolute-time-base.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
+    },
+    {
+      "id": "derived-segments-claims-review",
+      "schema": "derived-segments",
+      "fixture": "fixtures/contracts/derived-segments.claims-review.json",
+      "expected_valid": false,
+      "layer": "schema-and-semantic"
     }
   ]
 }

@@ -23,14 +23,70 @@ from fpdf import FPDF
 from ..contracts import dump_json, sha256_hex
 from ..ownerio.attempts import learning_input_digest
 from ..ownerio.inventory import disk_version_id, unregistered_source_id
+from ..tutoring import policy as tp
 from . import content as c
 
-FIXTURE_VERSION = "9"
+FIXTURE_VERSION = "11"
 MARKER = ".ll-synthetic-fixture"
 TERM = "2026-fall"
 FIXED_TIME = "2026-09-12T12:00:00Z"
 _PDF_DATE = datetime(2026, 9, 1, 12, 0, 0, tzinfo=timezone.utc)
 _COLORS = {"teal": (15, 110, 91), "orange": (181, 128, 58), "slate": (95, 127, 147), "red": (192, 57, 43), "ink": (19, 34, 56)}
+
+
+# ---- synthetic teaching policy --------------------------------------------------------------------
+# Invented sentences only. Each row: (clause id suffix, sentence, category, exclusion reason or None, restriction, actions).
+# The personal rows exist so that leaving them out can be tested; "Robin Sample" is not a person.
+_POLICY_COMMON = [
+    ("pacing-01", "Fixture policy: keep each reply to the depth the learner picked and stop once the question is answered.", "mode_pacing", None, False, "all"),
+    ("help-01", "Fixture policy: when the learner asks for help, give the help first and do not turn the request into a quiz.", "direct_help", None, False, "all"),
+    ("diagnostic-01", "Fixture policy: a diagnostic question is an offer the learner may skip, and only one is offered at a time.", "optional_diagnostics", None, False, "all"),
+    ("error-01", "Fixture policy: when an earlier tutor statement was wrong or a transcript line looks misheard, say so and give the corrected version.", "assistant_error_and_asr_uncertainty", None, False, "all"),
+    ("alternatives-01", "Fixture policy: accept a correct answer that uses a different method or different wording from the model answer.", "alternatives", None, False, ["assessment"]),
+    ("personal-01", "Fixture learner Robin Sample studies in the weekday evening blocks of the fixture planner.", "planner_personal", "names the fixture learner and a planner schedule", False, "all"),
+    ("assistance-01", "Fixture policy: note what help was given before an answer, because helped work is not unaided evidence.", "assistance", None, False, "all"),
+    ("history-01", "Robin Sample missed the fixture promoter question twice last week.", "learner_history", "describes the fixture learner's own attempt history", False, "all"),
+    ("source-01", "Fixture policy: say which statements come from the supplied course source and which are your own added clarification.", "source_vs_added_clarification", None, False, "all"),
+    ("save-01", "Fixture policy: only the course's own writer saves an attempt, and the tutor never saves anything itself.", "owner_save", None, False, "all"),
+    ("unrelated-01", "The fixture planner renews its parking permit in spring.", "unrelated", "not about tutoring", False, "all"),
+]
+_POLICY_COURSE = {
+    "be505": [
+        ("modes-01", "Modes learn/assess/produce/maintain keep their meaning.", "mode_pacing", None, False, "all"),
+        ("assistance-01", "Assistance is recorded per skill.", "assistance", None, False, "all"),
+        ("restriction-01", "Fixture course rule: do not write out a full solution to a graded fixture problem set for the learner.", "assistance", None, True, "all"),
+        ("history-01", "Robin Sample has two open fixture attempts on the origin question.", "learner_history", "describes the fixture learner's own attempt history", False, "all"),
+    ],
+    "be562": [("restriction-01", "Fixture course rule: remind the learner that help on a fixture problem set has to be disclosed.", "assistance", None, True, "all")],
+}
+
+
+def _strategy_text(course_id: str) -> str:
+    rows = _POLICY_COURSE.get(course_id, [])
+    return "# Fixture learning strategy\n" + ("\n" + " ".join(row[1] for row in rows) + "\n" if rows else "")
+
+
+def _policy_text() -> str:
+    half = len(_POLICY_COMMON) // 2
+    return (f"# Fixture tutoring policy\n\n> {c.FIXTURE_NOTE}\n\n## Session behaviour\n\n" + " ".join(row[1] for row in _POLICY_COMMON[:half])
+            + "\n\n## Evidence and saving\n\n" + "\n".join(row[1] for row in _POLICY_COMMON[half:]) + "\n")
+
+
+def _write_policy_projection(planner: Path, roots: dict[str, Path]) -> None:
+    """The synthetic projection over the synthetic policy files: spans and hashes are taken from the bytes just written."""
+    files = [("planner/protocols/tutoring-policy.md", "common", "protocols/tutoring-policy.md", planner, "common", _POLICY_COMMON)]
+    files += [(f"{cid}/learning-strategy.md", f"course:{cid}", "learning-strategy.md", roots[cid], cid, _POLICY_COURSE.get(cid, [])) for cid in roots]
+    sources, clauses = [], []
+    for label, scope, rel, base, prefix, rows in files:
+        data = (base / rel).read_bytes()
+        text = data.decode("utf-8")
+        sources.append(tp.source_entry(label, scope, rel, data))
+        for suffix, sentence, category, reason, restriction, actions in rows:
+            start = text.index(sentence)
+            clauses.append(tp.clause_entry(f"{prefix}.{suffix}", label, text, start, start + len(sentence), category=category, include=reason is None, exclusion_reason=reason,
+                                           restriction=restriction, actions=actions))
+    _write(planner / tp.SYNTHETIC_PROJECTION_REL, _json({"contract": tp.CONTRACT, "projection_version": 1, "review_state": "drafted_unreviewed", "sources": sources, "clauses": clauses,
+                                                         "required_categories": list(tp.REQUIRED_CATEGORIES), "note": c.FIXTURE_NOTE}))
 
 
 # ---- media builders ------------------------------------------------------------------------------
@@ -80,6 +136,24 @@ def write_pdf(path: Path, pages: list[dict]) -> None:
         pdf.cell(0, 6, f"{c.FIXTURE_NOTE} - {page.get('printed') or number}")
     path.parent.mkdir(parents=True, exist_ok=True)
     pdf.output(str(path))
+
+
+def write_docx(path: Path, paragraphs: list[str]) -> None:
+    """A minimal word-processing file (a zip with one document part). Synthetic text only; it is never opened by an Office program here."""
+    import zipfile
+    from xml.sax.saxutils import escape
+
+    body = "".join(f"<w:p><w:r><w:t>{escape(text)}</w:t></w:r></w:p>" for text in paragraphs)
+    document = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                f'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>{body}</w:body></w:document>')
+    types = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+             '<Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" '
+             'ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, data in (("[Content_Types].xml", types), ("word/document.xml", document)):
+            info = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))  # fixed timestamp: the same bytes on every build
+            archive.writestr(info, data)
 
 
 def write_wav(path: Path, segments: list[tuple[float, float]], rate: int = 8000) -> int:
@@ -257,7 +331,7 @@ def _build_be505(root: Path) -> None:
     _write(root / "course.yaml", _yaml({"schema_version": 1, "course_id": cid, "term": TERM, "display_name": "FIXTURE BE 505 - Molecular Systems (synthetic)",
                                         "workspace_root": ".", "bindings": {"planner": None, "shared_learning": None}}))
     _write(root / "AGENTS.md", f"# Fixture course instructions\n\n{c.COURSE_INSTRUCTIONS[cid]}\n")
-    _write(root / "learning-strategy.md", "# Fixture learning strategy\n\nModes learn/assess/produce/maintain keep their meaning. Assistance is recorded per skill.\n")
+    _write(root / "learning-strategy.md", _strategy_text(cid))
 
     sources: list[dict] = []
     for number, lecture in enumerate(c.BE505_LECTURES, start=1):
@@ -281,6 +355,11 @@ def _build_be505(root: Path) -> None:
                 related.append(f"src-lecture-{nn}-recording")
                 sources.append(_entry(root, f"src-lecture-{nn}-recording", "lecture_recording", f"{session_dir}/{lecture['recording']}", role="reference", date=lecture["session"],
                                       related=[f"src-lecture-{nn}-slides"], review="not_needed"))
+        if lecture.get("sheet"):
+            sheet_rel = f"materials/lectures/{lecture['unit']}/{lecture['sheet']['file']}"
+            write_pdf(root / sheet_rel, lecture["sheet"]["pages"])
+            related.append(f"src-lecture-{nn}-in-class-questions")
+            sources.append(_entry(root, f"src-lecture-{nn}-in-class-questions", "in_class_question_sheet", sheet_rel, related=[f"src-lecture-{nn}-slides"]))
         if lecture["indexed"]["slides"]:
             sources.append(_entry(root, f"src-lecture-{nn}-slides", "lecture_slides", deck_rel, date=lecture["session"], related=related))
     (root / "materials/sessions/2026-09-10-lecture").mkdir(parents=True, exist_ok=True)  # session folder with nothing recorded
@@ -291,6 +370,10 @@ def _build_be505(root: Path) -> None:
     sources.append(_entry(root, "src-ps-01-brief", "assignment_brief", "materials/assignments/ps-01/Fixture PS01.pdf", date="2026-09-05"))
     sources.append(_entry(root, "src-ps-01-solutions", "assignment_solution", "materials/assignments/ps-01/Fixture PS01 solutions.pdf", role="reference", date="2026-09-12", related=["src-ps-01-brief"]))
     sources.append(_entry(root, "src-ps-02-brief", "assignment_brief", None))
+    write_docx(root / "materials/assignments/ps-03/Fixture PS03.docx", [*c.PS03_QUESTION_LINES, c.FIXTURE_NOTE])  # labelled synthetic, like every fixture page
+    write_pdf(root / "materials/assignments/ps-03/Fixture PS03 blank.pdf", c.PS03_PAGES)
+    sources.append(_entry(root, "src-ps-03-brief", "assignment_brief", "materials/assignments/ps-03/Fixture PS03.docx", date="2026-09-19"))
+    sources.append(_entry(root, "src-ps-03-working-pdf", "assignment_working_copy", "materials/assignments/ps-03/Fixture PS03 blank.pdf", role="reference", date="2026-09-19", related=["src-ps-03-brief"]))
     _write_index(root, cid, sources)
     index = {s["source_id"]: s for s in sources}
 
@@ -315,10 +398,10 @@ def _build_be505(root: Path) -> None:
         questions.append({"question_id": q["question_id"], "version": 1, "collection": q["collection"], "number": q["number"], "title": q["title"], "prompt": q["prompt"],
                           "criteria": [{"criterion_id": f"{q['question_id']}.C{i:02d}", "tag": "core", "action": crit[3][0], "observable": crit[2], "concept_id": crit[1], "skill_id": crit[0], "action_types": crit[3]}
                                        for i, crit in enumerate(q["criteria"], start=1)],
-                          "origin": q["origin"], "source_refs": [ref], "source_note": c.FIXTURE_NOTE, "bank_path": "work/lecture-review/fixture-question-bank.md", "input_files": {},
+                          "origin": q["origin"], "source_refs": [ref], "source_note": c.FIXTURE_NOTE, "bank_path": q.get("bank_path", "work/lecture-review/fixture-question-bank.md"), "input_files": {},
                           "topic": "be505.topic.plasmids", "family_id": q["family_id"], "family_revision": 1, "page": q["page"],
                           "assessor_path": "work/lecture-review/lecture-01-assessor-guide-v1.md",
-                          **({"prompt_status": q["prompt_status"], "source_path": q["source_path"]} if q["prompt"] is None else {})})
+                          **({"prompt_status": q["prompt_status"]} if q["prompt"] is None else {}), **({"source_path": q["source_path"]} if q.get("source_path") else {})})
     families.append({"family_id": "be505.family.slide-teach-back-unrubriced", "revision": 1, "format": "open teach-back", "skill_ids": ["be505.skill.selection.interpret"],
                      "reasoning_signature": "Fixture family used to exercise catalog reads.", "prompt_template": "Explain this slide in your own words.", "origin": "generated_practice",
                      "source_refs": [{"source_id": "src-lecture-01-slides", "version_id": version_of("src-lecture-01-slides"), "locator": "slide 4"}],
@@ -331,7 +414,10 @@ def _build_be505(root: Path) -> None:
                    "unassessed": "Synthetic: artifacts without a genuine response are not attempts.", "family_matching": "Synthetic: a question is matched to its family by id and revision.",
                    "future_attempts": "Synthetic: new attempts carry question_id and question_version.", "coverage": c.FIXTURE_NOTE}, "source_index_digest": sha256_hex((root / ".agent/source-index.json").read_bytes()), "unassessed_artifacts": []}))
     # Answer guidance stays in a separate restricted file, as in the real course.
-    _write(root / "work/lecture-review/lecture-01-question-map-v1.json", _json({"contract_version": "be505-lecture-question-map-v1", "questions": [{"question_id": q["question_id"], "answer": q["answer"]} for q in c.BE505_QUESTIONS]}))
+    # Answer guidance stays in a separate restricted file, shaped as in the real course: entries keyed ``id``, a version on the file and on most entries.
+    _write(root / "work/lecture-review/lecture-01-question-map-v1.json", _json({"version": 1, "questions": [
+        {"id": q["question_id"], **({"version": "1"} if q["number"] % 2 else {}), "title": q["title"], "prompt": q["prompt"], "criteria": [crit[2] for crit in q["criteria"]],
+         "answer": q["answer"], "source": q["source"][1], "summary_page": "1"} for q in c.BE505_QUESTIONS], "strict_containment": []}))
     _write(root / "work/lecture-review/lecture-01-assessor-guide-v1.md", "# Fixture assessor guide (restricted)\n\n" + "\n".join(f"- {q['question_id']}: {q['answer']}" for q in c.BE505_QUESTIONS) + "\n")
 
     q1, q3, ps1 = c.BE505_QUESTIONS[0], c.BE505_QUESTIONS[2], c.BE505_QUESTIONS[3]
@@ -391,7 +477,7 @@ def _build_be505(root: Path) -> None:
 def _build_other(root: Path, cid: str, spec: dict) -> None:
     _write(root / "course.yaml", _yaml({"schema_version": 1, "course_id": cid, "term": TERM, "display_name": spec["display_name"], "workspace_root": ".", "bindings": {"planner": None, "shared_learning": None}}))
     _write(root / "AGENTS.md", f"# Fixture course instructions\n\n{c.COURSE_INSTRUCTIONS[cid]}\n")
-    _write(root / "learning-strategy.md", "# Fixture learning strategy\n")
+    _write(root / "learning-strategy.md", _strategy_text(cid))
     sources: list[dict] = []
     for i, lecture in enumerate(spec["lectures"], start=1):
         rel = f"materials/lectures/{lecture['unit']}/{lecture['deck']}"
@@ -449,7 +535,12 @@ def _build_planner(planner: Path, roots: dict[str, Path]) -> Path:
               "paths": {"shared_learning": "shared-learning"}, "courses": {cid: {"root": root.as_posix()} for cid, root in roots.items()},
               "planning_policy": {"external_writes_enabled": False}}
     _write(planner / "planner-config.yaml", _yaml(config))
+    # App-side read configuration of the fixture (the real one lives in the private binding): the page basis of one collection is "reviewed".
+    _write(planner / "app-read-overrides.json", _json({"reviewed_page_basis": {"be505": ["L04"]}, "deck_overrides": {
+        "be562": {"lecture-02": unregistered_source_id("materials/lectures/lecture-02/Fixture 562 Lecture 02.pdf")}}}))
     _write(planner / "AGENTS.md", f"# Fixture planner instructions\n\n{c.FIXTURE_NOTE}. Each course owns its records; a plan or file is not learning evidence.\n")
+    _write(planner / "protocols/tutoring-policy.md", _policy_text())
+    _write_policy_projection(planner, roots)
     _write(planner / "shared-learning/concepts.yaml", _yaml({
         "contract_version": "shared-learning-v1", "record_state": "live", "revision": 1,
         "concepts": [{"concept_id": "shared.probability.maximum-likelihood", "label": "Maximum likelihood (fixture)", "links": [

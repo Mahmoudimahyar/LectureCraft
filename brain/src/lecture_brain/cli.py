@@ -45,6 +45,14 @@ def main(argv: list[str] | None = None) -> int:
     approve = sub.add_parser("pair-approve", help="Approve a pending device after reviewing its fingerprint")
     approve.add_argument("key_id")
     approve.add_argument("fingerprint")
+    import_derived = sub.add_parser("import-derived", help="Check finished speech-timing output roots and copy them into the app's private derived store (runs no speech tool)")
+    import_derived.add_argument("--course", required=True)
+    import_derived.add_argument("--root", type=Path, action="append", required=True, help="An output root holding manifest.json (ll.derived-manifest/1); repeat for several")
+    import_derived.add_argument("--max-imports", type=int, default=8, help="Generations copied at most in this call; already stored and refused roots do not count")
+    derived_status = sub.add_parser("derived-status", help="Readback: recordings, their current identity and the stored speech-timing generations")
+    derived_status.add_argument("--course", required=True)
+    derived_status.add_argument("--source", help="Limit to one recording and add its current generation")
+    derived_status.add_argument("--segments", action="store_true", help="With --source: include the generated segments themselves")
     args = parser.parse_args(argv)
 
     try:
@@ -117,6 +125,25 @@ def main(argv: list[str] | None = None) -> int:
             _print(runtime.pairing.devices())
         elif args.command == "pair-approve":
             _print(runtime.pairing.approve(args.key_id, reviewed_fingerprint=args.fingerprint))
+        elif args.command in {"import-derived", "derived-status"}:
+            from .derived import Derived
+
+            derived = Derived(settings, runtime.journal, preparation=runtime.preparation, now=runtime.now)
+            if args.command == "import-derived":
+                report = derived.import_backlog(args.root, course_id=args.course, max_imports=args.max_imports)
+                _print(report)
+                return 0 if report["complete"] and not report["counts"]["rejected"] and not report["counts"]["cancelled"] else 1
+            if args.course not in settings.courses:
+                print(f"Course {args.course!r} is not one of the configured courses.", file=sys.stderr)
+                return 2
+            report = derived.status(args.course)
+            if args.source:
+                report["recordings"] = [r for r in report["recordings"] if r["source_id"] == args.source]
+                current = derived.current(args.course, args.source)
+                if current is not None and not args.segments:
+                    current["segment_count"] = len(current.pop("segments"))
+                report["current"] = current
+            _print(report)
         return 0
     finally:
         if args.command != "serve":

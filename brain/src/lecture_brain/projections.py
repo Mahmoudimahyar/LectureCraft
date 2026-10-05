@@ -23,25 +23,26 @@ from .fsutil import replace_atomic
 from .journal import Journal, JobState as S, TERMINAL
 from .ownerio import OwnerReadError
 from .ownerio.attempts import learning_view_status, read_attempt_records
-from .ownerio.catalogs import read_families, read_question_index, read_skills
+from .ownerio.catalogs import read_families, read_guidance, read_question_index, read_skills
 from .ownerio.inventory import build_inventory, other_materials, primary_deck
-from .preparation import Preparation
+from .ownerio.question_links import build_question_bank, parse_locator
+from .ownerio.renditions import compare_rendition, load_rendition_checks, record_rendition_check
+from .preparation import Preparation, file_sha256
 from .resume import ResumeStore
 from .review import ReviewStore
 
-_SLIDES = re.compile(r"(?i)\b(?:slides?|pages?|pdf pages?)\s+(\d+)(?:\s*[-–]\s*(\d+))?")
 _CAPTURE = re.compile(r"^Lecture Learning capture (?P<path>\S+) sha256:(?P<sha>[a-f0-9]{64}) bytes:(?P<bytes>\d+) turn:(?P<turn>\S+)$")
 MAX_TRANSCRIPT_LINES = 20000
 GENERATOR = "lecture-brain-projections"
 
 
 def _pages_in(locator: str) -> set[int]:
-    pages: set[int] = set()
-    for match in _SLIDES.finditer(locator or ""):
-        start, end = int(match.group(1)), int(match.group(2) or match.group(1))
-        if 0 < start <= end <= start + 200:
-            pages |= set(range(start, end + 1))
-    return pages
+    """Pages of the cited file that a catalog locator names, as written: a list stays a list (see ``parse_locator``)."""
+    return {page for anchor in parse_locator(locator)["anchors"] if anchor["kind"] == "pages" and anchor["target"] == "cited" for page in anchor["pages"]}
+
+
+def _ranges_text(ranges: list[list[int]]) -> str:
+    return ", ".join(str(a) if a == b else f"{a}–{b}" for a, b in ranges)
 
 
 class Projector:
@@ -55,6 +56,7 @@ class Projector:
         self._capabilities = capabilities or (lambda: {})
         self._rejections = rejections or (lambda: [])
         self._now = now or (lambda: "1970-01-01T00:00:00Z")
+        self._hashes: dict[str, str] = {}  # path|size|mtime -> sha256, for files compared as bytes
 
     # ---- shared readers ------------------------------------------------------------------------
     def _catalogs(self, course_id: str) -> dict[str, Any]:
@@ -66,6 +68,86 @@ class Projector:
             except OwnerReadError as exc:
                 out["problems"].append({"catalog": key, "code": exc.code, "detail": exc.message})
         return out
+
+    def _bank(self, course_id: str, catalogs: dict | None = None, inventory: dict | None = None) -> dict[str, Any]:
+        """Every catalogued question with its collection, lecture membership, typed anchors and source actions (read side only)."""
+        binding = self.settings.course(course_id)
+        inventory = inventory or build_inventory(binding)
+        catalogs = catalogs or self._catalogs(course_id)
+        items = {i["source_id"]: i for l in inventory["lectures"] for i in [*l["decks"], *l["extra_materials"]]}
+        items.update({i["source_id"]: i for i in inventory["other_sources"]})
+        checks = {}
+        for original_id, check in load_rendition_checks(self.settings.state_dir, course_id).items():
+            original, copy = items.get(original_id), items.get(check.get("rendition_source_id"))
+            # A recorded comparison counts only for the exact bytes that were compared (hashed from the files, not taken from the index).
+            if original and copy and self._bytes_sha(course_id, original) == check.get("original_sha256") and self._bytes_sha(course_id, copy) == check.get("rendition_sha256"):
+                checks[original_id] = check
+        return build_question_bank(catalogs["questions"], inventory, reviewed_collections=binding.reviewed_collections, rendition_checks=checks)
+
+    @staticmethod
+    def _question_row(link: dict, question: dict) -> dict[str, Any]:
+        """One question for a list: identity, why it is here, where it points. Never criteria wording or guidance."""
+        return {**{k: link[k] for k in ("question_id", "version", "collection", "number", "title", "origin", "topic", "prompt_in_index", "family_id", "family_revision", "criteria_count",
+                                        "criteria_authorship", "lecture_ids", "membership", "anchors", "anchor_state", "slide_anchor", "locator_text", "qualifiers", "unparsed",
+                                        "original", "display_rendition", "related_copy")},
+                "prompt": question["prompt"], "concept_ids": sorted({k["concept_id"] for k in question.get("criteria") or [] if k.get("concept_id")})}
+
+    def questions_view(self, course_id: str, *, collection: str | None = None, lecture_id: str | None = None, text: str | None = None, origin: str | None = None,
+                       anchor: str | None = None, offset: int = 0, limit: int = 50) -> dict[str, Any]:
+        """The course question bank: real totals, filters over the whole set, one page of rows (R1-Q1, R1-Q1b)."""
+        binding = self.settings.course(course_id)
+        inventory = build_inventory(binding)
+        catalogs = self._catalogs(course_id)
+        bank = self._bank(course_id, catalogs, inventory)
+        index = (catalogs["questions"] or {}).get("questions", {})
+        needle = (text or "").strip().lower()
+        wanted = set(bank["lectures"].get(lecture_id, {}).get("question_ids", [])) if lecture_id else None
+        rows = []
+        for collection_row in bank["collections"]:
+            for question_id in collection_row["question_ids"]:
+                link, question = bank["questions"][question_id], index[question_id]
+                if collection and str(link["collection"]) != collection or wanted is not None and question_id not in wanted or origin and link["origin"] != origin:
+                    continue
+                if anchor == "slide_named" and link["slide_anchor"] != "named" or anchor == "no_slide" and link["slide_anchor"] != "none" or anchor == "unresolved" and link["anchor_state"] != "unresolved":
+                    continue
+                if needle and needle not in f"{question_id} {link['title'] or ''} {question['prompt']}".lower():
+                    continue
+                rows.append(self._question_row(link, question))
+        offset, limit = max(0, int(offset)), max(1, min(int(limit), 500))
+        page = rows[offset:offset + limit]
+        titles = {l["lecture_id"]: l["title"] for l in inventory["lectures"]}
+        try:
+            guidance = read_guidance(binding.root, index)
+            guidance_summary = {"adapter": guidance["adapter"], "files": guidance["files"], "resolved": len(guidance["entries"]), "errors": guidance["errors"]}
+        except OwnerReadError as exc:
+            guidance_summary = {"adapter": None, "files": 0, "resolved": 0, "errors": [{"code": exc.code, "entry_id": None, "file": None, "detail": exc.message}]}
+        return {"course_id": course_id, "links_version": bank["links_version"], "total": bank["total"], "matching": len(rows), "offset": offset, "limit": limit,
+                "next_offset": offset + limit if offset + limit < len(rows) else None, "items": page,
+                "collections": [{k: c[k] for k in ("collection", "count", "lecture_ids", "cited_source_ids", "origins", "without_wording", "slide_named", "anchor_unresolved", "page_basis_reviewed")}
+                                for c in bank["collections"]],
+                "lectures": [{"lecture_id": lid, "title": titles.get(lid), "collections": row["collections"], "count": len(row["question_ids"]), "gap": row["gap"]} for lid, row in bank["lectures"].items()],
+                "guidance": guidance_summary, "catalog_problems": catalogs["problems"], "note": bank["note"]}
+
+    def verify_rendition(self, course_id: str, question_id: str) -> dict[str, Any]:
+        """Compare a question's related copy with its original and keep the outcome, bound to both files' bytes (app-local)."""
+        binding = self.settings.course(course_id)
+        inventory = build_inventory(binding)
+        link = self._bank(course_id, inventory=inventory)["questions"].get(question_id)
+        copy = link and (link["related_copy"] or link["display_rendition"])
+        if not link or not link["original"] or not copy:
+            return {"result": "not_applicable", "reason": "This question has no original with a separate related copy."}
+        items = {i["source_id"]: i for l in inventory["lectures"] for i in [*l["decks"], *l["extra_materials"]]}
+        items.update({i["source_id"]: i for i in inventory["other_sources"]})
+        original, rendition = items[link["original"]["source_id"]], items[copy["source_id"]]
+        outcome = compare_rendition(binding.root / original["path"], binding.root / rendition["path"], page=copy["page"] or 1)
+        return record_rendition_check(self.settings.state_dir, course_id, original=original, rendition=rendition, original_sha256=self._bytes_sha(course_id, original),
+                                      rendition_sha256=self._bytes_sha(course_id, rendition), outcome=outcome, checked_at=self._now())
+
+    def _bytes_sha(self, course_id: str, item: dict) -> str | None:
+        try:
+            return file_sha256(self.settings.course(course_id).root / item["path"], self._hashes) if item.get("path") else None
+        except OSError:
+            return None
 
     def _records(self, course_id: str) -> dict[str, Any]:
         try:
@@ -86,6 +168,7 @@ class Projector:
                 due = [r for r in self.reviews.due_view(course_id, now=self._now()) if r["is_due"]]
                 dispositions = Counter(l["disposition"].split(":")[0] for l in coverage["courses"][course_id]["lectures"])
                 row.update(lecture_units=len(inventory["lectures"]), sessions=len(inventory["sessions"]), index_status=inventory["index"]["status"],
+                           catalogued_questions=len(((self._catalogs(course_id)["questions"] or {}).get("questions")) or {}),
                            recorded_attempts=attempts, assessed_label="Not assessed" if attempts == 0 else f"{attempts} recorded attempt{'s' if attempts != 1 else ''}",
                            due_items=len(due), preparation=dict(dispositions),
                            pending_requests=len(self.journal.jobs(course_id=course_id, states=[s for s in S if s not in TERMINAL])))
@@ -99,6 +182,7 @@ class Projector:
         binding = self.settings.course(course_id)
         inventory = build_inventory(binding)
         coverage = {l["lecture_id"]: l for l in self.preparation.coverage()["courses"][course_id]["lectures"]}
+        bank = self._bank(course_id, inventory=inventory)
 
         def session(s: dict) -> dict:
             return {"session_id": s["session_id"], "date": s["date"], "state": s["state"], "linked_lecture_ids": s["linked_lecture_ids"],
@@ -113,6 +197,8 @@ class Projector:
             lectures.append({"lecture_id": lecture["lecture_id"], "title": lecture["title"], "session_link": lecture["session_link"],
                              "deck": ({k: deck[k] for k in ("source_id", "state", "registration", "rendition", "filename", "bytes")} if deck else None),
                              "displayable": displayable, "other_materials_count": len(other_materials(lecture)),
+                             "deck_choice": {"state": lecture["deck_choice"]["state"], "basis": lecture["deck_choice"]["basis"], "candidates": len(lecture["deck_choice"]["candidate_source_ids"])},
+                             "questions": {"count": len(bank["lectures"][lecture["lecture_id"]]["question_ids"]), "collections": bank["lectures"][lecture["lecture_id"]]["collections"]},
                              "sessions": [session(s) for s in lecture["sessions"]], "disposition": cov.get("disposition", "not_processed"),
                              "pages": cov.get("pages"), "pages_confirmed": cov.get("pages_confirmed", 0), "pages_suggested": cov.get("pages_suggested", 0),
                              "pages_unresolved": cov.get("pages_unresolved")})
@@ -121,10 +207,11 @@ class Projector:
                 "unlinked_sessions": [session(s) for s in inventory["unlinked_sessions"]],
                 "other_sources": [{k: i[k] for k in ("source_id", "kind", "filename", "state", "registration", "rendition", "disclosure", "bytes", "media_type", "source_date")} for i in inventory["other_sources"]],
                 "recorded_attempts": len(records["attempts"]), "learning_view_status": learning_view_status(binding.root),
+                "question_bank": {"total": bank["total"], "collections": [{"collection": c["collection"], "count": c["count"], "lecture_ids": c["lecture_ids"]} for c in bank["collections"]]},
                 "enumeration_truncated": inventory["enumeration_truncated"]}
 
     # ---- lecture -------------------------------------------------------------------------------
-    def lecture_view(self, course_id: str, lecture_id: str) -> dict[str, Any] | None:
+    def lecture_view(self, course_id: str, lecture_id: str, *, deck: str | None = None) -> dict[str, Any] | None:
         binding = self.settings.course(course_id)
         root = binding.root
         inventory = build_inventory(binding)
@@ -136,10 +223,20 @@ class Projector:
         items.update({i["source_id"]: i for i in inventory["other_sources"]})
         state = self.preparation.state(course_id, lecture_id) or {}
         stages = state.get("stages", {})
+        requested = deck
+        choice = dict(lecture["deck_choice"])
         deck = primary_deck(lecture)
+        if requested and requested != (deck or {}).get("source_id") and requested in {d["source_id"] for d in lecture["decks"]}:
+            # A choice made for this request only (the learner picked among the unit's files); stored nowhere by this read.
+            deck = next(d for d in lecture["decks"] if d["source_id"] == requested)
+            choice.update(state="selected", basis="this_request", source_id=requested)
+        choice["candidates"] = [{"source_id": d["source_id"], "filename": d["filename"], "bytes": d["bytes"], "registration": d["registration"], "rendition": d["rendition"], "state": d["state"]}
+                                for d in lecture["decks"] if d["source_id"] in choice["candidate_source_ids"]]
         display: dict[str, Any] = {"kind": "unavailable", "reason": "No slide deck file is present for this lecture unit."}
+        if deck is None and choice["state"] == "unresolved":
+            display = {"kind": "choose_deck", "reason": f"This unit holds {len(choice['candidates'])} candidate files and the course index does not say which one is the lecture deck."}
         if deck is not None:
-            rendition = stages.get("rendition", {})
+            rendition = stages.get("rendition", {}) if choice["basis"] != "this_request" else {}
             if deck["rendition"] == "native_pdf" and deck["state"] in {"registered_readable", "present_unindexed"}:
                 display = {"kind": "original_pdf", "content": f"sources/{course_id}/{deck['source_id']}/content", "note": "Original PDF, shown unchanged."}
             elif rendition.get("status") == "rendition":
@@ -147,7 +244,12 @@ class Projector:
             else:
                 display = {"kind": "unavailable", "reason": rendition.get("reason") or f"The deck is {deck['state'].replace('_', ' ')}."}
         try:
-            texts = c.parse_json((self.preparation.prepared_dir(course_id, lecture_id) / "slides-text.json").read_bytes())["pages"]
+            if choice["basis"] == "this_request":
+                stored = c.parse_json((self.preparation.prepared_dir(course_id, lecture_id) / "other" / f"{deck['source_id']}.json").read_bytes())
+                texts = stored["pages"] if stored.get("sha256") == self.preparation.identity_of(course_id, deck)[1] else None
+            else:
+                stored = c.parse_json((self.preparation.prepared_dir(course_id, lecture_id) / "slides-text.json").read_bytes())
+                texts = stored["pages"] if deck is not None and stored.get("deck_source_id", deck["source_id"]) == deck["source_id"] else None
         except (OSError, c.ContractError, KeyError):
             texts = None
         prepared = texts is not None
@@ -163,27 +265,45 @@ class Projector:
         questions = (catalogs["questions"] or {}).get("questions", {})
         concepts = (catalogs["questions"] or {}).get("concepts", {})
         skills = catalogs["skills"]["skills"]
+        bank = self._bank(course_id, catalogs, inventory)
+        mine = bank["lectures"][lecture_id]
         page_concepts: dict[int, dict[str, dict]] = {}
         page_questions: dict[int, list[dict]] = {}
         if deck is not None:
-            for question in questions.values():
-                pages = set()
-                for ref in question.get("source_refs", []):
-                    if ref.get("source_id") == deck["source_id"]:
-                        pages |= _pages_in(ref.get("locator", ""))
-                for page in pages:
-                    page_questions.setdefault(page, []).append({"question_id": question["question_id"], "title": question.get("title"), "family_id": question.get("family_id"),
-                                                                "family_revision": question.get("family_revision"), "prompt": question["prompt"]})
-                    for criterion in question.get("criteria", []):
-                        concept = concepts.get(criterion.get("concept_id"))
-                        if concept:
-                            page_concepts.setdefault(page, {})[concept["concept_id"]] = {"concept_id": concept["concept_id"], "label": concept["label"], "basis": "question source reference"}
+            for link in bank["questions"].values():
+                question = questions[link["question_id"]]
+                for anchor in link["anchors"]:
+                    if anchor["kind"] != "pages" or anchor["source_id"] != deck["source_id"]:
+                        continue
+                    stated = _ranges_text(anchor["ranges"])
+                    why = (f"The course record names slide {stated} of this deck." if anchor["basis"] == "exact" else
+                           f"The course record names slide {stated}; this collection's slide numbers are not yet confirmed as page numbers.")
+                    for page in anchor["pages"]:
+                        page_questions.setdefault(page, []).append({"question_id": link["question_id"], "title": link["title"], "family_id": link["family_id"],
+                                                                    "family_revision": link["family_revision"], "prompt": question["prompt"], "prompt_in_index": link["prompt_in_index"],
+                                                                    "collection": link["collection"], "basis": anchor["basis"], "why": why})
+                        for criterion in question.get("criteria", []):
+                            concept = concepts.get(criterion.get("concept_id"))
+                            if concept:
+                                page_concepts.setdefault(page, {})[concept["concept_id"]] = {"concept_id": concept["concept_id"], "label": concept["label"], "basis": "question source reference"}
             for skill in skills.values():
                 for ref in skill.get("source_refs", []):
                     if ref.get("source_id") == deck["source_id"] and skill.get("concept_id") in concepts:
                         for page in _pages_in(ref.get("locator", "")):
                             concept = concepts[skill["concept_id"]]
                             page_concepts.setdefault(page, {}).setdefault(concept["concept_id"], {"concept_id": concept["concept_id"], "label": concept["label"], "basis": "skill source reference"})
+        own = set(mine["question_ids"])
+        related: dict[str, dict] = {}
+        for rel in (catalogs["questions"] or {}).get("relationships", []):
+            for inside, outside, direction in ((rel["from_question"], rel["to_question"], "from_lecture_question"), (rel["to_question"], rel["from_question"], "to_lecture_question")):
+                if inside in own and outside not in own and outside in bank["questions"]:
+                    row = related.setdefault(outside, dict(self._question_row(bank["questions"][outside], questions[outside]), via=[]))
+                    row["via"].append({"question_id": inside, "relation": rel["relation"], "direction": direction, "automatic_credit": bool(rel.get("automatic_credit", False))})
+        lecture_questions = {
+            "collections": [{k: c_[k] for k in ("collection", "count", "page_basis_reviewed", "slide_named", "anchor_unresolved", "without_wording")} for c_ in bank["collections"] if c_["collection"] in mine["collections"]],
+            "all": [self._question_row(bank["questions"][q], questions[q]) for q in mine["question_ids"]], "gap": mine["gap"],
+            "related_by_relationship": [related[k] for k in sorted(related)],
+            "note": "All lecture questions come from the collections the course catalog ties to this unit's files. A slide is named only where the catalog names one."}
 
         loaded = self.annotations.load(course_id)
         slides_links: dict[int, dict[str, list]] = {}
@@ -240,9 +360,10 @@ class Projector:
         return {"course_id": course_id, "lecture_id": lecture_id, "title": lecture["title"], "session_link": lecture["session_link"],
                 "deck": ({"source_id": deck["source_id"], "version_id": deck_identity[0], "sha256": deck_identity[1], "filename": deck["filename"], "state": deck["state"],
                           "registration": deck["registration"], "rendition": deck["rendition"]} if deck else None),
+                "deck_choice": choice, "questions": lecture_questions,
                 "display": display, "page_count": page_count, "slides": slides, "recordings": recordings, "transcripts": transcripts,
                 "sessions": [{"session_id": s["session_id"], "state": s["state"]} for s in lecture["sessions"]], "preparation": stages,
-                "other_materials": other_materials(lecture),
+                "other_materials": other_materials(dict(lecture, deck_choice=choice)),
                 "link_conflicts": [{"conflict_id": x["conflict_id"], "annotation_id": x["annotation_id"], "proposed": x["proposed"], "current": x["current"]} for x in loaded["conflicts"]]}
 
     # ---- questions -----------------------------------------------------------------------------
@@ -254,6 +375,7 @@ class Projector:
         question = index["questions"][question_id]
         family = catalogs["families"].get((question.get("family_id"), question.get("family_revision")))
         records = self._records(course_id)
+        link = self._bank(course_id, catalogs)["questions"][question_id]
         evidence = []
         for attempt_id, attempt in records["attempts"].items():
             if attempt["question"].get("question_id") == question_id or attempt["question"].get("family_id") == question.get("family_id"):
@@ -266,6 +388,8 @@ class Projector:
                 "family": {"family_id": family["family_id"], "revision": family["revision"], "skill_ids": family["skill_ids"]} if family else None,
                 "rubric_available": family is not None, "criteria_count": len(question.get("criteria", [])),
                 "criteria_note": "Criteria and answer guidance are used for assessment and shown with feedback, not before your attempt.",
+                **{k: link[k] for k in ("lecture_ids", "membership", "anchors", "anchor_state", "slide_anchor", "locator_text", "qualifiers", "unparsed", "original", "display_rendition",
+                                        "related_copy", "criteria_authorship", "source_note", "number")},
                 "relationships": [r for r in index["relationships"] if question_id in (r["from_question"], r["to_question"])],
                 "evidence": sorted(evidence, key=lambda e: e["recorded_at"], reverse=True), "answer_guidance": "restricted"}
 
@@ -467,9 +591,9 @@ class Projector:
         for question in ((catalogs["questions"] or {}).get("questions") or {}).values():
             if question["question_id"] not in selected:
                 available.append({"question_id": question["question_id"], "title": question.get("title"), "prompt": question["prompt"], "prompt_in_index": question["prompt_in_index"],
-                                  "origin": question.get("origin"),
+                                  "origin": question.get("origin"), "collection": question.get("collection"),
                                   "family_id": question.get("family_id"), "family_revision": question.get("family_revision"), "source_refs": question.get("source_refs", [])})
-        return {"course_id": course_id, "items": rows, "due_count": sum(1 for r in rows if r["is_due"]), "available_questions": available[:200],
+        return {"course_id": course_id, "items": rows, "due_count": sum(1 for r in rows if r["is_due"]), "available_questions": available, "available_total": len(available),
                 "default_session_size": int(self.settings.policy["review_default_max_items"]), "scheduler_config": self.reviews.scheduler_config(course_id),
                 "note": "Existing course questions are offered first. Saving an item does not schedule it; a due date is a suggestion, not evidence of forgetting."}
 
@@ -565,7 +689,8 @@ class Projector:
         catalogs = self._catalogs(course_id)
         index = catalogs["questions"] or {"questions": {}, "concepts": {}}
         for question in index["questions"].values():
-            entries.append({"type": "question", "title": question.get("title") or question["question_id"], "text": question["prompt"][:1500], "ref": {"question_id": question["question_id"]}})
+            entries.append({"type": "question", "title": question.get("title") or question["question_id"], "text": f"{question['question_id']} {question['prompt']}"[:1500],
+                            "prompt_in_index": question["prompt_in_index"], "ref": {"question_id": question["question_id"]}})
         for concept in index["concepts"].values():
             entries.append({"type": "concept", "title": concept["label"], "text": " ".join([concept["label"], *concept.get("aliases", [])]), "ref": {"node_id": concept["concept_id"]}})
         for skill in catalogs["skills"]["skills"].values():

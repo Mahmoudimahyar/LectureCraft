@@ -144,6 +144,25 @@ BE505_LECTURES = [
         "revisits": [],
         "alignment": "none",
     },
+    {
+        # A unit that also holds an in-class question sheet whose file name sorts BEFORE the deck (as in a real course).
+        "unit": "lecture-04",
+        "deck": "Fixture Lecture 04 - Induction lab.pdf",
+        "title": "Fixture Lecture 04 - Induction lab",
+        "session": None,
+        "recording": None,
+        "transcript": None,
+        "indexed": {"slides": True, "transcript": False, "recording": False},
+        "sheet": {"file": "04 - Fixture in-class questions.pdf",
+                  "pages": [{"title": "Fixture in-class questions", "bullets": ["Question 1. Sketch the induction curve after adding inducer.", "Mark the lag and the plateau."], "figure": "promoter"}]},
+        "slides": [
+            {"title": "Planning an induction", "bullets": ["Grow to mid-log first.", "Add inducer at a chosen density.", "Sample at fixed times."], "figure": "promoter", "seconds": None, "lines": []},
+            {"title": "Reading the time course", "bullets": ["Lag before product appears.", "Rise, then plateau.", "Compare with the uninduced control."], "figure": "ori", "seconds": None, "lines": []},
+            {"title": "What can go wrong", "bullets": ["Leaky expression before induction.", "Too much inducer slows growth.", "Plasmid loss without selection."], "figure": "marker", "seconds": None, "lines": []},
+        ],
+        "revisits": [],
+        "alignment": "none",
+    },
 ]
 
 BE505_TOPICS = [
@@ -209,7 +228,42 @@ BE505_QUESTIONS = [
      "family_id": "be505.family.question.l02-q01", "origin": "generated_practice", "source": ("src-lecture-02-slides", "slides 1-2"), "page": 1,
      "criteria": [("be505.skill.inducible-control.explain", "be505.concept.inducible-promoter", "States that inducer binding releases the repressor from the operator so transcription can start.", ["explain"])],
      "answer": "The inducer binds the repressor, which releases the operator, allowing RNA polymerase to transcribe the gene."},
+    # A lecture question whose catalog locator names no slide (as in real early collections): it belongs to the lecture all the same.
+    {"question_id": "BE505-L01-Q04", "collection": "L01", "number": 4, "title": "One molecule, several jobs",
+     "prompt": "Name the three questions a plasmid's parts address and say which part addresses each.",
+     "family_id": "be505.family.question.l01-q04", "origin": "generated_practice",
+     "source": ("src-lecture-01-slides", "lecture scientific content; exact mapping in companion hierarchy/source map"), "page": None,
+     "criteria": [("be505.skill.ori-vs-promoter.integrate", "be505.concept.replication-vs-transcription", "Separates copying, reading and finding, and assigns origin, promoter and marker.", ["integrate"])],
+     "answer": "Copying: the origin. Reading the gene: the promoter. Finding carriers: the selectable marker."},
+    # Comma-listed slides plus transcript lines: separate anchor types, every listed page kept.
+    {"question_id": "BE505-L04-Q01", "collection": "L04", "number": 1, "title": "When to add the inducer",
+     "prompt": "Explain why cells are grown before the inducer is added, and what the uninduced control is for.",
+     "family_id": "be505.family.question.l04-q01", "origin": "generated_practice", "source": ("src-lecture-04-slides", "Slides 1, 3; transcript 4-9; timing example tutor-created"), "page": None,
+     "criteria": [("be505.skill.inducible-control.explain", "be505.concept.inducible-promoter", "Relates induction timing to host burden and names the control's purpose.", ["explain"])],
+     "answer": "Growing first builds biomass before the burden of expression; the uninduced control shows leaky expression."},
+    {"question_id": "BE505-L04-Q02", "collection": "L04", "number": 2, "title": "Reading a lag",
+     "prompt": "The product appears only after a delay. Give one reason for the lag.",
+     "family_id": "be505.family.question.l04-q02", "origin": "generated_practice", "source": ("src-lecture-04-slides", "Transcript 3-5 (in-class question)"), "page": None,
+     "criteria": [("be505.skill.inducible-control.explain", "be505.concept.inducible-promoter", "Attributes the lag to transcription and translation taking time after the repressor releases.", ["explain"])],
+     "answer": "After the repressor releases, transcription and translation take time before product accumulates."},
+    # The instructor's own in-class sheet: its own collection and source; no wording in the catalog.
+    {"question_id": "BE505-L04-CLASS-Q01", "collection": "L04-class", "number": 1, "title": "In-class question 1", "prompt": None,
+     "prompt_status": "Read the original question and diagram (synthetic fixture).", "bank_path": "materials/lectures/lecture-04/04 - Fixture in-class questions.pdf",
+     "family_id": "be505.family.question.l04-class-q01", "origin": "course_source", "source": ("src-lecture-04-in-class-questions", "page 1, Question 1"), "page": 1,
+     "criteria": [("be505.skill.inducible-control.explain", "be505.concept.inducible-promoter", "Sketch shows lag, rise and plateau after induction.", ["explain"])],
+     "answer": "A curve that stays near baseline, rises after a lag and levels off."},
+    # Original is a .docx (authoritative, not displayable here); the course index relates a PDF working copy to it.
+    {"question_id": "BE505-PS03-Q01", "collection": "PS03", "number": 1, "title": "Problem set 3, question 1", "prompt": None,
+     "prompt_status": "Original source is authoritative; open the stated page including figures and givens (synthetic fixture).",
+     "source_path": "materials/assignments/ps-03/Fixture PS03.docx", "bank_path": "materials/assignments/ps-03/Fixture PS03 blank.pdf",
+     "family_id": "be505.family.question.ps03-q01", "origin": "course_source", "source": ("src-ps-03-brief", "Question 1, including all subparts, supplied figures and numerical givens"), "page": 1,
+     "criteria": [("be505.skill.inducible-control.explain", "be505.concept.inducible-promoter", "States one design change that lowers leaky expression.", ["explain"])],
+     "answer": "For example a tighter operator or a lower-copy origin."},
 ]
+
+PS03_QUESTION_LINES = ["Fixture Problem Set 03", "Question 1. A culture shows product before any inducer is added.",
+                       "Propose one design change that lowers this leaky expression and say why it helps.", "No drawing is required for this question."]
+PS03_PAGES = [{"title": PS03_QUESTION_LINES[0], "bullets": PS03_QUESTION_LINES[1:], "figure": "promoter"}]
 
 BE505_RELATIONSHIPS = [
     {"from_question": "BE505-L01-Q01", "to_question": "BE505-L01-Q03", "relation": "diagnostic_prerequisite",
@@ -218,6 +272,8 @@ BE505_RELATIONSHIPS = [
      "rationale": "The promoter explanation is fully contained in the combined prediction question."},
     {"from_question": "BE505-L01-Q03", "to_question": "BE505-L02-Q01", "relation": "partial_overlap",
      "rationale": "Both require reasoning about when transcription happens."},
+    {"from_question": "BE505-L04-Q01", "to_question": "BE505-PS03-Q01", "relation": "diagnostic_prerequisite",
+     "rationale": "Explaining induction timing is a narrower step used when the leaky-expression design question fails."},
 ]
 
 PS01_PAGES = [

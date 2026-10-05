@@ -251,6 +251,19 @@ class Coordinator:
             message, ref = self.capture.read_message(course_id, session_id, message["message_id"])
         return message, ref
 
+    @staticmethod
+    def _reply_detail(out: TutorOutput, material: dict) -> dict:
+        """What travels beside a reply in the signed result detail.
+
+        ``segments`` are the parts of the reply text in order, each marked ``course_source`` or ``added_explanation``; a part's
+        ``sources`` are positions in the message's own ``sources`` list. ``support_itemized`` is false (and ``segments`` null)
+        when the tutor did not itemize the reply. ``policy`` is the record of the teaching-policy selection.
+        """
+        segments = None
+        if out.support_itemized:
+            segments = [{"text": s["text"], "support": s["support"], "sources": [out.sources_used.index(i) for i in s["sources"]]} for s in out.segments]
+        return {"support_itemized": out.support_itemized, "segments": segments, "policy": material.get("policy")}
+
     # ---- execution ------------------------------------------------------------------------------
     def _execute(self, job: dict, prior: NativeObservation | None) -> S:
         lease, generation = job["lease_token"], job["generation"]
@@ -281,7 +294,7 @@ class Coordinator:
         message, _ = self._tutor_message(request, out, material, reply_to_turn=None, disposition="not_assessed", session_id=session_id)
         publication = self.writer.none_publication(course_id, request["request_id"], self.now(), "Not assessed in this exchange: receiving an answer does not establish understanding. Earlier evidence is unchanged.")
         return ({"publication": publication, "message": message, "native-result": native_result, "context": context}, S.SUCCEEDED, None,
-                {"problems": [*out.problems, *material["source_problems"]], "uncertainty": out.uncertainty})
+                {"problems": [*out.problems, *material["source_problems"]], "uncertainty": out.uncertainty, **self._reply_detail(out, material)})
 
     # -- WF05 -------------------------------------------------------------------------------------
     def _attachments(self, directory: Path, submission: dict) -> dict[str, bytes]:
@@ -334,7 +347,8 @@ class Coordinator:
         text, native_result, _ = self._native(job, lease, request, prompt=prompt, context=context, session_id=submission["session_id"], prior=prior)
         out = parse_tutor_output(text, expect_assessment=family is not None, intended_skill_ids=skill_ids, max_sources=len(material["spans"]))
         extra = {"problems": [*out.problems, *material["source_problems"]], "uncertainty": out.uncertainty, "diagnostic": out.diagnostic, "observations": out.observations,
-                 "conditions": submission["conditions"], "criteria": material["rubric"] or ([{"skill_id": r["skill_id"], "observable": r["criterion"]} for r in family["rubric"]] if family else [])}
+                 "conditions": submission["conditions"], "criteria": material["rubric"] or ([{"skill_id": r["skill_id"], "observable": r["criterion"]} for r in family["rubric"]] if family else []),
+                 **self._reply_detail(out, material)}
         if family is None or out.observations is None:
             reason = ("Assessment pending: no reviewed question family/rubric is bound to this response. Your full response is retained." if family is None
                       else "Assessment pending: the tutor returned no usable assessment for the intended skills. Your full response is retained.")
@@ -417,7 +431,8 @@ class Coordinator:
             raise _Pause(S.WAITING_REVIEW, "The corrected wording could not be assessed for the same skills; the earlier assessment stands and your corrected text is retained and linked.")
         before = {o["skill_id"]: o["outcome"] for o in effective["observations"]}
         after = {o["skill_id"]: o["outcome"] for o in out.observations}
-        extra = {"observations": out.observations, "previous_outcomes": before, "problems": out.problems, "conditions": submission["conditions"], "capture_correction": {"attempt_id": target}}
+        extra = {"observations": out.observations, "previous_outcomes": before, "problems": out.problems, "conditions": submission["conditions"], "capture_correction": {"attempt_id": target},
+                 **self._reply_detail(out, material)}
         if before == after:
             message, _ = self._tutor_message(request, out, material, reply_to_turn=submission["turn_id"], disposition="canonical_saved", session_id=submission["session_id"])
             publication = self.writer.none_publication(course_id, request["request_id"], self.now(), capture=capture,
@@ -508,9 +523,10 @@ class Coordinator:
         message, _ = self._tutor_message(request, out, material, reply_to_turn=payload["turn_id"], disposition="not_assessed", session_id=payload["session_id"])
         publication = self.writer.none_publication(course_id, request["request_id"], self.now(), "Diagnostic exchange: kept as an operational proposal, not an assessed attempt.")
         records = {"publication": publication, "message": message, "native-result": native_result, "context": context}
+        extra = {"diagnostic": proposal, **self._reply_detail(out, material)}
         if diagnostic["next_prompt"]:
-            return records, S.WAITING_USER, "Waiting for your answer to the diagnostic question. Nothing runs until you respond; you can also skip.", {"diagnostic": proposal}
-        return records, S.SUCCEEDED, None, {"diagnostic": proposal}
+            return records, S.WAITING_USER, "Waiting for your answer to the diagnostic question. Nothing runs until you respond; you can also skip.", extra
+        return records, S.SUCCEEDED, None, extra
 
     # -- WF09: assessment dispute -----------------------------------------------------------------
     def _do_correct_assessment(self, job, lease, request, payload, directory, payload_bytes, prior):
@@ -547,7 +563,7 @@ class Coordinator:
             raise _Pause(S.WAITING_REVIEW, "The regrade returned no usable assessment for the same skills; the original assessment stands and your dispute is kept.")
         before = {o["skill_id"]: o["outcome"] for o in effective["observations"]}
         after = {o["skill_id"]: o["outcome"] for o in out.observations}
-        extra = {"observations": out.observations, "previous_outcomes": before, "problems": out.problems, "dispute_reason": payload["command"]["reason"]}
+        extra = {"observations": out.observations, "previous_outcomes": before, "problems": out.problems, "dispute_reason": payload["command"]["reason"], **self._reply_detail(out, material)}
         if before == after:
             message, _ = self._tutor_message(request, out, material, reply_to_turn=submission["turn_id"], disposition="canonical_saved", session_id=submission["session_id"])
             publication = self.writer.none_publication(course_id, request["request_id"], self.now(), "Reviewed: the assessment is unchanged. No revision was written and no new attempt exists.")

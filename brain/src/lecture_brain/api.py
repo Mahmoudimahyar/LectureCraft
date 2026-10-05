@@ -22,7 +22,7 @@ import secrets
 import time
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -117,12 +117,19 @@ def create_app(runtime: Runtime, *, extra_hosts: set[str] | None = None, static_
         return locked(lambda: projector.course_view(course_id))
 
     @app.get("/api/courses/{course_id}/lectures/{lecture_id}")
-    def lecture_view(course_id: str, lecture_id: str):
+    def lecture_view(course_id: str, lecture_id: str, deck: str | None = Query(None, max_length=200)):
         course(course_id)
-        view = locked(lambda: projector.lecture_view(course_id, lecture_id))
+        view = locked(lambda: projector.lecture_view(course_id, lecture_id, deck=deck))
         if view is None:
             raise HTTPException(404, "Unknown lecture unit")
         return view
+
+    @app.get("/api/courses/{course_id}/questions")
+    def question_bank(course_id: str, collection: str | None = Query(None, max_length=80), lecture: str | None = Query(None, max_length=80), q: str | None = Query(None, max_length=200),
+                      origin: str | None = Query(None, max_length=40), anchor: str | None = Query(None, pattern="^(slide_named|no_slide|unresolved)$"),
+                      offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=500)):
+        course(course_id)
+        return locked(lambda: projector.questions_view(course_id, collection=collection, lecture_id=lecture, text=q, origin=origin, anchor=anchor, offset=offset, limit=limit))
 
     @app.get("/api/courses/{course_id}/questions/{question_id}")
     def question_view(course_id: str, question_id: str):
@@ -421,6 +428,12 @@ def create_app(runtime: Runtime, *, extra_hosts: set[str] | None = None, static_
     async def repair_apply(request: Request):
         issue_id = (await request.json()).get("issue_id", "")
         return locked(lambda: runtime.maintenance.repair_apply(issue_id))
+
+    @app.post("/api/courses/{course_id}/questions/{question_id}/verify-rendition")
+    def verify_rendition(course_id: str, question_id: str):
+        """Compare a question's related copy with its original. Reads both files; keeps the outcome in the app's own state."""
+        course(course_id)
+        return locked(lambda: projector.verify_rendition(course_id, question_id))
 
     @app.post("/api/prepare/{course_id}")
     def prepare(course_id: str):

@@ -79,20 +79,70 @@ def read_question_index(root: Path, course_id: str) -> dict[str, Any] | None:
 _QUESTION_MAP = re.compile(r"^lecture-\d{2}-question-map-v\d+\.json$")
 
 
-def read_answer_guidance(root: Path, question_id: str) -> str | None:
+GUIDANCE_ADAPTER = "question-map-guidance/2"
+
+
+def read_guidance(root: Path, questions: dict[str, dict]) -> dict[str, Any]:
+    """Assessor guidance joined to the question catalog by the owner's entry id (R1-Q6).
+
+    An entry is used only when it names exactly one catalogued question and its revision applies: the entry's own
+    ``version`` when it has one, else the map file's. An entry with two identifiers that disagree, a second entry for
+    the same question, an entry for no catalogued question and an entry for another revision are reported and not
+    used. The diagnostics carry ids and file names only, never guidance text.
+    """
+    review = root / "work" / "lecture-review"
+    entries: dict[str, dict] = {}
+    errors: list[dict] = []
+    seen: dict[str, str] = {}
+    refused: set[str] = set()
+    files = 0
+    if not review.is_dir():
+        return {"adapter": GUIDANCE_ADAPTER, "files": 0, "entries": {}, "errors": []}
+    for path in sorted(review.iterdir()):
+        if not path.is_file() or not _QUESTION_MAP.match(path.name):
+            continue
+        files += 1
+        doc = parse_owner_json(read_owner_bytes(path, what=path.name), what=path.name)
+        for raw in doc.get("questions") or []:
+            if not isinstance(raw, dict) or not raw.get("answer"):
+                continue
+            ids = {str(raw[k]) for k in ("id", "question_id") if raw.get(k)}
+            entry_id = str(raw.get("id") or raw.get("question_id") or "")
+
+            def refuse(code: str, detail: str, entry_id: str = entry_id, name: str = path.name) -> None:
+                errors.append({"code": code, "entry_id": entry_id, "file": name, "detail": detail})
+                refused.add(entry_id)
+                entries.pop(entry_id, None)
+
+            if len(ids) != 1:
+                refuse("conflicting_identifiers" if ids else "missing_identifier", "the entry does not name exactly one question")
+                continue
+            if entry_id in seen:
+                refuse("duplicate_entry", f"also present in {seen[entry_id]}")
+                continue
+            seen[entry_id] = path.name
+            question = questions.get(entry_id)
+            if question is None:
+                refuse("unknown_question", "no catalogued question has this id")
+                continue
+            version, basis = (raw["version"], "entry") if raw.get("version") is not None else (doc.get("version"), "file")
+            if version is not None and question.get("version") is not None and str(version) != str(question["version"]):
+                refuse("revision_mismatch", f"guidance is for version {version}, the question is at version {question['version']}")
+                continue
+            if entry_id not in refused:
+                entries[entry_id] = {"question_id": entry_id, "answer": str(raw["answer"]), "file": path.name, "version": version,
+                                     "version_basis": basis if version is not None else "none_stated"}
+    return {"adapter": GUIDANCE_ADAPTER, "files": files, "entries": entries, "errors": errors}
+
+
+def read_answer_guidance(root: Path, question_id: str, questions: dict[str, dict] | None = None) -> str | None:
     """Restricted read of owner-kept answer guidance for one question.
 
     Only the tutoring context selector (assessment) and an explicit, recorded reveal call this.
     It is never included in browse views, search indexes or client payloads by default.
     """
-    review = root / "work" / "lecture-review"
-    if not review.is_dir():
-        return None
-    for path in sorted(review.iterdir()):
-        if not path.is_file() or not _QUESTION_MAP.match(path.name):
-            continue
-        doc = parse_owner_json(read_owner_bytes(path, what=path.name), what=path.name)
-        for question in doc.get("questions") or []:
-            if question.get("question_id") == question_id and question.get("answer"):
-                return str(question["answer"])
-    return None
+    if questions is None:
+        raw = parse_owner_json(read_owner_bytes(root / "learning" / "question-index.json", what="learning/question-index.json"), what="learning/question-index.json")
+        questions = {q["question_id"]: q for q in raw.get("questions") or []}
+    entry = read_guidance(root, questions)["entries"].get(question_id)
+    return entry["answer"] if entry else None

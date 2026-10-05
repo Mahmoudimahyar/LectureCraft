@@ -62,19 +62,54 @@ def is_provisional_ref(ref: dict | None) -> bool:
     return bool(ref) and (str(ref.get("source_id") or "").startswith("unreg-") or str(ref.get("version_id") or "").startswith("disk-"))
 
 
+def _is_slide_candidate(deck: dict) -> bool:
+    """A file the course index gives a non-slide kind (a question sheet, an information sheet) is a related source,
+    not a candidate deck. Files the index does not know are candidates: their kind is only a folder convention."""
+    return deck["kind_basis"] != "owner_index" or str(deck["kind"]).endswith("_slides")
+
+
+def choose_deck(decks: list[dict], *, referenced: set[str] | frozenset[str] = frozenset(), override: str | None = None) -> dict[str, Any]:
+    """Which file a lecture unit is shown with, and on what basis (R1-Q5).
+
+    Evidence, in order: a local override; what can be displayed at all; the course index's slide kind; an explicit
+    reference to one candidate (a question or a related transcript names it). File order and size are never used:
+    when the evidence leaves several equal candidates the choice is reported as unresolved, with the candidates.
+    """
+    candidates = [d for d in decks if _is_slide_candidate(d)]
+    related = [d["source_id"] for d in decks if not _is_slide_candidate(d)]
+
+    def result(state: str, basis: str | None, chosen: dict | None, pool: list[dict]) -> dict[str, Any]:
+        return {"state": state, "basis": basis, "source_id": chosen["source_id"] if chosen else None, "candidate_source_ids": [d["source_id"] for d in pool],
+                "related_source_ids": related + [d["source_id"] for d in candidates if chosen is not None and d["source_id"] != chosen["source_id"]]}
+
+    if override:
+        chosen = next((d for d in decks if d["source_id"] == override), None)
+        if chosen is not None:
+            related = [d["source_id"] for d in decks if d["source_id"] != override]
+            return {"state": "selected", "basis": "local_override", "source_id": override, "candidate_source_ids": [d["source_id"] for d in candidates], "related_source_ids": related}
+    if not candidates:
+        return result("none", None, None, [])
+    displayable = [d for d in candidates if d["state"] in _OPENABLE and d["rendition"] == "native_pdf"]
+    readable = [d for d in candidates if d["state"] in _OPENABLE]
+    pool = displayable or readable or candidates
+    narrowed = "only_displayable_candidate" if displayable and len(displayable) < len(candidates) else "only_candidate"
+    registered = [d for d in pool if d["registration"] == "registered"]
+    if len(registered) == 1:
+        return result("selected", "index_kind", registered[0], pool)
+    if registered:
+        pool = registered
+    if len(pool) == 1:
+        return result("selected", narrowed, pool[0], pool)
+    named = [d for d in pool if d["source_id"] in referenced]
+    if len(named) == 1:
+        return result("selected", "explicit_reference", named[0], pool)
+    return result("unresolved", None, None, pool)
+
+
 def primary_deck(lecture: dict) -> dict | None:
-    """The deck a lecture unit is shown with. A unit may hold several files: prefer one that can actually be
-    displayed (a readable PDF), then any readable deck, and among equals the one the course index registered.
-    An empty or unconvertible file that merely sorts first never hides a usable deck beside it."""
-    decks = lecture["decks"]
-    if not decks:
-        return None
-
-    def rank(deck: dict) -> tuple[int, int]:
-        readable = deck["state"] in _OPENABLE
-        return (0 if readable and deck["rendition"] == "native_pdf" else 1 if readable else 2, 0 if deck["registration"] == "registered" else 1)
-
-    return min(decks, key=rank)  # min keeps list (name) order among equals
+    """The deck a lecture unit is shown with, or ``None`` when there is none or the choice is unresolved."""
+    choice = lecture.get("deck_choice") or choose_deck(lecture["decks"])
+    return next((d for d in lecture["decks"] if d["source_id"] == choice["source_id"]), None) if choice["source_id"] else None
 
 
 def other_materials(lecture: dict) -> list[dict]:
@@ -141,6 +176,7 @@ def _registered_item(root: Path, entry: dict) -> dict:
         "role": entry["role"], "path": rel, "filename": name, "media_type": media_type_for(name) if name else None, "bytes": size, "state": state,
         "registration": "registered", "rendition": _rendition(name), "disclosure": _disclosure(entry["kind"], name), "source_date": entry["source_date"],
         "historical_versions": [dict(v, bytes_available=False) for v in entry["historical_versions"]],
+        "related_source_ids": list(entry.get("related_source_ids") or []),
     }
 
 
@@ -160,6 +196,7 @@ def _disk_item(root: Path, rel: str, kind: str) -> dict:
         "source_id": unregistered_source_id(rel), "version_id": None, "sha256": None, "kind": kind, "kind_basis": "folder_convention", "role": None, "path": rel,
         "filename": path.name, "media_type": media_type_for(path.name), "bytes": size, "state": "present_unindexed" if size else "present_unindexed_empty",
         "registration": "unregistered", "rendition": _rendition(path.name), "disclosure": _disclosure(kind, path.name), "source_date": None, "historical_versions": [],
+        "related_source_ids": [],
     }
 
 
@@ -273,9 +310,13 @@ def build_inventory(binding: CourseBinding) -> dict[str, Any]:
             lecture_id = directory.name.lower()
             for session_id in linked:
                 sessions[session_id]["linked_lecture_ids"].append(lecture_id)
-            shown = primary_deck({"decks": decks})
+            # Explicit references to a candidate: another index entry (a transcript, a sheet) relates to it.
+            referenced = {d["source_id"] for d in decks if any(d["source_id"] in e["related_source_ids"] for e in entries.values())}
+            choice = choose_deck(decks, referenced=referenced | set(binding.cited_source_ids), override=binding.deck_overrides.get(lecture_id))
+            shown = primary_deck({"decks": decks, "deck_choice": choice})
             title = Path(shown["filename"]).stem if shown else directory.name
             result["lectures"].append({"lecture_id": lecture_id, "unit_dir": directory.relative_to(root).as_posix(), "title": title, "decks": decks, "extra_materials": extras,
+                                       "deck_choice": choice,
                                        "sessions": [sessions[s] for s in sorted(linked)], "session_link": "owner_related_sources" if linked else "none_recorded"})
 
     result["sessions"] = [sessions[k] for k in sorted(sessions)]

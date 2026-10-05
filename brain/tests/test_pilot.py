@@ -171,11 +171,18 @@ def test_a_quick_question_is_answered_by_the_worker_with_a_context_manifest_and_
         # What was supplied is recorded: policy files and source spans by version and hash, text kept apart from instructions.
         manifest = json.loads((private / "pilot" / "manifests" / "req-pilot-ask.json").read_text(encoding="utf-8"))
         assert manifest["course_id"] == "be505" and manifest["learner_history_supplied"] == 0 and manifest["assessor_guidance_supplied"] is False
-        # Only the course's own agent guidance is supplied. Files that speak about the learner's attempts, name the learner or carry
-        # planner preferences are withheld by rule, and the manifest says so.
+        # The course's own agent guidance is supplied as it is. The tutoring policy and the course strategy are never supplied whole:
+        # only clauses selected by a projection the owner has reviewed. This workspace's projection is an unreviewed draft, so none of
+        # its clauses are supplied, and the manifest records what was held back, what is excluded and which rule areas are missing.
         assert [i["label"] for i in manifest["instructions"]] == ["AGENTS.md"] and all(len(i["sha256"]) == 64 for i in manifest["instructions"])
-        assert [w["label"] for w in manifest["instructions_withheld"]] == ["learning-strategy.md", "planner/protocols/tutoring-policy.md"]
+        policy = manifest["policy"]
+        assert policy["review_state"] == "drafted_unreviewed" and policy["clauses_included"] == [] and policy["text_supplied"] is False
+        assert "common.help-01" in policy["clauses_held"] and "be505.restriction-01" in policy["clauses_held"]
+        assert {"common.personal-01", "common.history-01", "be505.history-01"} <= {e["id"] for e in policy["clauses_excluded"]} and all(e["reason"] for e in policy["clauses_excluded"])
+        assert sorted(g["category"] for g in policy["gaps"]) == sorted(policy["required_categories"]) and len(policy["required_categories"]) == 8
         assert "learning-strategy.md" not in prompt_text(private, native) and "tutoring-policy.md" not in prompt_text(private, native)
+        assert "Fixture policy:" not in prompt_text(private, native) and "Robin Sample" not in prompt_text(private, native)
+        assert "Rule areas not available in this request: mode and pacing" in prompt_text(private, native)
         span = manifest["source_spans"][0]
         assert span["source_id"] == "src-lecture-01-slides" and span["locator"] == {"kind": "page", "page": 2, "printed_label": None} and len(span["text_sha256"]) == 64 and span["text_chars"] > 0
         prompt = (private / "pilot" / "prompts" / f"{native['dispatch_id']}.txt").read_text(encoding="utf-8")
@@ -185,6 +192,32 @@ def test_a_quick_question_is_answered_by_the_worker_with_a_context_manifest_and_
         # No attempt, no candidate, no review item, and no course byte changed.
         assert not list(private.rglob("*.candidate")) and not list(private.rglob("review/*.json"))
         assert {cid: _tree(root) for cid, root in roots.items()} == before
+    finally:
+        env.journal.close()
+
+
+def test_with_an_owner_reviewed_projection_the_worker_gets_the_selected_clauses_and_nothing_personal(pilot, clock, tmp_path):
+    from lecture_brain.tutoring import policy as tutoring_policy
+
+    path = tutoring_policy.projection_path(pilot)
+    projection = json.loads(path.read_text(encoding="utf-8"))
+    path.write_text(json.dumps(dict(projection, review_state="owner_reviewed")), encoding="utf-8")
+    env, log = _env(pilot, clock, tmp_path)
+    try:
+        env.ask("req-pilot-policy", text="What does the origin of replication control?")
+        env.coordinator.tick()
+        assert env.job("req-pilot-policy")["state"] == S.SUCCEEDED
+        native = env.result("req-pilot-policy")["native-result"]
+        prompt = prompt_text(pilot.state_dir, native)
+        manifest = json.loads((pilot.state_dir / "pilot" / "manifests" / "req-pilot-policy.json").read_text(encoding="utf-8"))
+        assert [i["label"] for i in manifest["instructions"]] == ["AGENTS.md", "policy-projection/supplied-clauses.md"]
+        policy = manifest["policy"]
+        assert policy["review_state"] == "owner_reviewed" and policy["clauses_held"] == [] and "common.help-01" in policy["clauses_included"] and "be505.restriction-01" in policy["clauses_included"]
+        assert "give the help first and do not turn the request into a quiz" in prompt and "do not write out a full solution to a graded fixture problem set" in prompt
+        # Clauses about the learner or the planner stay out, and so do the file names and anything else in those files.
+        assert "Robin Sample" not in prompt and "parking permit" not in prompt and "learning-strategy.md" not in prompt and "tutoring-policy.md" not in prompt
+        assert {"common.personal-01", "common.history-01", "common.unrelated-01", "be505.history-01"} <= {e["id"] for e in policy["clauses_excluded"]}
+        assert manifest["learner_history_supplied"] == 0 and '"prior_effective_attempts": []' in prompt
     finally:
         env.journal.close()
 

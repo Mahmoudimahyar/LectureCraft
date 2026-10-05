@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.lecture-learning.invalid/v1/derived-manifest.schema.json",
+  "title": "Lecture Learning derived-manifest v1 (new adapter contract; one generation of generated speech timing for one recording; not a course record)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "status",
+    "kind",
+    "course_id",
+    "generation",
+    "created_at",
+    "consumer_version",
+    "recording",
+    "producer",
+    "window",
+    "time_base",
+    "clip_offset_ms",
+    "input_fingerprint",
+    "segments_path",
+    "outputs",
+    "text_origin",
+    "review_state",
+    "establishes"
+  ],
+  "properties": {
+    "contract": {
+      "const": "ll.derived-manifest/1"
+    },
+    "status": {
+      "const": "complete"
+    },
+    "kind": {
+      "const": "speech_timing"
+    },
+    "course_id": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/course"
+    },
+    "generation": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+    },
+    "created_at": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/time"
+    },
+    "consumer_version": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+    },
+    "recording": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "sha256",
+        "bytes",
+        "duration_ms"
+      ],
+      "properties": {
+        "source_id": {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/id"
+        },
+        "sha256": {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/hash"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "duration_ms": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 86400000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "tool_version",
+        "model",
+        "language",
+        "parameters_sha256"
+      ],
+      "properties": {
+        "tool": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "tool_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "language": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 35
+        },
+        "parameters_sha256": {
+          "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/hash"
+        }
+      }
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start_ms",
+        "end_ms"
+      ],
+      "properties": {
+        "start_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400000
+        },
+        "end_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000
+        }
+      }
+    },
+    "time_base": {
+      "const": "clip_relative"
+    },
+    "clip_offset_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 86400000
+    },
+    "input_fingerprint": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/hash"
+    },
+    "segments_path": {
+      "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/path"
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "$ref": "https://schemas.lecture-learning.invalid/v1/common.schema.json#/$defs/artifact"
+      },
+      "minItems": 1,
+      "maxItems": 32
+    },
+    "text_origin": {
+      "const": "generated_speech_text"
+    },
+    "review_state": {
+      "const": "generated_unreviewed"
+    },
+    "establishes": {
+      "type": "array",
+      "maxItems": 0
+    }
+  }
+}

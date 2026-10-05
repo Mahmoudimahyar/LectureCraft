@@ -10,6 +10,7 @@ import json
 from typing import Any
 
 from .outputs import output_format_instructions
+from .policy import gap_line
 
 DEPTH_GUIDE = {
     "quick": "Give the direct answer first, then at most a short explanation. Stay under {words} words. Do not add a quiz.",
@@ -31,6 +32,19 @@ def _sources_block(spans: list[dict]) -> str:
     return "\n\n".join(out)
 
 
+def _policy_block(material: dict[str, Any]) -> list[str]:
+    """The selected teaching-policy clauses under their own heading, and one line naming rule areas that were not supplied.
+
+    Absent when the caller supplied no policy selection at all (an offline evaluation run builds its own material).
+    """
+    if "policy_text" not in material:
+        return []
+    lines = ["TEACHING POLICY (selected clauses of the common tutoring policy and of this course's strategy)",
+             material["policy_text"] or "(No teaching-policy clause was supplied for this request.)"]
+    missing = gap_line(material.get("policy_gaps") or [])
+    return [*lines, *([missing] if missing else []), ""]
+
+
 def build_prompt(*, action: str, depth: str, material: dict[str, Any], question_text: str | None = None, submission: dict | None = None, family: dict | None = None,
                  policy: dict, diagnostic_state: dict | None = None, correction: dict | None = None) -> tuple[str, dict]:
     """Return (prompt text, machine-readable task spec). The spec is embedded verbatim in the prompt."""
@@ -49,6 +63,7 @@ def build_prompt(*, action: str, depth: str, material: dict[str, Any], question_
         "COURSE INSTRUCTIONS",
         material["instruction_text"],
         "",
+        *_policy_block(material),
         "SOURCES (numbered)",
         _sources_block(material["spans"]),
         "",

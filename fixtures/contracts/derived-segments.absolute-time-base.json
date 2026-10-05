@@ -1,0 +1,40 @@
+{
+  "contract": "ll.derived-segments/1",
+  "course_id": "fixture-course",
+  "source_id": "src-fixture-recording",
+  "generation": "gen-fixture-0001",
+  "time_base": "recording_absolute",
+  "clip_offset_ms": 0,
+  "text_origin": "generated_speech_text",
+  "review_state": "generated_unreviewed",
+  "establishes": [],
+  "segments": [
+    {
+      "index": 0,
+      "clip_start_ms": 0,
+      "clip_end_ms": 4200,
+      "text": "Synthetic generated sentence one.",
+      "words": [
+        {
+          "clip_start_ms": 0,
+          "clip_end_ms": 900,
+          "text": "Synthetic",
+          "probability": 0.91
+        },
+        {
+          "clip_start_ms": 900,
+          "clip_end_ms": 1800,
+          "text": "generated"
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "clip_start_ms": 4200,
+      "clip_end_ms": 9000,
+      "text": "Synthetic generated sentence two.",
+      "start_ms": 4200,
+      "end_ms": 9000
+    }
+  ]
+}

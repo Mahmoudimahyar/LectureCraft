@@ -34,14 +34,14 @@ def test_workspace_lists_all_courses_and_calls_zero_attempts_not_assessed(projec
     courses = {c_["course_id"]: c_ for c_ in view["courses"]}
     assert sorted(courses) == ["be505", "be562", "be572", "cs542", "ds551"] and view["fixture_label"].startswith("FIXTURE PROFILE")
     assert courses["cs542"]["assessed_label"] == "Not assessed" and courses["be505"]["assessed_label"] == "4 recorded attempts"
-    assert courses["be505"]["lecture_units"] == 3 and view["coverage_totals"]["lecture_units"] == 10
+    assert courses["be505"]["lecture_units"] == 4 and view["coverage_totals"]["lecture_units"] == 11
     _no_invented_measures(view)
 
 
 def test_course_view_keeps_every_unit_and_separates_preparation_from_learning(projector):
     view = projector.course_view("be505")
     lectures = {l["lecture_id"]: l for l in view["lectures"]}
-    assert sorted(lectures) == ["lecture-01", "lecture-02", "lecture-03"]
+    assert sorted(lectures) == ["lecture-01", "lecture-02", "lecture-03", "lecture-04"]
     assert lectures["lecture-01"]["disposition"] == "links_reviewed" and lectures["lecture-03"]["session_link"] == "none_recorded"
     assert [s["state"] for s in view["unlinked_sessions"]] == ["empty_unrecorded"]
     assert any(s["state"] == "registered_unavailable" for s in view["other_sources"])
@@ -206,29 +206,33 @@ def multi_file_unit(settings, clock):
     journal.close()
 
 
-def test_unit_with_several_files_shows_a_readable_deck_and_lists_every_other_file(multi_file_unit):
+def test_unit_with_several_files_offers_its_readable_candidates_and_lists_every_other_file(multi_file_unit):
     projector, original_name, prep = multi_file_unit
     row = next(l for l in projector.course_view("be505")["lectures"] if l["lecture_id"] == "lecture-03")
-    # An empty file that happens to sort first must not make the unit look unusable.
-    assert row["deck"]["filename"] in {original_name, "Second reading.pdf"} and row["displayable"] is True
-    assert row["disposition"].split(":")[0] != "no_source"
-    assert row["other_materials_count"] == 3
+    # Two readable files and nothing in the course index that says which is the deck: neither is picked by name or size.
+    assert row["deck"] is None and row["deck_choice"] == {"state": "unresolved", "basis": None, "candidates": 2}
+    assert row["disposition"].startswith("no_source") and "2 candidate files" in row["disposition"]
+    assert row["other_materials_count"] == 4
     view = projector.lecture_view("be505", "lecture-03")
-    assert view["deck"]["filename"] == row["deck"]["filename"] and view["page_count"] >= 2
+    # An empty file that happens to sort first is not a candidate while readable files exist.
+    assert sorted(c_["filename"] for c_ in view["deck_choice"]["candidates"]) == sorted([original_name, "Second reading.pdf"])
+    chosen = next(c_ for c_ in view["deck_choice"]["candidates"] if c_["filename"] == original_name)
+    view = projector.lecture_view("be505", "lecture-03", deck=chosen["source_id"])
+    assert view["deck"]["filename"] == original_name and view["page_count"] >= 2
     others = {m["filename"]: m for m in view["other_materials"]}
-    assert set(others) == {"000 placeholder.pdf", "Second reading.pdf", "notes for the unit.txt", original_name} - {row["deck"]["filename"]}
+    assert set(others) == {"000 placeholder.pdf", "Second reading.pdf", "notes for the unit.txt"}
     assert others["000 placeholder.pdf"]["available"] is False and others["notes for the unit.txt"]["available"] is True
     other_deck = next(m for m in view["other_materials"] if m["role"] == "deck" and m["available"])
     assert other_deck["media_type"] == "application/pdf" and other_deck["source_id"]
     assert all(set(m) == {"source_id", "filename", "role", "kind", "state", "registration", "rendition", "media_type", "bytes", "available"} for m in view["other_materials"])
     # The unit keeps one identity and is counted once in the all-lecture denominator.
-    assert sum(1 for l in prep.coverage()["courses"]["be505"]["lectures"]) == 3
+    assert sum(1 for l in prep.coverage()["courses"]["be505"]["lectures"]) == 4
 
 
 def test_single_file_units_list_no_other_files(projector):
     view = projector.lecture_view("be505", "lecture-01")
     assert view["other_materials"] == []
-    assert all(l["other_materials_count"] == 0 for l in projector.course_view("be505")["lectures"])
+    assert {l["lecture_id"]: l["other_materials_count"] for l in projector.course_view("be505")["lectures"]} == {"lecture-01": 0, "lecture-02": 0, "lecture-03": 0, "lecture-04": 1}
 
 
 def test_files_the_course_index_has_not_registered_are_identified_by_their_content(projector, settings):

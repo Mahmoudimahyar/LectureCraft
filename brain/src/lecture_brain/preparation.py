@@ -360,7 +360,10 @@ class Preparation:
 
         slide_texts: list[str] = []
         if deck is None:
-            stages["rendition"] = {"status": "no_source", "reason": "No slide deck file is present for this lecture unit."}
+            choice = lecture.get("deck_choice") or {}
+            stages["rendition"] = {"status": "no_source", "reason": (
+                f"{len(choice['candidate_source_ids'])} candidate files and nothing in the course index says which one is the deck; choose one in the lecture view."
+                if choice.get("state") == "unresolved" else "No slide deck file is present for this lecture unit.")}
         else:
             pdf = self._displayable_pdf(course_id, root, deck, stages)
             if pdf is not None:

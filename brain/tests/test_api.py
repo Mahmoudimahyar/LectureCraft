@@ -174,7 +174,7 @@ def test_startup_queues_preparation_from_updater_receipts_and_the_loop_runs_it(c
     for _ in range(3):
         client.post("/api/supervisor/tick")
     coverage = client.get("/api/coverage").json()
-    assert coverage["totals"].get("not_processed", 0) == 0 and coverage["totals"]["lecture_units"] == 10
+    assert coverage["totals"].get("not_processed", 0) == 0 and coverage["totals"]["lecture_units"] == 11
     l2 = client.get("/api/courses/be505/lectures/lecture-02").json()
     assert any(o["review_state"] == "suggested" for s in l2["slides"] for o in s["occurrences"])
     assert runtime.adapter.calls == 0  # preparation never calls the tutor
@@ -226,3 +226,26 @@ def test_cleanup_of_rebuildable_data_queues_its_rebuild_so_nothing_stays_unproce
     if not any(i["path"].endswith("/prepared") for i in again["removable"]):
         quiet = client.post("/api/cleanup/be562/apply", json={"preview_id": again["preview_id"]}).json()
         assert quiet["rebuild"]["queued"] is False
+
+
+# ---- R1-Q1/Q5: question bank and deck choice over HTTP ------------------------------------------------
+def test_question_bank_endpoint_pages_filters_and_keeps_the_true_total(client):
+    first = client.get("/api/courses/be505/questions", params={"limit": 3}).json()
+    assert first["total"] >= 11 and len(first["items"]) == 3 and first["next_offset"] == 3
+    rest = client.get("/api/courses/be505/questions", params={"limit": 500, "offset": 3}).json()
+    assert len(first["items"]) + len(rest["items"]) == first["total"] and rest["next_offset"] is None
+    lecture = client.get("/api/courses/be505/questions", params={"lecture": "lecture-04"}).json()
+    assert lecture["matching"] == 3 and {q["collection"] for q in lecture["items"]} == {"L04", "L04-class"}
+    assert client.get("/api/courses/be505/questions", params={"q": "BE505-L01-Q04"}).json()["matching"] == 1
+    assert client.get("/api/courses/be505/questions", params={"limit": 0}).status_code == 422 and client.get("/api/courses/nope/questions").status_code == 404
+    # the single-question route still answers, and an id is never mistaken for the list
+    assert client.get("/api/courses/be505/questions/BE505-L01-Q04").json()["anchor_state"] == "unresolved"
+
+
+def test_lecture_endpoint_accepts_a_deck_of_the_same_unit_only(client):
+    view = client.get("/api/courses/be505/lectures/lecture-04").json()
+    assert view["deck"]["source_id"] == "src-lecture-04-slides" and len(view["questions"]["all"]) == 3
+    sheet = client.get("/api/courses/be505/lectures/lecture-04", params={"deck": "src-lecture-04-in-class-questions"}).json()
+    assert sheet["deck"]["source_id"] == "src-lecture-04-in-class-questions" and sheet["deck_choice"]["basis"] == "this_request" and sheet["page_count"] == 1
+    other = client.get("/api/courses/be505/lectures/lecture-04", params={"deck": "src-lecture-01-slides"}).json()
+    assert other["deck"]["source_id"] == "src-lecture-04-slides"  # a file of another unit is ignored

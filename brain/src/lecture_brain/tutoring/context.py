@@ -19,11 +19,13 @@ from ..ownerio.attempts import read_attempt_records
 from ..ownerio.catalogs import read_answer_guidance, read_families, read_question_index
 from ..ownerio.inventory import build_inventory
 from ..preparation import current_identity
+from .policy import build_policy, receipt_of, summary_line
 
 MAX_SPAN_CHARS = 6000
-# Not supplied to the pilot worker, with the reason recorded in each context manifest.
-PILOT_WITHHELD = {"learning-strategy.md": "speaks about the state of the learner's own attempts (learner history is not supplied in the pilot)",
-                  "planner/protocols/tutoring-policy.md": "names the learner and carries planner preferences (personal planner data is not supplied in the pilot)"}
+MAX_AGENTS_CHARS = 8000
+# How the teaching-policy selection appears among a context receipt's instruction artifacts.
+POLICY_TEXT_LABEL = "policy-projection/supplied-clauses.md"  # the clause text that was supplied (absent when none was)
+POLICY_RECEIPT_LABEL = "policy-projection/selection-receipt.json"  # the record of the selection; a record, not text given to the tutor
 
 
 def _all_items(inventory: dict):
@@ -72,23 +74,28 @@ def read_span(root: Path, item: dict, locator: dict) -> str | None:
     return None
 
 
-def _instruction_artifacts(settings: Settings, course_id: str) -> tuple[list[dict], str]:
-    root = settings.course(course_id).root
-    artifacts, texts = [], []
-    for rel, base, label in (("AGENTS.md", root, "AGENTS.md"), ("learning-strategy.md", root, "learning-strategy.md"),
-                             ("protocols/tutoring-policy.md", settings.planner_root, "planner/protocols/tutoring-policy.md")):
-        if settings.profile == "pilot" and label in PILOT_WITHHELD:
-            continue  # the pilot worker gets the course's own agent guidance only
-        path = base / rel
-        if path.is_file():
-            data = path.read_bytes()
-            artifacts.append(c.artifact_for_bytes(data, label, "text/markdown"))
-            texts.append(f"--- {label} ---\n{data.decode('utf-8-sig', 'replace')[:8000]}")
-    if not artifacts:
+def _instruction_artifacts(settings: Settings, course_id: str, action: str) -> tuple[list[dict], str, dict, dict]:
+    """(instruction artifacts, the course's own guidance, the policy selection, its record) — the same in every profile.
+
+    The course's ``AGENTS.md`` is the course's own guidance and is supplied as it is. The common tutoring policy and
+    the course's learning strategy are never supplied whole: only the clauses the projection selects, each verified
+    against the current file, and the record says what was left out and which rule areas are missing.
+    """
+    path = settings.course(course_id).root / "AGENTS.md"
+    if path.is_file():
+        data = path.read_bytes()
+        artifacts = [c.artifact_for_bytes(data, "AGENTS.md", "text/markdown")]
+        text = f"--- AGENTS.md ---\n{data.decode('utf-8-sig', 'replace')[:MAX_AGENTS_CHARS]}"
+    else:
         data = b"No course instruction file was readable; default tutoring rules in the task apply.\n"
-        artifacts.append(c.artifact_for_bytes(data, "builtin/no-course-instructions.txt", "text/plain"))
-        texts.append(data.decode())
-    return artifacts, "\n\n".join(texts)
+        artifacts = [c.artifact_for_bytes(data, "builtin/no-course-instructions.txt", "text/plain")]
+        text = data.decode()
+    selection = build_policy(settings, course_id, action)
+    record = receipt_of(selection)
+    if selection["text"]:
+        artifacts.append(c.artifact_for_bytes(selection["text"].encode("utf-8"), POLICY_TEXT_LABEL, "text/markdown"))
+    artifacts.append(c.artifact_for_bytes(c.dump_json(record), POLICY_RECEIPT_LABEL, "application/json"))
+    return artifacts, text, selection, record
 
 
 def select_context(settings: Settings, *, request: dict, sources: list[dict], skill_ids: list[str], question_id: str | None, for_assessment: bool,
@@ -99,8 +106,8 @@ def select_context(settings: Settings, *, request: dict, sources: list[dict], sk
     policy = settings.policy
     budget = int(policy["default_context_character_budget"])
     inventory = build_inventory(settings.course(course_id))
-    instructions, instruction_text = _instruction_artifacts(settings, course_id)
-    budget -= len(instruction_text)
+    instructions, instruction_text, selection, policy_record = _instruction_artifacts(settings, course_id, request["action"])
+    budget -= len(instruction_text) + len(selection["text"])
 
     supplied_sources, spans, source_problems = [], [], []
     for source in sources[: int(policy["default_top_source_spans"])]:
@@ -167,27 +174,30 @@ def select_context(settings: Settings, *, request: dict, sources: list[dict], sk
         "instructions": instructions, "sources": supplied_sources, "effective_attempts": attempts_refs, "known_solution_exposure": exposure,
         "native_history_blind": False, "created_at": now, "policy_revision": settings.policy_revision,
         "selection_note": ("Pinned request sources first, then the newest effective attempts for the intended skills. Tool restrictions are prompt-level only and are not an OS/tool sandbox."
-                           + (" Assessor guidance was supplied to the tutor for grading and withheld from the client." if guidance else "")),
+                           + (" Assessor guidance was supplied to the tutor for grading and withheld from the client." if guidance else "")
+                           + " " + summary_line(policy_record) + f" The clause selection is recorded under instructions as {POLICY_RECEIPT_LABEL}; that entry is a record, not text given to the tutor."),
     }
     c.require_valid("context", receipt)
     if pilot:
-        _write_pilot_manifest(settings, request, receipt, spans, rubric)
+        _write_pilot_manifest(settings, request, receipt, spans, rubric, policy_record)
         instruction_text = (f"[{settings.pilot['label']}: a restricted worker started by the Lecture Learning app for a limited pilot. You are not the learner's desktop course chat "
                             "and have no earlier conversation with the learner beyond this thread.]\n\n" + instruction_text)
-    return receipt, {"instruction_text": instruction_text, "spans": spans, "attempts": attempt_summaries, "rubric": rubric, "assessor_guidance": guidance,
-                     "source_problems": source_problems}
+    return receipt, {"instruction_text": instruction_text, "policy_text": selection["text"], "policy_gaps": selection["gaps"], "policy": policy_record,
+                     "spans": spans, "attempts": attempt_summaries, "rubric": rubric, "assessor_guidance": guidance, "source_problems": source_problems}
 
 
-def _write_pilot_manifest(settings: Settings, request: dict, receipt: dict, spans: list[dict], rubric: list[dict]) -> None:
+def _write_pilot_manifest(settings: Settings, request: dict, receipt: dict, spans: list[dict], rubric: list[dict], policy_record: dict) -> None:
     """What the pilot worker is given, by version and hash. Source text is listed apart from instructions; nothing is invented."""
     manifest = {
-        "contract": "ll.pilot-context-manifest/1", "request_id": request["request_id"], "course_id": request["scope"]["course_id"], "action": request["action"], "created_at": receipt["created_at"],
+        "contract": "ll.pilot-context-manifest/2", "request_id": request["request_id"], "course_id": request["scope"]["course_id"], "action": request["action"], "created_at": receipt["created_at"],
         "policy_revision": receipt["policy_revision"],
-        "instructions": [{"label": a["path"], "sha256": a["sha256"], "bytes": a["bytes"], "supplied_chars_at_most": 8000} for a in receipt["instructions"]],
+        "instructions": [{"label": a["path"], "sha256": a["sha256"], "bytes": a["bytes"], "supplied_chars_at_most": MAX_AGENTS_CHARS if a["path"] != POLICY_TEXT_LABEL else a["bytes"]}
+                         for a in receipt["instructions"] if a["path"] != POLICY_RECEIPT_LABEL],
         "source_spans": [{"source_id": s["source"]["source_id"], "version_id": s["source"]["version_id"], "sha256": s["source"]["sha256"], "locator": s["source"]["locator"], "filename": s["filename"],
                           "text_chars": len(s["text"] or ""), "text_sha256": c.sha256_hex((s["text"] or "").encode("utf-8")) if s["text"] else None} for s in spans],
         "rubric_criteria": [{"criterion_id": r.get("criterion_id"), "skill_id": r["skill_id"]} for r in rubric],
-        "instructions_withheld": [{"label": label, "reason": reason} for label, reason in PILOT_WITHHELD.items()],
+        # Which clauses of the tutoring policy and the course strategy were supplied, held back or excluded (with the reason), and which rule areas are missing.
+        "policy": policy_record,
         "learner_history_supplied": 0, "assessor_guidance_supplied": False, "audio_or_video_supplied": False,
         "note": "Instruction files and source spans are identified by the bytes they were read from. Prompt digest is added when the turn is sent.",
     }

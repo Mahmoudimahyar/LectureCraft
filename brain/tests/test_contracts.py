@@ -13,7 +13,7 @@ def cases(repo):
 
 def test_all_supplied_cases_match_expected(repo):
     all_cases = cases(repo)
-    assert len(all_cases) == 84
+    assert len(all_cases) == 97  # 84 original cases + 13 derived-manifest / derived-segments cases (remediation R1-E)
     for case in all_cases:
         record = c.parse_json((repo / case["fixture"]).read_bytes())
         errors = c.validate(case["schema"], record)

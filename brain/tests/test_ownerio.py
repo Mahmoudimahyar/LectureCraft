@@ -72,7 +72,7 @@ def test_wrong_course_identity_is_rejected(be505):
 def test_inventory_accounts_for_every_unit_and_keeps_states_distinct(settings):
     inv = build_inventory(settings.course("be505"))
     lectures = {l["lecture_id"]: l for l in inv["lectures"]}
-    assert sorted(lectures) == ["lecture-01", "lecture-02", "lecture-03"]
+    assert sorted(lectures) == ["lecture-01", "lecture-02", "lecture-03", "lecture-04"]
     l1, l2, l3 = lectures["lecture-01"], lectures["lecture-02"], lectures["lecture-03"]
     assert l1["decks"][0]["state"] == "registered_readable" and l1["decks"][0]["source_id"] == "src-lecture-01-slides"
     assert [s["session_id"] for s in l1["sessions"]] == ["2026-09-03"]
@@ -106,7 +106,7 @@ def test_inventory_states_across_other_courses(settings):
 def test_coverage_denominator_is_all_courses_and_is_not_filterable(settings):
     summary = coverage_summary(settings)
     assert sorted(summary["courses"]) == ["be505", "be562", "be572", "cs542", "ds551"]
-    assert summary["totals"]["lecture_units"] == 3 + 2 + 3 + 1 + 1
+    assert summary["totals"]["lecture_units"] == 4 + 2 + 3 + 1 + 1
     assert summary["totals"]["sessions"] == 3 + 2 + 1 + 1 + 2
     be505 = summary["courses"]["be505"]
     assert be505["by_state"]["present_unindexed"] >= 3 and be505["by_state"]["registered_unavailable"] == 1

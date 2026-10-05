@@ -6,7 +6,7 @@ value (root, thread, executable, permission) is ignored in favour of these local
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 import json
 import os
@@ -43,6 +43,11 @@ class CourseBinding:
     status: str = "bound"  # bound | missing_root | identity_mismatch
     problem: str | None = None
     native_thread_id: str | None = None
+    # App-side read configuration (never a course edit): a chosen deck per lecture unit, the collections whose slide
+    # numbers the owner confirmed as physical pages, and the source ids the course's own question catalog cites.
+    deck_overrides: Mapping[str, str] = field(default_factory=dict)
+    reviewed_collections: tuple[str, ...] = ()
+    cited_source_ids: tuple[str, ...] = ()
 
     @property
     def usable(self) -> bool:
@@ -168,6 +173,21 @@ def _bind_course(course_id: str, root: Path, native_threads: Mapping[str, str]) 
     return CourseBinding(course_id, TERM, root, str(meta.get("display_name") or display), thread_key, "bound", None, native)
 
 
+def _with_read_configuration(binding: CourseBinding, overrides: Mapping[str, Any]) -> CourseBinding:
+    """Attach the app's read-side configuration for one course. The question catalog is read only for the ids it cites."""
+    if not binding.usable:
+        return binding
+    cited: set[str] = set()
+    try:
+        index = json.loads((binding.root / "learning" / "question-index.json").read_text(encoding="utf-8-sig"))
+        cited = {r.get("source_id") for q in index.get("questions") or [] for r in q.get("source_refs") or [] if isinstance(r, dict) and r.get("source_id")}
+    except (OSError, ValueError, AttributeError):
+        pass  # no catalog, or one the catalog reader will report: deck choice then simply has no question references
+    decks = (overrides.get("deck_overrides") or {}).get(binding.course_id) or {}
+    reviewed = (overrides.get("reviewed_page_basis") or {}).get(binding.course_id) or []
+    return replace(binding, deck_overrides={str(k): str(v) for k, v in decks.items()}, reviewed_collections=tuple(str(c) for c in reviewed), cited_source_ids=tuple(sorted(cited)))
+
+
 def load_settings(profile: str | None = None, *, env: Mapping[str, str] | None = None, repo: Path | None = None,
                   planner_config: Path | None = None, state_dir: Path | None = None, pilot: dict[str, Any] | None = None) -> Settings:
     env = os.environ if env is None else env
@@ -225,6 +245,10 @@ def load_settings(profile: str | None = None, *, env: Mapping[str, str] | None =
 
     planner = read_planner_config(planner_config)
     declared = planner.get("courses") or {}
+    # Read-side overrides. The fixture profile takes them from the generated fixture workspace, never from the private binding.
+    overrides_file = planner_config.parent / "app-read-overrides.json" if profile == "fixture" else None
+    overrides = (json.loads(overrides_file.read_text(encoding="utf-8")) if overrides_file is not None and overrides_file.is_file()
+                 else {} if profile == "fixture" else dict(workspace.get("read_overrides") or {}))
     native_file = repo / "config" / "local-bindings" / "native.json"
     native_binding: dict[str, Any] = {}
     if profile != "fixture" and native_file.is_file():
@@ -238,7 +262,7 @@ def load_settings(profile: str | None = None, *, env: Mapping[str, str] | None =
             courses[course_id] = CourseBinding(course_id, TERM, Path("."), course_id.upper(), f"tutor-{course_id}", "missing_root",
                                                "Course is not present in the planner configuration")
             continue
-        courses[course_id] = _bind_course(course_id, Path(entry["root"]), native_threads)
+        courses[course_id] = _with_read_configuration(_bind_course(course_id, Path(entry["root"]), native_threads), overrides)
 
     if profile == "fixture":
         # The fixture profile writes directly and answers with a labeled keyword double. It may only ever see folders

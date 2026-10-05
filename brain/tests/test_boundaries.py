@@ -88,6 +88,7 @@ STATE_CHANGING_ROUTES = {
     ("POST", "/api/activity/{request_id}/reconcile"), ("POST", "/api/activity/{request_id}/retry"), ("POST", "/api/supervisor/{action}"),
     ("POST", "/api/fixture/native-mode"), ("POST", "/api/probe-native"), ("POST", "/api/maintenance/apply"), ("POST", "/api/prepare/{course_id}"),
     ("POST", "/api/export"), ("POST", "/api/cleanup/{course_id}/apply"), ("POST", "/api/evidence-deletion"), ("POST", "/api/acceptance/run"),
+    ("POST", "/api/courses/{course_id}/questions/{question_id}/verify-rendition"),
 }
 
 
@@ -144,6 +145,8 @@ def test_every_state_changing_route_of_the_read_only_profile_leaves_course_and_p
         call("POST", "/api/activity/{request_id}/reconcile", "/api/activity/req-b-ask/reconcile", {200, 409})
         call("POST", "/api/activity/{request_id}/retry", "/api/activity/req-b-ask/retry", {200, 409})
         call("POST", "/api/prepare/{course_id}", "/api/prepare/be505", {200})
+        checked = call("POST", "/api/courses/{course_id}/questions/{question_id}/verify-rendition", "/api/courses/be505/questions/BE505-PS03-Q01/verify-rendition", {200}).json()
+        assert checked["result"] == "match" and (tmp_path / "private-state" / "rendition-checks.json").is_file()  # the outcome is kept in the app's own state
         call("POST", "/api/export", "/api/export", {200}, json={"courses": sorted(roots)})
         preview = client.get("/api/cleanup/be505/preview").json()
         call("POST", "/api/cleanup/{course_id}/apply", "/api/cleanup/be505/apply", {200}, json={"preview_id": preview["preview_id"]})

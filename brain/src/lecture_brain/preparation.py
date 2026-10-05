@@ -38,14 +38,17 @@ from .config import Settings
 from .fsutil import replace_atomic
 from .ownerio.inventory import build_inventory, disk_version_id, primary_deck
 
-TOOL_VERSION = "prep-4"
+TOOL_VERSION = "prep-5"
 _WORD = re.compile(r"[a-z][a-z0-9'-]{2,}")
 _STOP = frozenset("the and that this with for are was not but you can has have its from one each will our out about into than then them they their there what when which who how why does did had been were would could should also just more most some such only very much many may might must shall over under between both few any all per via".split())
 _CUE_TIME = re.compile(r"(?:(\d+):)?(\d{2}):(\d{2})[.,](\d{3})\s*-->\s*(?:(\d+):)?(\d{2}):(\d{2})[.,](\d{3})")
 MIN_SEGMENT_SCORE = 0.10
 MIN_MARGIN = 0.02
 # A spoken reference back to an earlier slide ("go back to the membrane slide", "remember the origin slide again").
-# It counts only together with a title word that belongs to exactly one earlier slide; a look ahead never counts.
+# It counts only when the speaker says "slide", uses a back-pointing word, and names a title word that belongs to
+# exactly one earlier slide; a look ahead never counts. Ordinary speech uses "back" and "again" constantly, and slide
+# titles contain everyday words, so anything less than all three produced false revisits on real lectures.
+_SLIDE_WORDS = frozenset({"slide", "slides"})
 _BACK_CUES = frozenset({"back", "again", "return", "returning", "revisit", "revisiting", "recall", "remember", "earlier", "previous", "previously"})
 _AHEAD_CUES = frozenset({"later", "next", "soon", "upcoming"})
 
@@ -187,6 +190,8 @@ def align_lines_to_slides(slide_texts: list[str], lines: list[str]) -> list[dict
     raw = [set(_WORD.findall(line.lower())) for line in lines]
 
     def referenced_earlier_slide(i: int) -> int | None:
+        if not raw[i] & _SLIDE_WORDS:
+            return None
         if not raw[i] & _BACK_CUES or raw[i] & _AHEAD_CUES:
             return None
         named = [s for s in range(n_slides) if own_title_words[s] & raw[i]]
@@ -203,7 +208,8 @@ def align_lines_to_slides(slide_texts: list[str], lines: list[str]) -> list[dict
             i += 1
             continue
         j = i
-        while j + 1 < n_lines and referenced_earlier_slide(j + 1) in {None, target} and sim[j + 1][target] >= sim[j + 1][assigned[j + 1]]:
+        # The revisit lasts while the next line still relates to that slide (not merely "no worse than nothing").
+        while j + 1 < n_lines and referenced_earlier_slide(j + 1) in {None, target} and sim[j + 1][target] > 0 and sim[j + 1][target] >= sim[j + 1][assigned[j + 1]]:
             j += 1
         for k in range(i, j + 1):
             assigned[k], kinds[k], bases[k] = target, "revisit", "title_reference"

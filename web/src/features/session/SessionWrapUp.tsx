@@ -106,7 +106,7 @@ export function SessionWrapUp() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="ll-page ll-page-reading">
       <PageHeader title="Session summary" subtitle={`${courseName(app.workspace, courseId)} · built from this session's actual requests and receipts, not from a model's recollection.`} />
 
       <section className="ll-card mb-4 p-4" aria-labelledby="where-h">

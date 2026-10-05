@@ -11,6 +11,7 @@ import { ActivityPage, ConflictResolution } from "@/features/activity/ActivityPa
 import { ConnectPage } from "@/features/connect/ConnectPage";
 import { LectureWorkspace } from "@/features/lecture/LectureWorkspace";
 import { ConceptDetail, HistoryPage, ProgressPage } from "@/features/progress/ProgressPages";
+import { QuestionBankPage } from "@/features/question/QuestionList";
 import { QuestionPractice } from "@/features/question/QuestionPractice";
 import { ReviewHome, ReviewSession } from "@/features/review/ReviewPages";
 import { SessionWrapUp } from "@/features/session/SessionWrapUp";
@@ -57,6 +58,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="courses/:courseId" element={<CourseLectures />} />
               <Route path="courses/:courseId/lectures/:lectureId" element={<LectureWorkspace />} />
               <Route path="courses/:courseId/sources/:sourceId" element={<SourceDetail />} />
+              <Route path="courses/:courseId/questions" element={<QuestionBankPage />} />
               <Route path="courses/:courseId/questions/:questionId" element={<QuestionPractice />} />
               <Route path="courses/:courseId/concepts/:typedId" element={<ConceptDetail />} />
               <Route path="review" element={<ReviewHome />} />

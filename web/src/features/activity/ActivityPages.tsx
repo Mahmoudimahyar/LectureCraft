@@ -62,7 +62,7 @@ export function ActivityPage() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="ll-page">
       <PageHeader title="Activity" subtitle={data?.note ?? "Requests and their real states."} actions={
         <select className="ll-input w-auto" value={filter} onChange={(e) => setFilter(e.target.value as "open" | "all")} aria-label="Which requests to show">
           <option value="open">Open requests</option><option value="all">All requests</option>
@@ -145,7 +145,7 @@ function RequestDetail({ requestId }: { requestId: string }) {
   const local = useLocalRequests(app.courseId);
   const mine = local.data?.find((r) => r.requestId === requestId);
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="ll-page ll-page-reading">
       <Link to="/activity" className="ll-btn ll-btn-sm mb-3">← All activity</Link>
       <PageHeader title="Request detail" subtitle={<span className="break-all font-mono">{requestId}</span>} />
       {mine && <div className="mb-4"><RequestCard request={mine} /></div>}
@@ -207,7 +207,7 @@ function ResumeConflict({ courseId }: { courseId: string }) {
     return <EmptyState title="No competing study positions" action={<Link className="ll-btn" to="/study">Back to study</Link>}>{resume.data?.current ? "There is one current position; continue from Study." : "No position has been synchronised yet."}</EmptyState>;
   }
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="ll-page ll-page-reading">
       <PageHeader title="Two study positions" subtitle={resume.data.conflict.note} />
       <ul className="grid gap-3 md:grid-cols-2">
         {heads.map((head) => {
@@ -275,7 +275,7 @@ function LinkConflict({ conflictId, courseId, lectureId }: { conflictId: string;
     }
   };
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="ll-page ll-page-reading">
       <PageHeader title="Two versions of a slide link" subtitle="Another correction was accepted first. Nothing was overwritten; choose which one should stand." />
       <div className="grid gap-3 md:grid-cols-2">
         <div className="ll-card flex flex-col gap-2 p-3"><h2 className="font-semibold">Current (accepted)</h2><p data-testid="conflict-current">{interval(conflict.current)} · revision {conflict.current.revision}</p><Button busy={busy} disabled={!head} onClick={() => resolve(false)}>Keep this one</Button></div>

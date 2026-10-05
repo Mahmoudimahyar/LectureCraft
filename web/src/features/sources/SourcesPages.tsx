@@ -71,7 +71,7 @@ export function SourcesPage() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="ll-page">
       <PageHeader title="Sources" subtitle={`${data.display_name} — inventory, versions and preparation`} actions={<>
         <Button onClick={prepare} busy={busy === "prepare"}>Prepare a batch now</Button>
         <Button onClick={() => setHintOpen(true)}>Tell the Brain about new material</Button>
@@ -188,7 +188,7 @@ export function SourceDetail() {
   const isMedia = !!item.media_type && (item.media_type.startsWith("audio/") || item.media_type.startsWith("video/"));
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="ll-page">
       <ReturnLink />
       <PageHeader title={item.filename ?? item.source_id} subtitle={`${kindLabel(item.kind)} · ${item.kind_basis === "owner_index" ? "kind from the course index" : "kind inferred from its folder"}`} />
       <dl className="ll-card mb-4 grid gap-x-4 gap-y-1 p-3 text-sm sm:grid-cols-[auto_1fr]">

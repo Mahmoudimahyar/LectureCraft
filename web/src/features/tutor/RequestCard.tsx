@@ -47,10 +47,29 @@ function DiagnosticBlock({ detail, request, onFollowUp }: { detail: ResultDetail
             <Button size="sm" onClick={() => setOpen(false)}>Skip</Button>
             <Button size="sm" variant="quiet" onClick={() => onFollowUp?.({ kind: "deeper", request })}>Just explain it</Button>
           </div>
-          <p className="text-xs text-muted">Nothing runs until you answer. Skipping leaves this pending — it is not counted as a failure.</p>
+          <p className="text-sm text-muted">Nothing runs until you answer. Skipping leaves this pending — it is not counted as a failure.</p>
         </>
       ) : <p className="text-sm text-muted">The short detour ends here{diagnostic.followups_limit ? ` (after ${diagnostic.followups_used} of ${diagnostic.followups_limit} checks)` : ""}. Going deeper is your choice.</p>}
     </div>
+  );
+}
+
+const ADDED_EXPLANATION = "Added explanation — not from the cited course source";
+
+// The reply. When the tutor itemized it and the parts really are the verified text, a part the tutor added beyond the
+// supplied course source gets a quiet marker; supported parts are left as they are. Otherwise the text is shown as before.
+function ReplyBody({ text, detail }: { text: string; detail: ResultDetail | null }) {
+  const segments = detail?.support_itemized ? detail.segments ?? [] : [];
+  const joined = segments.map((s) => s.text).join("\n\n");
+  if (segments.length === 0 || !text.endsWith(joined)) return <Markdown>{text}</Markdown>;
+  const lead = text.slice(0, text.length - joined.length).trim();
+  return (
+    <>
+      {lead && <Markdown>{lead}</Markdown>}
+      {segments.map((s, i) => s.support === "added_explanation"
+        ? <div key={i} className="border-l-2 border-dashed border-line pl-2" title={ADDED_EXPLANATION} data-support="added_explanation"><span className="sr-only">{ADDED_EXPLANATION}: </span><Markdown>{s.text}</Markdown></div>
+        : <Markdown key={i}>{s.text}</Markdown>)}
+    </>
   );
 }
 
@@ -114,7 +133,7 @@ export function RequestCard({ request, onFollowUp, showContext = true }: { reque
       {verified?.message && (
         <section aria-label="Tutor reply" className="border-l-2 border-accent pl-3" data-testid="tutor-reply">
           <p className="ll-label mb-1">Tutor</p>
-          <Markdown>{verified.message.text}</Markdown>
+          <ReplyBody text={verified.message.text} detail={detail} />
           {verified.message.sources.length > 0 && (
             <ul className="mt-1 flex flex-wrap gap-1.5" aria-label="Sources used">
               {verified.message.sources.map((s, i) => {

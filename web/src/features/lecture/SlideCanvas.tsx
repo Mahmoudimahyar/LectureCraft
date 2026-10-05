@@ -24,10 +24,12 @@ export function loadPdf(url: string): Promise<PdfDocument> {
   return doc;
 }
 
-async function renderPage(doc: PdfDocument, pageNumber: number, canvas: HTMLCanvasElement, cssWidth: number, textLayer?: HTMLDivElement | null, onTask?: (task: { cancel: () => void }) => void): Promise<{ width: number; height: number }> {
+async function renderPage(doc: PdfDocument, pageNumber: number, canvas: HTMLCanvasElement, cssWidth: number, textLayer?: HTMLDivElement | null, onTask?: (task: { cancel: () => void }) => void,
+  cssHeight?: number | null, zoom = 1): Promise<{ width: number; height: number }> {
   const page = await doc.getPage(pageNumber);
   const base = page.getViewport({ scale: 1 });
-  const scale = cssWidth / base.width;
+  // Fit inside the box without distortion: the width decides unless the box is also limited in height (contain).
+  const scale = Math.min(cssWidth / base.width, cssHeight ? cssHeight / base.height : Infinity) * zoom;
   const ratio = Math.min(window.devicePixelRatio || 1, 2);
   const viewport = page.getViewport({ scale: scale * ratio });
   canvas.width = Math.floor(viewport.width);
@@ -59,16 +61,21 @@ interface SlideCanvasProps {
   label: string;
   onPageCount?: (count: number) => void;
   hidden?: boolean;
+  /** Shown at the left of the zoom controls (slide title and source line), so they share one row. */
+  header?: React.ReactNode;
+  /** The frame has a height of its own (wide workspace): fit the whole slide inside it instead of fitting the width only. */
+  contain?: boolean;
 }
 
 const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
 
-export function SlideCanvas({ url, page, label, onPageCount, hidden }: SlideCanvasProps) {
+export function SlideCanvas({ url, page, label, onPageCount, hidden, header, contain = false }: SlideCanvasProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
   const [fitWidth, setFitWidth] = useState(0);
+  const [fitHeight, setFitHeight] = useState(0);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
   const [rendered, setRendered] = useState<number | null>(null);
@@ -79,6 +86,7 @@ export function SlideCanvas({ url, page, label, onPageCount, hidden }: SlideCanv
     // A hidden pane measures 0: keep the last real width so switching panes never re-renders the slide.
     const update = () => {
       if (frame.clientWidth > 0) setFitWidth(Math.max(240, frame.clientWidth - 2));
+      if (frame.clientHeight > 0) setFitHeight(Math.max(160, frame.clientHeight - 2));
     };
     update();
     const observer = new ResizeObserver(update);
@@ -97,7 +105,7 @@ export function SlideCanvas({ url, page, label, onPageCount, hidden }: SlideCanv
         if (cancelled) return;
         onPageCount?.(doc.numPages);
         if (page < 1 || page > doc.numPages) throw new Error(`This deck has ${doc.numPages} page(s); page ${page} does not exist.`);
-        await renderPage(doc, page, canvasRef.current!, fitWidth * zoom, textRef.current, (t) => { task = t; });
+        await renderPage(doc, page, canvasRef.current!, fitWidth, textRef.current, (t) => { task = t; }, contain ? fitHeight : null, zoom);
         if (!cancelled) {
           setState("ready");
           setRendered(page);
@@ -114,26 +122,34 @@ export function SlideCanvas({ url, page, label, onPageCount, hidden }: SlideCanv
       task?.cancel(); // one render per canvas at a time: a quick slide change never draws a stale page
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url, page, fitWidth, zoom, hidden]);
+  }, [url, page, fitWidth, contain ? fitHeight : 0, contain, zoom, hidden]);
 
   const step = (direction: 1 | -1) => setZoom((current) => ZOOMS[Math.min(ZOOMS.length - 1, Math.max(0, ZOOMS.indexOf(current) + direction))] ?? 1);
 
   if (hidden) {
-    return <Callout tone="unassessed" title="Slide hidden while you explain">You chose to answer without the slide. This is self-reported; it does not prove no other help was used.</Callout>;
+    return (
+      <div className="flex flex-col gap-2">
+        {header}
+        <Callout tone="unassessed" title="Slide hidden while you explain">You chose to answer without the slide. This is self-reported; it does not prove no other help was used.</Callout>
+      </div>
+    );
   }
+  const fitLabel = contain ? "Fit to window" : "Fit width";
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-end gap-1">
-        <span className="mr-auto text-sm text-muted" aria-live="polite">{Math.round(zoom * 100)}% of fit width</span>
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <div className="flex items-center gap-1">
+        {header ?? <span className="flex-1" />}
+        <span className="shrink-0 text-sm text-muted tabular-nums" aria-live="polite" data-testid="slide-zoom">{Math.round(zoom * 100)}% of {contain ? "fit" : "fit width"}</span>
         <IconButton label="Zoom out" size="sm" onClick={() => step(-1)} disabled={zoom === ZOOMS[0]}><Minus aria-hidden className="size-4" /></IconButton>
-        <IconButton label="Fit width" size="sm" onClick={() => setZoom(1)}><Maximize2 aria-hidden className="size-4" /></IconButton>
+        <IconButton label={fitLabel} size="sm" onClick={() => setZoom(1)}><Maximize2 aria-hidden className="size-4" /></IconButton>
         <IconButton label="Zoom in" size="sm" onClick={() => step(1)} disabled={zoom === ZOOMS[ZOOMS.length - 1]}><Plus aria-hidden className="size-4" /></IconButton>
       </div>
-      <div ref={frameRef} className="max-h-[72dvh] overflow-auto rounded-[var(--ll-radius)] border border-line/50 bg-raised" tabIndex={0} role="group" aria-label={`${label}. Scroll to pan when zoomed.`}>
+      <div ref={frameRef} className={contain ? "ll-slide-frame flex overflow-auto rounded-[var(--ll-radius)] border border-line/50 bg-raised" : "max-h-[72dvh] overflow-auto rounded-[var(--ll-radius)] border border-line/50 bg-raised"}
+        data-fit={contain ? "contain" : "width"} data-testid="slide-frame" tabIndex={0} role="group" aria-label={`${label}. Scroll to pan when zoomed.`}>
         {state === "error" ? (
           <div className="p-4"><Callout tone="danger" role="alert" title="This slide could not be shown">{error} The original file is unchanged; nothing was regenerated in its place.</Callout></div>
         ) : (
-          <div className="ll-source-surface relative mx-auto w-fit" data-testid="slide-surface" data-render-state={state}>
+          <div className={contain ? "ll-source-surface relative m-auto w-fit shrink-0" : "ll-source-surface relative mx-auto w-fit"} data-testid="slide-surface" data-render-state={state}>
             <canvas ref={canvasRef} role="img" aria-label={label} className="block" data-testid="slide-canvas" data-rendered={rendered ?? ""} />
             <div ref={textRef} className="ll-pdf-textlayer" />
             {state === "loading" && <div className="absolute inset-0 flex items-center justify-center bg-white/70 text-[#132238]"><LoadingState label="Rendering slide…" /></div>}
@@ -176,10 +192,10 @@ export function SlideThumb({ url, page, active, title, onSelect }: { url: string
   return (
     <button ref={buttonRef} type="button" onClick={onSelect} aria-current={active ? "true" : undefined} aria-label={`Slide ${page}${title ? `: ${title}` : ""}`}
       className={`flex w-full items-start gap-2 rounded-[var(--ll-radius)] p-1.5 text-left ${active ? "bg-raised outline outline-2 outline-accent" : "hover:bg-raised"}`}>
-      <span className={`w-5 shrink-0 pt-1 text-right text-xs ${active ? "font-bold text-accent" : "text-muted"}`}>{page}</span>
+      <span className={`w-6 shrink-0 pt-1 text-right text-sm tabular-nums ${active ? "font-bold text-accent" : "text-muted"}`}>{page}</span>
       <span className="flex min-w-0 flex-col gap-1">
         <span className="ll-source-surface block overflow-hidden rounded border border-line/50"><canvas ref={canvasRef} className="block" width={132} height={99} aria-hidden /></span>
-        <span className={`truncate text-xs ${active ? "font-semibold text-accent" : "text-muted"}`}>{title ?? `Slide ${page}`}</span>
+        <span className={`truncate text-sm ${active ? "font-semibold text-accent" : "text-muted"}`}>{title ?? `Slide ${page}`}</span>
       </span>
     </button>
   );

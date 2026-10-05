@@ -54,7 +54,7 @@ export function ProgressPage() {
   const s = data.summary;
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="ll-page">
       <PageHeader title="Progress" subtitle="What your recorded responses showed — not a score." actions={<Link className="ll-btn" to="/history">Study history</Link>} />
       {data.owner_view_status === "stale" && <Callout tone="caution" className="mb-3" title="The course's own summary view is out of date">Its original attempt records are intact and are what you see here; only the generated summary lags. <Link className="text-accent underline" to="/settings/maintenance">Maintenance</Link></Callout>}
       <ul className="mb-4 flex flex-wrap gap-2" aria-label="Evidence summary">
@@ -175,7 +175,7 @@ export function ConceptDetail() {
   };
   const evidence = node.evidence_by_outcome ?? {};
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="ll-page ll-page-reading">
       <ReturnLink />
       <PageHeader title={node.label} subtitle={<><StatusChip tone="accent">{NODE_TYPE_LABEL[node.type] ?? node.type}</StatusChip> <span className="ml-2 break-all font-mono text-sm">{node.id}</span></>} />
       {node.mapping === "system_mapping_incomplete" && <Callout tone="unassessed" className="mb-3" title="System mapping incomplete">This skill is not linked to a concept in the course catalog. That is a coverage gap in the catalog — it says nothing about you.</Callout>}
@@ -202,7 +202,7 @@ export function ConceptDetail() {
                   </li>
                 ))}
               </ul>
-              <p className="mt-1 text-xs text-muted">Source: {list[0]!.provenance}.{list[0]!.scope === "question_to_question" ? " This is a relation between questions; it is not a concept prerequisite and gives no automatic credit." : ""}</p>
+              <p className="mt-1 text-sm text-muted">Source: {list[0]!.provenance}.{list[0]!.scope === "question_to_question" ? " This is a relation between questions; it is not a concept prerequisite and gives no automatic credit." : ""}</p>
             </section>
           ))}
         </div>
@@ -225,7 +225,7 @@ export function HistoryPage() {
   const data = history.data;
   const attempts = data.attempts.filter((a) => (!filter || `${a.question.prompt} ${a.attempt_id} ${a.effective.observations.map((o) => o.skill_id).join(" ")}`.toLowerCase().includes(filter.toLowerCase())) && (!onlyRevised || a.revisions.length > 0));
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="ll-page">
       <ReturnLink />
       <PageHeader title="Study history" subtitle={data.note} />
       <Tabs defaultValue="attempts">

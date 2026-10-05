@@ -47,7 +47,7 @@ export function ConnectPage() {
   };
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-5">
+    <div className="ll-page ll-page-reading flex flex-col gap-5">
       <PageHeader title="Connect your course workspace" subtitle="One learner, your existing course folders. Nothing is reorganised, uploaded or written by connecting." />
 
       <section aria-labelledby="scope-heading" className="ll-card p-4">

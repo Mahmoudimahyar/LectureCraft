@@ -4,6 +4,8 @@ export declare const annotation: ValidateFn;
 export declare const bundle: ValidateFn;
 export declare const context: ValidateFn;
 export declare const control: ValidateFn;
+export declare const derived_manifest: ValidateFn;
+export declare const derived_segments: ValidateFn;
 export declare const message: ValidateFn;
 export declare const native_result: ValidateFn;
 export declare const publication: ValidateFn;

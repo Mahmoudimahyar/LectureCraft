@@ -80,7 +80,7 @@ export function TranscriptPanel({ transcripts, slideRanges, positionMs, playing,
         <StatusChip tone={transcript.timing === "annotated" ? "success" : "unassessed"}>{transcript.timing === "annotated" ? "Timed where linked" : "Untimed: line references only"}</StatusChip>
         <input type="search" className="ll-input min-w-[9rem] flex-1" placeholder="Search this transcript…" aria-label="Search this transcript" value={filter} onChange={(e) => setFilter(e.target.value)} />
       </div>
-      <p className="text-xs text-muted">{transcript.filename} · {transcript.lines.length} lines · version {transcript.version_id ?? "not yet identified (file not hashed)"}{transcript.timing_note ? ` · ${transcript.timing_note}` : ""}</p>
+      <p className="text-sm text-muted">{transcript.filename} · {transcript.lines.length} lines · version {transcript.version_id ?? "not yet identified (file not hashed)"}{transcript.timing_note ? ` · ${transcript.timing_note}` : ""}</p>
       {/* What the marked lines mean for the slide on screen: reviewed, or only a text match awaiting review. Never a time. */}
       <p className="text-sm" data-testid="slide-lines-note" role="note">
         {(() => {
@@ -113,11 +113,11 @@ export function TranscriptPanel({ transcripts, slideRanges, positionMs, playing,
           const selected = !!selection && n >= selection.start && n <= selection.end;
           return (
             <li key={n} data-line={n} aria-current={active ? "true" : undefined}
-              className={cn("flex gap-2 rounded px-1.5 py-1 text-sm", slideLines.has(n) && "border-l-2 border-accent", active && "bg-raised font-medium", selected && "outline outline-2 outline-focus")}>
+              className={cn("flex gap-2 rounded px-1.5 py-1", slideLines.has(n) && "border-l-2 border-accent", active && "bg-raised font-medium", selected && "outline outline-2 outline-focus")}>
               <button type="button" className="w-9 shrink-0 text-right text-xs tabular-nums text-muted hover:underline" onClick={(e) => pick(n, e.shiftKey)} aria-label={`Select line ${n}${selected ? " (selected)" : ""}`}>{n}</button>
               <span className="min-w-0 flex-1">{text || <span className="text-muted">(blank line)</span>}</span>
               {timing && (
-                <button type="button" className="shrink-0 text-xs tabular-nums text-accent underline" onClick={() => onSeek(timing.start_ms)}
+                <button type="button" className="shrink-0 text-sm tabular-nums text-accent underline" onClick={() => onSeek(timing.start_ms)}
                   aria-label={`Go to ${formatMs(timing.start_ms)} in the recording (${timing.review_state === "confirmed" ? "reviewed" : "suggested"} timing)`}>
                   {formatMs(timing.start_ms)}{timing.review_state !== "confirmed" ? " ?" : ""}
                 </button>
@@ -132,7 +132,7 @@ export function TranscriptPanel({ transcripts, slideRanges, positionMs, playing,
           <Button size="sm" disabled={!selectionRef} onClick={() => selectionRef && onQuote(selectionRef, selectedText)} title={selectionRef ? undefined : "This file has not been identified by bytes yet, so an exact quote cannot be attached"}>Ask about this</Button>
           <Button size="sm" variant="quiet" disabled={!selectionRef} onClick={() => selectionRef && onReportError(selectionRef, selectedText)}>Report a transcript error</Button>
           <Button size="sm" variant="quiet" onClick={() => setSelection(null)}>Clear</Button>
-          <span className="text-xs text-muted">Shift-click a line number to extend the selection.</span>
+          <span className="text-sm text-muted">Shift-click a line number to extend the selection.</span>
         </div>
       )}
     </div>

@@ -9,10 +9,10 @@ import { dispositionLabel, SESSION_STATE, SOURCE_STATE } from "@/lib/labels";
 import { useCourse, useResume } from "@/lib/queries";
 import type { WorkspaceCourse } from "@/lib/types";
 
-export function lastPosition(courseId: string): { lectureId: string; page: number } | null {
+export function lastPosition(courseId: string): { lectureId: string; page: number; title?: string; at?: number } | null {
   try {
     const raw = window.localStorage.getItem(`ll.last.${courseId}`);
-    return raw ? (JSON.parse(raw) as { lectureId: string; page: number }) : null;
+    return raw ? (JSON.parse(raw) as { lectureId: string; page: number; title?: string; at?: number }) : null;
   } catch {
     return null;
   }
@@ -37,7 +37,7 @@ function ContinueCard({ course }: { course: WorkspaceCourse }) {
       <div className="flex flex-col gap-2">
         <Link to={`/courses/${course.course_id}/lectures/${head.cursor.lecture_id}?page=${page}`} className="ll-btn ll-btn-primary w-full justify-between">
           <span>Continue: {head.cursor.lecture_id.replace("-", " ")}, slide {page}</span>
-          <span className="text-xs font-normal opacity-90">synchronised {formatWhen(head.updated_at)} · paused</span>
+          <span className="text-sm font-normal opacity-90">synchronised {formatWhen(head.updated_at)} · paused</span>
         </Link>
         {moved && (
           <Link to={`/courses/${course.course_id}/lectures/${local.lectureId}?page=${local.page}`} className="ll-btn w-full justify-between">
@@ -64,33 +64,57 @@ export function StudyHome() {
   if (app.workspaceLoading) return <LoadingState label="Loading your courses…" />;
   if (!app.workspace) return <ErrorState error={app.workspaceError} />;
   const { workspace } = app;
+  // Where this device was last: the most recent lecture position across the courses (a per-device convenience).
+  const recent = workspace.courses.filter((c) => c.binding === "bound").map((c) => ({ course: c, last: lastPosition(c.course_id) })).filter((r) => r.last)
+    .sort((a, b) => (b.last!.at ?? 0) - (a.last!.at ?? 0))[0];
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="ll-page" data-testid="study-home">
       <PageHeader title="Study" subtitle={`All configured courses · ${workspace.term}`} actions={app.pairing.state !== "paired" ? <Link className="ll-btn" to="/connect">Pair this device</Link> : undefined} />
-      <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <section aria-labelledby="continue-h" className="ll-card mb-5 flex flex-wrap items-center justify-between gap-4 p-5" data-testid="continue-studying">
+        <div className="min-w-0">
+          <h2 id="continue-h" className="text-xl font-semibold">Continue studying</h2>
+          {recent ? (
+            <p className="ll-measure mt-1 text-lg">{recent.course.display_name} — {recent.last!.title ?? recent.last!.lectureId.replace("-", " ")}, slide {recent.last!.page}</p>
+          ) : (
+            <p className="ll-measure mt-1 text-muted">Nothing opened on this device yet. Choose a course below; your place is remembered when you open a lecture.</p>
+          )}
+        </div>
+        {recent && (
+          <div className="flex flex-wrap gap-2">
+            <Link to={`/courses/${recent.course.course_id}/lectures/${recent.last!.lectureId}?page=${recent.last!.page}`} onClick={() => app.setCourseId(recent.course.course_id)} className="ll-btn ll-btn-primary">
+              Open the slide <ArrowRight aria-hidden className="size-4" />
+            </Link>
+            {recent.course.catalogued_questions ? <Link className="ll-btn" to={`/courses/${recent.course.course_id}/questions?lecture=${encodeURIComponent(recent.last!.lectureId)}`}>Questions for this lecture</Link> : null}
+          </div>
+        )}
+      </section>
+      <h2 className="mb-2 text-lg font-semibold">Courses</h2>
+      <ul className="ll-card-grid">
         {workspace.courses.map((course) => {
           const bound = course.binding === "bound";
           const prep = course.preparation ?? {};
           const pendingLinks = prep.links_pending_review ?? 0;
           return (
-            <li key={course.course_id} className="ll-card flex flex-col gap-3 p-4">
+            <li key={course.course_id} className="ll-card flex flex-col gap-3 p-5">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <h2 className="text-lg font-semibold">{bound ? <Link to={`/courses/${course.course_id}`} onClick={() => app.setCourseId(course.course_id)} className="hover:underline">{course.display_name}</Link> : course.display_name}</h2>
+                  <h3 className="text-xl font-semibold">{bound ? <Link to={`/courses/${course.course_id}`} onClick={() => app.setCourseId(course.course_id)} className="hover:underline">{course.display_name}</Link> : course.display_name}</h3>
                   <p className="text-sm text-muted">{course.course_id}</p>
                 </div>
                 <BookOpen aria-hidden className="size-6 shrink-0 text-accent" />
               </div>
               {!bound ? <Callout tone="danger" title="This course is not bound">{course.problem} Other courses are unaffected.</Callout> : (
                 <>
-                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
                     <dt className="text-muted">Lecture units</dt><dd>{course.lecture_units}</dd>
                     <dt className="text-muted">Sessions</dt><dd>{course.sessions}</dd>
+                    <dt className="text-muted">Questions</dt>
+                    <dd>{course.catalogued_questions ? <Link className="text-accent hover:underline" to={`/courses/${course.course_id}/questions`} onClick={() => app.setCourseId(course.course_id)}>{course.catalogued_questions} in the catalog</Link> : "No question catalog"}</dd>
                     <dt className="text-muted">Recorded evidence</dt><dd><StatusChip tone={course.recorded_attempts ? "neutral" : "unassessed"}>{course.assessed_label}</StatusChip></dd>
                     <dt className="text-muted">Preparation</dt>
                     <dd>{pendingLinks ? `${pendingLinks} with suggested links` : prep.not_processed ? `${prep.not_processed} not prepared yet` : "No pending link review"}</dd>
                   </dl>
-                  <div className="flex flex-wrap gap-2 text-sm">
+                  <div className="flex flex-wrap gap-2">
                     {course.due_items ? <Link className="ll-chip" to="/review" onClick={() => app.setCourseId(course.course_id)}>{course.due_items} review item{course.due_items === 1 ? "" : "s"} available</Link> : null}
                     {course.pending_requests ? <Link className="ll-chip" to="/activity">{course.pending_requests} open request{course.pending_requests === 1 ? "" : "s"}</Link> : null}
                   </div>
@@ -102,7 +126,7 @@ export function StudyHome() {
           );
         })}
       </ul>
-      <p className="mt-4 text-sm text-muted">Counts describe what exists and what was prepared. They say nothing about what you know; reading or replaying a lecture is never treated as an assessment.</p>
+      <p className="ll-measure mt-4 text-sm text-muted">Counts describe what exists and what was prepared. They say nothing about what you know; reading or replaying a lecture is never treated as an assessment.</p>
     </div>
   );
 }
@@ -117,7 +141,7 @@ export function CourseLectures() {
   const shown = useMemo(() => lectures.filter((l) => {
     const text = `${l.title} ${l.lecture_id}`.toLowerCase();
     if (filter && !text.includes(filter.toLowerCase())) return false;
-    if (only === "openable") return l.displayable;
+    if (only === "openable") return l.displayable || l.deck_choice.state === "unresolved";
     if (only === "needs_attention") return !l.displayable || l.disposition.startsWith("links_pending") || l.disposition.startsWith("not_processed");
     return true;
   }), [lectures, filter, only]);
@@ -126,10 +150,11 @@ export function CourseLectures() {
   if (course.isError || !course.data) return <ErrorState error={course.error} retry={() => void course.refetch()} />;
   const data = course.data;
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="ll-page">
       <nav aria-label="Breadcrumb" className="mb-2 text-sm text-muted"><Link to="/study" className="hover:underline">Courses</Link> › <span aria-current="page">{data.display_name}</span></nav>
       <PageHeader title={data.display_name} subtitle={`${lectures.length} lecture unit${lectures.length === 1 ? "" : "s"} in the inventory${shown.length !== lectures.length ? ` · showing ${shown.length} (filter does not change the total)` : ""}`}
-        actions={<Link className="ll-btn ll-btn-sm" to="/sources" onClick={() => app.setCourseId(data.course_id)}>Sources and preparation</Link>} />
+        actions={<><Link className="ll-btn ll-btn-sm" to={`/courses/${data.course_id}/questions`}>Question bank ({data.question_bank.total})</Link>
+          <Link className="ll-btn ll-btn-sm" to="/sources" onClick={() => app.setCourseId(data.course_id)}>Sources and preparation</Link></>} />
       {data.index.status !== "ok" && <Callout tone="caution" className="mb-3" title="The course's published source index could not be trusted right now">{data.index.reason} Files on disk are still listed; registration details are temporarily unavailable.</Callout>}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <input type="search" className="ll-input max-w-xs" placeholder="Filter lectures…" aria-label="Filter lectures in this course" value={filter} onChange={(e) => setFilter(e.target.value)} />
@@ -149,12 +174,16 @@ export function CourseLectures() {
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <h2 className="font-semibold">
-                      {lecture.displayable ? <Link className="hover:underline" to={`/courses/${data.course_id}/lectures/${lecture.lecture_id}`}>{lecture.title}</Link> : lecture.title}
+                      {lecture.displayable || lecture.deck_choice.state === "unresolved" ? <Link className="hover:underline" to={`/courses/${data.course_id}/lectures/${lecture.lecture_id}`}>{lecture.title}</Link> : lecture.title}
                     </h2>
                     <p className="text-sm text-muted">{lecture.lecture_id}{lecture.pages ? ` · ${lecture.pages} slides` : ""}</p>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
-                    {deckState ? <StatusChip tone={deckState.tone} title={deckState.detail}>Slides: {deckState.label}</StatusChip> : <StatusChip tone="unassessed">No slide file</StatusChip>}
+                    {deckState ? <StatusChip tone={deckState.tone} title={deckState.detail}>Slides: {deckState.label}</StatusChip>
+                      : lecture.deck_choice.state === "unresolved" ? <StatusChip tone="caution">{lecture.deck_choice.candidates} candidate files: choose one</StatusChip> : <StatusChip tone="unassessed">No slide file</StatusChip>}
+                    {lecture.questions.count > 0
+                      ? <Link className="ll-chip hover:underline" to={`/courses/${data.course_id}/questions?lecture=${encodeURIComponent(lecture.lecture_id)}`}>{lecture.questions.count} question{lecture.questions.count === 1 ? "" : "s"}</Link>
+                      : <StatusChip tone="unassessed">No question collection</StatusChip>}
                     <StatusChip tone={prep.tone} title={prep.detail ?? undefined}>{prep.label}</StatusChip>
                   </div>
                 </div>

@@ -1,9 +1,10 @@
 // TanStack Query hooks: a cache of read projections and request receipts. It owns no academic record.
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { apiGet } from "./api";
 import { getBrain } from "./device";
 import { transport } from "./requests";
 import { verifyResult, type ResultEnvelope, type VerifiedResult } from "./transport";
+import type { QuestionBankView } from "./types";
 import type { ActivityView, ConceptsView, CourseView, HistoryView, LectureView, ProgressView, QuestionView, ResumeState, ReviewView, SearchIndex, SettingsView, WorkspaceView } from "./types";
 
 const view = <T,>(key: unknown[], path: string, options: { enabled?: boolean; refetchInterval?: number | false } = {}): UseQueryResult<T, Error> =>
@@ -12,7 +13,26 @@ const view = <T,>(key: unknown[], path: string, options: { enabled?: boolean; re
 
 export const useWorkspace = () => view<WorkspaceView>(["workspace"], "workspace", { refetchInterval: 20_000 });
 export const useCourse = (courseId?: string) => view<CourseView>(["course", courseId], `courses/${courseId}`, { enabled: !!courseId });
-export const useLecture = (courseId?: string, lectureId?: string) => view<LectureView>(["lecture", courseId, lectureId], `courses/${courseId}/lectures/${lectureId}`, { enabled: !!courseId && !!lectureId });
+export const useLecture = (courseId?: string, lectureId?: string, deck?: string | null) =>
+  view<LectureView>(["lecture", courseId, lectureId, deck ?? null], `courses/${courseId}/lectures/${lectureId}${deck ? `?deck=${encodeURIComponent(deck)}` : ""}`, { enabled: !!courseId && !!lectureId });
+
+export interface QuestionBankFilter { collection?: string; lecture?: string; q?: string; origin?: string; anchor?: string }
+export const QUESTION_PAGE = 25;
+/** The question bank, one page at a time. Totals come from the Brain with every page; nothing is cut off silently. */
+export function useQuestionBank(courseId: string | undefined, filter: QuestionBankFilter) {
+  return useInfiniteQuery<QuestionBankView, Error>({
+    queryKey: ["question-bank", courseId, filter],
+    enabled: !!courseId,
+    retry: false,
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) => {
+      const query = new URLSearchParams({ offset: String(pageParam), limit: String(QUESTION_PAGE) });
+      for (const [key, value] of Object.entries(filter)) if (value) query.set(key, value);
+      return apiGet<QuestionBankView>(`courses/${courseId}/questions?${query.toString()}`, signal);
+    },
+    getNextPageParam: (last) => last.next_offset ?? undefined,
+  });
+}
 export const useQuestion = (courseId?: string, questionId?: string) => view<QuestionView>(["question", courseId, questionId], `courses/${courseId}/questions/${encodeURIComponent(questionId ?? "")}`, { enabled: !!courseId && !!questionId });
 export const useConcepts = (courseId?: string) => view<ConceptsView>(["concepts", courseId], `courses/${courseId}/concepts`, { enabled: !!courseId });
 export const useProgress = (courseId?: string) => view<ProgressView>(["progress", courseId], `courses/${courseId}/progress`, { enabled: !!courseId });

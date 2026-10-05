@@ -18,7 +18,7 @@ const SECTIONS = [["appearance", "Appearance"], ["access", "Access and devices"]
 export function SettingsPage() {
   const { section = "appearance" } = useParams();
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="ll-page">
       <PageHeader title="Settings" />
       <div className="grid gap-4 md:grid-cols-[13rem_minmax(0,1fr)]">
         <nav aria-label="Settings sections" className="flex gap-1 overflow-x-auto md:flex-col">
@@ -407,7 +407,7 @@ export function RepairPreview() {
   if (!approved && (preview.isError || !preview.data)) return <ErrorState error={preview.error} />;
   const p = approved ?? preview.data!;
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="ll-page ll-page-reading">
       <Link to="/settings/maintenance" className="ll-btn ll-btn-sm mb-3">← Maintenance</Link>
       <PageHeader title="Repair preview" subtitle={p.issue?.summary ?? "This issue no longer exists."} />
       {p.status === "unknown_issue" ? <Callout tone="success" title="Nothing to repair">The problem is no longer present.</Callout> : (

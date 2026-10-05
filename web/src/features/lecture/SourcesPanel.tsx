@@ -7,7 +7,7 @@ import { BookMarked, FileQuestion, Files, Network } from "lucide-react";
 import { Button, Callout, Dialog, Field, formatMs, StatusChip } from "@/components/ui";
 import type { SourceRef } from "@/lib/db";
 import { kindLabel, REVIEW_STATE, SOURCE_STATE } from "@/lib/labels";
-import type { Occurrence, OtherMaterial, RecordingView, SlideView } from "@/lib/types";
+import type { Occurrence, OtherMaterial, QuestionRow, RecordingView, SlideView } from "@/lib/types";
 
 function locatorText(source: SourceRef): string {
   const loc = source.locator as Record<string, unknown>;
@@ -30,10 +30,15 @@ interface SourcesPanelProps {
   slide: SlideView | undefined;
   /** Other files stored in this lecture unit's folder. They belong to the unit, not to one slide. */
   others?: OtherMaterial[];
+  /** Lecture questions that share a concept with this slide but are not placed on it by the course record. */
+  relatedByConcept?: QuestionRow[];
+  /** How many questions the lecture's collections hold, so "nothing on this slide" is never read as "no questions". */
+  lectureQuestionCount?: number;
+  onShowLectureQuestions?: () => void;
   onPin: (source: SourceRef, label: string) => void;
 }
 
-export function SourcesPanel({ courseId, slide, others = [], onPin }: SourcesPanelProps) {
+export function SourcesPanel({ courseId, slide, others = [], relatedByConcept = [], lectureQuestionCount = 0, onShowLectureQuestions, onPin }: SourcesPanelProps) {
   const location = useLocation();
   const back = { returnTo: location.pathname + location.search, returnLabel: "Return to slide" };
   if (!slide && others.length === 0) return <Callout tone="unassessed" title="No slide selected" />;
@@ -42,6 +47,12 @@ export function SourcesPanel({ courseId, slide, others = [], onPin }: SourcesPan
   return (
     <div className="flex flex-col gap-4">
       {nothing && <Callout tone="unassessed" title="Nothing is linked to this slide yet">No related question, reading or concept is recorded for it. That is a gap in the mapping, not a statement about you; the slide itself can still be studied and asked about.</Callout>}
+      {slide.questions.length === 0 && lectureQuestionCount > 0 && (
+        <p className="ll-card flex flex-wrap items-center justify-between gap-2 p-2" data-testid="lecture-questions-hint">
+          <span>No question names this slide in the course record. This lecture has {lectureQuestionCount} question{lectureQuestionCount === 1 ? "" : "s"}.</span>
+          {onShowLectureQuestions && <Button size="sm" onClick={onShowLectureQuestions}>All lecture questions</Button>}
+        </p>
+      )}
       {slide.questions.length > 0 && (
         <section aria-labelledby="src-questions">
           <h3 id="src-questions" className="ll-label mb-1 flex items-center gap-1"><FileQuestion aria-hidden className="size-4" /> Questions on this slide</h3>
@@ -49,7 +60,8 @@ export function SourcesPanel({ courseId, slide, others = [], onPin }: SourcesPan
             {slide.questions.map((q) => (
               <li key={q.question_id}>
                 <Link to={`/courses/${courseId}/questions/${encodeURIComponent(q.question_id)}`} state={back} className="ll-card flex items-center justify-between gap-2 p-2 hover:bg-raised">
-                  <span><span className="font-medium">{q.title ?? q.question_id}</span> <span className="text-sm text-muted">{q.question_id}</span></span>
+                  <span className="min-w-0"><span className="font-medium">{q.title ?? q.question_id}</span> <span className="text-sm text-muted">{q.question_id}</span>
+                    <span className="block text-sm text-muted" data-testid="question-why">{q.why}</span></span>
                   <span className="text-sm text-accent">Open</span>
                 </Link>
               </li>
@@ -84,6 +96,23 @@ export function SourcesPanel({ courseId, slide, others = [], onPin }: SourcesPan
               );
             })}
           </ul>
+        </section>
+      )}
+      {relatedByConcept.length > 0 && (
+        <section aria-labelledby="src-related-concept">
+          <h3 id="src-related-concept" className="ll-label mb-1 flex items-center gap-1"><Network aria-hidden className="size-4" /> Related concepts</h3>
+          <p className="mb-1 text-sm text-muted">Lecture questions that share a concept with this slide. The course record does not place them on this slide.</p>
+          <ul className="flex flex-col gap-1">
+            {relatedByConcept.slice(0, 8).map((q) => (
+              <li key={q.question_id}>
+                <Link to={`/courses/${courseId}/questions/${encodeURIComponent(q.question_id)}`} state={back} className="ll-card flex items-center justify-between gap-2 p-2 hover:bg-raised">
+                  <span className="min-w-0"><span className="font-medium">{q.title ?? q.question_id}</span> <span className="text-sm text-muted">{q.question_id}</span></span>
+                  <span className="text-sm text-accent">Open</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          {relatedByConcept.length > 8 && onShowLectureQuestions && <p className="mt-1 text-sm"><button type="button" className="text-accent hover:underline" onClick={onShowLectureQuestions}>and {relatedByConcept.length - 8} more in All lecture questions</button></p>}
         </section>
       )}
       <OtherFiles courseId={courseId} others={others} back={back} />
@@ -128,7 +157,7 @@ function OtherFiles({ courseId, others, back }: { courseId: string; others: Othe
           );
         })}
       </ul>
-      <p className="mt-1 text-xs text-muted">Slide-to-recording links exist for the unit's main slides only. Other PDF files are searchable by page and open as originals.</p>
+      <p className="mt-1 text-sm text-muted">Slide-to-recording links exist for the unit's main slides only. Other PDF files are searchable by page and open as originals.</p>
     </section>
   );
 }

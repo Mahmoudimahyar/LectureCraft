@@ -182,7 +182,7 @@ export function TutorPanel({ courseId, lecture, page, slideRef, pinned, onUnpin,
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto" aria-label="Conversation on this lecture">
-        {thread.length === 0 ? <p className="text-sm text-muted">No questions or explanations on this lecture yet. Reading a slide is never counted as an assessment.</p> : (
+        {thread.length === 0 ? <p className="text-muted">No questions or explanations on this lecture yet. Reading a slide is never counted as an assessment.</p> : (
           <>
             <label className="mb-2 flex items-center gap-2 text-sm"><input type="checkbox" className="size-4" checked={onlyThisSlide} onChange={(e) => setOnlyThisSlide(e.target.checked)} /> Only this slide</label>
             <ol className="flex flex-col gap-3">{thread.map((r) => <li key={r.requestId}><RequestCard request={r} onFollowUp={onFollowUp} /></li>)}</ol>
@@ -264,7 +264,7 @@ export function TutorPanel({ courseId, lecture, page, slideRef, pinned, onUnpin,
             {follow?.kind === "diagnose" ? "Submit answer" : mode === "explain" ? "Check my explanation" : "Send"}
           </Button>
         </div>
-        <p className="text-xs text-muted">Nothing is sent while you type. {mode === "explain" ? "Your response is frozen and retained before the tutor sees it." : "Asking for help is not assessed."} Ctrl+Enter sends.</p>
+        <p className="text-sm text-muted">Nothing is sent while you type. {mode === "explain" ? "Your response is frozen and retained before the tutor sees it." : "Asking for help is not assessed."} Ctrl+Enter sends.</p>
         {problem && (
           <Callout tone="danger" role="alert" title="Not sent" actions={<>
             {problem.copyable && <Button size="sm" onClick={() => void navigator.clipboard?.writeText(text)}>Copy my text</Button>}

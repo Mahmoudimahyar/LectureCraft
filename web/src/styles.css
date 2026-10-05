@@ -242,12 +242,12 @@ body {
   }
 }
 
-/* Narrow lecture workspace: four pane tabs in a row; two rows of two with enlarged text. */
+/* Narrow lecture workspace: five pane tabs in a row; two rows with enlarged text. */
 .ll-pane-tabs {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 [data-text-scale="large"] .ll-pane-tabs {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 /* Form controls never force a row wider than the screen (narrow viewports, enlarged text):
@@ -264,4 +264,174 @@ body {
     max-width: 100%;
     min-width: 0;
   }
+}
+
+/* ---- Remediation R1: one page frame, three width tiers, a type floor, the lecture workspace ---------------- */
+/* Type floor: body text 16px; on very wide windows the whole scale steps up so text keeps pace with the screen.
+   Percentages (not px) so a browser's own font-size preference still applies. */
+@media (min-width: 1800px) {
+  html:not([data-text-scale="large"]) {
+    font-size: 106.25%;
+  }
+}
+@media (min-width: 2400px) {
+  html:not([data-text-scale="large"]) {
+    font-size: 112.5%;
+  }
+}
+
+/* One shared page frame. Collections use the window; reading pages keep a comfortable column; text keeps a measure. */
+.ll-page {
+  width: 100%;
+  margin-inline: auto;
+  max-width: 72rem;
+}
+.ll-page-reading {
+  max-width: 56rem;
+}
+@media (min-width: 1280px) {
+  .ll-page {
+    max-width: 92rem;
+  }
+  .ll-page-reading {
+    max-width: 64rem;
+  }
+}
+@media (min-width: 1800px) {
+  .ll-page {
+    max-width: none;
+    padding-inline: 1rem;
+  }
+  .ll-page-reading {
+    max-width: 72rem;
+  }
+}
+.ll-measure {
+  max-width: 72ch;
+}
+.ll-card-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+}
+
+@layer components {
+  .ll-label {
+    font-size: 0.875rem;
+  }
+}
+
+/* Lecture workspace (direction B): outline · slide stage · one context panel. On wide screens it fills the window
+   under the header, so the slide and the transport are both visible without scrolling the page. */
+.ll-shell-fill {
+  min-height: 100dvh;
+}
+.ll-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.ll-workspace-grid {
+  display: grid;
+  gap: 0.75rem;
+  min-height: 0;
+}
+.ll-stage {
+  min-width: 0;
+  min-height: 0;
+}
+.ll-slide-frame {
+  min-height: 12rem;
+}
+@media (min-width: 64rem) {
+  html:not([data-text-scale="large"]) .ll-shell-fill[data-fill="true"] {
+    height: 100dvh;
+    overflow: hidden;
+  }
+  html:not([data-text-scale="large"]) .ll-shell-fill[data-fill="true"] .ll-main {
+    min-height: 0;
+    overflow: hidden;
+    padding-bottom: 1rem;
+  }
+  html:not([data-text-scale="large"]) .ll-shell-fill[data-fill="true"] .ll-shell-body {
+    min-height: 0;
+  }
+  html:not([data-text-scale="large"]) .ll-workspace {
+    height: 100%;
+    min-height: 0;
+  }
+  html:not([data-text-scale="large"]) .ll-workspace-grid {
+    flex: 1;
+    grid-template-columns: var(--ll-outline-w, 17rem) minmax(0, 1fr) clamp(22rem, 28vw, 32rem);
+  }
+  html:not([data-text-scale="large"]) .ll-workspace-grid[data-outline="closed"] {
+    --ll-outline-w: 3rem;
+  }
+  html:not([data-text-scale="large"]) .ll-workspace-grid[data-focus="true"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  html:not([data-text-scale="large"]) .ll-stage {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    overflow: hidden;
+  }
+  html:not([data-text-scale="large"]) .ll-stage > .ll-stage-slide {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  html:not([data-text-scale="large"]) .ll-stage-extras {
+    max-height: 30%;
+    overflow-y: auto;
+  }
+  html:not([data-text-scale="large"]) .ll-slide-frame {
+    flex: 1;
+    min-height: 0;
+  }
+  html:not([data-text-scale="large"]) .ll-pane {
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+/* The transport: one controller, two compact rows. */
+.ll-transport media-controller {
+  display: block;
+  width: 100%;
+  background: transparent;
+  --media-background-color: transparent;
+  --media-control-background: transparent;
+  --media-control-hover-background: var(--ll-surface-raised);
+  --media-control-padding: 6px;
+  --media-primary-color: var(--ll-text);
+  --media-secondary-color: transparent;
+  --media-text-color: var(--ll-text);
+  --media-range-track-background: color-mix(in srgb, var(--ll-border) 55%, transparent);
+  --media-range-bar-color: var(--ll-accent);
+  --media-range-thumb-background: var(--ll-accent);
+  --media-font-family: var(--ll-font-ui);
+  --media-font-size: 0.875rem;
+  --media-control-height: 28px;
+}
+.ll-transport media-control-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem 0.5rem;
+  width: 100%;
+}
+.ll-transport .ll-transport-range {
+  flex: 1 1 8rem;
+  min-width: 6rem;
+  height: 2.75rem;
+  accent-color: var(--ll-accent);
+}
+.ll-transport select.ll-input {
+  min-height: 2.25rem;
+  width: auto;
+  padding-block: 0;
 }

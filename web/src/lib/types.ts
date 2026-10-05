@@ -32,6 +32,8 @@ export interface BrainPublic {
 }
 
 export interface WorkspaceCourse {
+  /** Questions in the course's own catalog (0 when the course has none). A count of what exists, not of what was answered. */
+  catalogued_questions?: number;
   course_id: string;
   display_name: string;
   binding: string;
@@ -108,9 +110,93 @@ export interface CourseLecture {
   pages_confirmed: number;
   pages_suggested: number;
   pages_unresolved: number | null;
+  /** How the displayed deck was chosen; "unresolved" means several equal candidates and no choice was made for you. */
+  deck_choice: { state: "selected" | "unresolved" | "none"; basis: string | null; candidates: number };
+  /** Questions of the catalog collections tied to this unit's files (whether or not they name a slide). */
+  questions: { count: number; collections: string[] };
+}
+
+/** Where a catalog locator points, as written: pages of a file, or line ranges of the unit's transcript. */
+export interface QuestionAnchor {
+  kind: "pages" | "transcript_lines";
+  ranges: Array<[number, number]>;
+  pages?: number[];
+  source_id: string | null;
+  lecture_id: string | null;
+  /** "exact": this collection's slide numbers were confirmed as physical pages; "stated": named by the catalog, not yet confirmed. */
+  basis: "exact" | "stated";
+  from: "locator" | "page_field";
+  resolution?: string;
+  named_source?: string;
+}
+export interface QuestionFile {
+  source_id: string;
+  filename: string | null;
+  kind: string;
+  available: boolean;
+  displayable: boolean;
+  disclosure: string;
+  page: number | null;
+  index_relation?: boolean;
+  label?: string;
+  note?: string;
+  verification?: { method?: string; checked_at?: string; score?: number; scope?: string };
+}
+/** One question in a list: identity, why it is listed, where it points. Never criteria wording or guidance. */
+export interface QuestionRow {
+  question_id: string;
+  version: number | null;
+  collection: string | null;
+  number: number | null;
+  title: string | null;
+  origin: string | null;
+  topic: string | null;
+  prompt: string;
+  prompt_in_index: boolean;
+  family_id: string | null;
+  family_revision: number | null;
+  criteria_count: number;
+  criteria_authorship: "tutor_authored" | "catalog";
+  lecture_ids: string[];
+  membership: { basis: "cited_source_in_unit" | "not_a_lecture_file"; source_ids: string[] };
+  anchors: QuestionAnchor[];
+  anchor_state: "resolved" | "partial" | "unresolved";
+  slide_anchor: "named" | "none";
+  locator_text: string;
+  qualifiers: string[];
+  unparsed: string[];
+  original: QuestionFile | null;
+  display_rendition: QuestionFile | null;
+  related_copy: QuestionFile | null;
+  concept_ids: string[];
+  via?: Array<{ question_id: string; relation: string; direction: string; automatic_credit: boolean }>;
+}
+export interface QuestionCollection {
+  collection: string;
+  count: number;
+  lecture_ids?: string[];
+  origins?: Record<string, number>;
+  without_wording: number;
+  slide_named: number;
+  anchor_unresolved: number;
+  page_basis_reviewed: boolean;
+}
+export interface QuestionBankView {
+  course_id: string;
+  total: number;
+  matching: number;
+  offset: number;
+  limit: number;
+  next_offset: number | null;
+  items: QuestionRow[];
+  collections: QuestionCollection[];
+  lectures: Array<{ lecture_id: string; title: string | null; collections: string[]; count: number; gap: string | null }>;
+  guidance: { adapter: string | null; files: number; resolved: number; errors: Array<{ code: string; entry_id: string | null; file: string | null; detail: string }> };
+  note: string;
 }
 
 export interface CourseView {
+  question_bank: { total: number; collections: Array<{ collection: string; count: number; lecture_ids: string[] }> };
   course_id: string;
   display_name: string;
   index: { status: string; revision?: number; reason?: string; as_of?: string };
@@ -179,7 +265,8 @@ export interface SlideView {
   text: string | null;
   text_status: "extracted" | "no_text_layer" | "not_prepared";
   concepts: Array<{ concept_id: string; label: string; basis: string }>;
-  questions: Array<{ question_id: string; title: string | null; family_id: string | null; family_revision: number | null; prompt: string }>;
+  questions: Array<{ question_id: string; title: string | null; family_id: string | null; family_revision: number | null; prompt: string; prompt_in_index: boolean; collection: string | null;
+    basis: "exact" | "stated"; why: string }>;
   occurrences: Occurrence[];
   transcript_ranges: TranscriptRange[];
   related: RelatedLink[];
@@ -219,7 +306,11 @@ export interface LectureView {
   title: string;
   session_link: string;
   deck: { source_id: string; version_id: string | null; sha256: string | null; filename: string; state: string; registration: string; rendition: string } | null;
-  display: { kind: "original_pdf" | "rendition_pdf" | "unavailable"; content?: string; note?: string; reason?: string };
+  display: { kind: "original_pdf" | "rendition_pdf" | "unavailable" | "choose_deck"; content?: string; note?: string; reason?: string };
+  deck_choice: { state: "selected" | "unresolved" | "none"; basis: string | null; source_id: string | null;
+    candidates: Array<{ source_id: string; filename: string; bytes: number | null; registration: string; rendition: string; state: string }> };
+  /** The lecture's own questions (by collection), questions reached through a relationship, and the gap when there is no collection. */
+  questions: { collections: QuestionCollection[]; all: QuestionRow[]; gap: string | null; related_by_relationship: QuestionRow[]; note: string };
   page_count: number | null;
   slides: SlideView[];
   recordings: RecordingView[];
@@ -248,6 +339,19 @@ export interface QuestionView {
   criteria_note: string;
   relationships: Array<{ from_question: string; to_question: string; relation: string; rationale?: string; automatic_credit: boolean }>;
   evidence: Array<{ attempt_id: string; recorded_at: string; assessment_id: string; outcomes: Record<string, string>; link_scope: string }>;
+  number: number | null;
+  lecture_ids: string[];
+  membership: QuestionRow["membership"];
+  anchors: QuestionAnchor[];
+  anchor_state: QuestionRow["anchor_state"];
+  slide_anchor: QuestionRow["slide_anchor"];
+  locator_text: string;
+  qualifiers: string[];
+  original: QuestionFile | null;
+  display_rendition: QuestionFile | null;
+  related_copy: QuestionFile | null;
+  criteria_authorship: "tutor_authored" | "catalog";
+  source_note: string | null;
 }
 
 export interface ConceptNode {
@@ -376,7 +480,9 @@ export interface ReviewView {
   course_id: string;
   items: ReviewRow[];
   due_count: number;
-  available_questions: Array<{ question_id: string; title: string | null; prompt: string; prompt_in_index: boolean; origin: string | null; family_id: string | null; family_revision: number | null; source_refs: Array<{ source_id: string; version_id: string; locator: string }> }>;
+  available_questions: Array<{ question_id: string; title: string | null; prompt: string; prompt_in_index: boolean; origin: string | null; collection?: string | null; family_id: string | null; family_revision: number | null; source_refs: Array<{ source_id: string; version_id: string; locator: string }> }>;
+  /** Every catalogued question not yet in the list (no cut-off). */
+  available_total: number;
   default_session_size: number;
   scheduler_config: Artifact;
   note: string;
@@ -495,4 +601,8 @@ export interface ResultDetail {
   target_state?: string;
   conflict_id?: string;
   capture_correction?: { attempt_id: string };
+  /** True when the tutor itemized the reply into parts; false or absent means one citation list for the whole reply. */
+  support_itemized?: boolean;
+  /** The reply's parts in order (joined by a blank line they are the reply text). `sources` are positions in the message's `sources`. */
+  segments?: Array<{ text: string; support: "course_source" | "added_explanation"; sources: number[] }> | null;
 }

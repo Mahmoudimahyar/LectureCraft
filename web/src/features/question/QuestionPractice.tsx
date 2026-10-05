@@ -3,17 +3,79 @@
 // recorded as exposure. Skipping creates nothing; only a submitted answer is assessed.
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useApp } from "@/app/state";
 import { Button, Callout, ErrorState, formatWhen, LoadingState, OUTCOME_LABEL, PageHeader, StatusChip } from "@/components/ui";
+import { apiPost, contentUrl } from "@/lib/api";
 import { isoNow } from "@/lib/bundle";
 import { deleteDraft, getDraft, saveDraft, type SourceRef } from "@/lib/db";
 import { RELATION_LABEL } from "@/lib/labels";
 import { useCourse, useQuestion, useReview } from "@/lib/queries";
 import { NotPairedError, reviewItemPayload, type Conditions } from "@/lib/requests";
-import type { QuestionRecord } from "@/lib/types";
+import type { QuestionFile, QuestionRecord, QuestionView } from "@/lib/types";
+import { anchorSummary } from "./QuestionList";
 import { ReturnLink } from "@/features/search/SearchOverlay";
 import { useLocalRequests, useSubmitActions } from "@/features/tutor/actions";
 import { RequestCard, type FollowUp } from "@/features/tutor/RequestCard";
+
+/** Where a question belongs and how to read it: lecture and anchors as the catalog states them; the authoritative original; a checked copy for reading. */
+function QuestionSources({ courseId, questionId, view }: { courseId: string; questionId: string; view: QuestionView }) {
+  const back = { returnTo: `/courses/${courseId}/questions/${encodeURIComponent(questionId)}`, returnLabel: "Return to the question" };
+  const queryClient = useQueryClient();
+  const [checking, setChecking] = useState(false);
+  const [outcome, setOutcome] = useState<string | null>(null);
+  const open = (file: QuestionFile) => `/courses/${courseId}/sources/${encodeURIComponent(file.source_id)}${file.page ? `?page=${file.page}` : ""}`;
+  const check = async () => {
+    setChecking(true);
+    setOutcome(null);
+    try {
+      const result = await apiPost<{ result: string; score?: number; scope?: string; reason?: string }>(`courses/${courseId}/questions/${encodeURIComponent(questionId)}/verify-rendition`, {});
+      setOutcome(result.result === "match" ? "The copy's text matches the original. It is now offered as a display rendition."
+        : `Not accepted as a rendition (${result.result.replace(/_/g, " ")}${typeof result.score === "number" ? `, ${Math.round(result.score * 100)}% of the page's words found in the original` : ""}). The original remains the only authority.`);
+      await queryClient.invalidateQueries({ queryKey: ["question", courseId, questionId] });
+    } catch (error) {
+      setOutcome((error as Error).message);
+    } finally {
+      setChecking(false);
+    }
+  };
+  return (
+    <div className="mt-3 flex flex-col gap-2" data-testid="question-sources">
+      <p className="text-sm text-muted" data-testid="question-membership">
+        {view.lecture_ids.length ? <>Belongs to {view.lecture_ids.map((id, i) => <span key={id}>{i ? ", " : ""}<Link className="text-accent hover:underline" to={`/courses/${courseId}/lectures/${id}?panel=questions`}>{id.replace("-", " ")}</Link></span>)} through its collection{view.collection ? ` ${view.collection}` : ""}. </>
+          : <>Collection {view.collection ?? "none"}: not tied to a lecture unit. </>}
+        {anchorSummary(view).text}
+      </p>
+      {view.original && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-muted">Original (authoritative):</span>
+          {view.original.available
+            ? view.original.displayable
+              ? <Link className="ll-btn ll-btn-sm" to={open(view.original)} state={back}>Open original{view.original.page ? `, page ${view.original.page}` : ""}</Link>
+              : <a className="ll-btn ll-btn-sm" href={contentUrl(`sources/${courseId}/${view.original.source_id}/content`)} target="_blank" rel="noreferrer">Open original ({view.original.filename})</a>
+            : <StatusChip tone="unassessed">{view.original.filename ?? view.original.source_id}: file not available</StatusChip>}
+          {view.original.available && !view.original.displayable && <span className="text-sm text-muted">This file type opens outside the app.</span>}
+        </div>
+      )}
+      {view.display_rendition && (
+        <div className="flex flex-wrap items-center gap-2" data-testid="display-rendition">
+          <StatusChip tone="neutral">Display rendition</StatusChip>
+          <Link className="ll-btn ll-btn-sm" to={open(view.display_rendition)} state={back}>Read the copy{view.display_rendition.page ? `, page ${view.display_rendition.page}` : ""}</Link>
+          <span className="ll-measure text-sm text-muted">{view.display_rendition.filename}. {view.display_rendition.note} {view.display_rendition.verification?.scope}</span>
+        </div>
+      )}
+      {view.related_copy && (
+        <div className="flex flex-wrap items-center gap-2" data-testid="related-copy">
+          <StatusChip tone="unassessed">Copy, not checked</StatusChip>
+          <Link className="ll-btn ll-btn-sm" to={open(view.related_copy)} state={back}>Open the copy</Link>
+          <Button size="sm" variant="quiet" busy={checking} onClick={check}>Check it against the original</Button>
+          <span className="ll-measure text-sm text-muted">{view.related_copy.filename}. {view.related_copy.note}.</span>
+        </div>
+      )}
+      {outcome && <p role="status" className="text-sm text-muted">{outcome}</p>}
+    </div>
+  );
+}
 
 export function QuestionPractice() {
   const { courseId = "", questionId = "" } = useParams();
@@ -121,7 +183,7 @@ export function QuestionPractice() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="ll-page ll-page-reading">
       <ReturnLink />
       <PageHeader title={q.title ?? q.question_id} subtitle={`${q.question_id} · ${q.origin === "course_source" ? "from course material" : "generated practice (tutor-authored)"}${q.collection ? ` · ${q.collection}` : ""}`} />
 
@@ -141,7 +203,9 @@ export function QuestionPractice() {
                 state={{ returnTo: `/courses/${courseId}/questions/${encodeURIComponent(questionId)}`, returnLabel: "Return to the question" }}>{item.filename ?? ref.source_id} · {ref.locator}</Link>
             : <span key={ref.source_id + ref.locator} className="ll-chip">{ref.source_id} · {ref.locator} (not available)</span>)}
         </div>
-        <p className="mt-2 text-sm text-muted">Open the original to see all sub-parts, givens and figures exactly as set. {q.criteria_note}</p>
+        <QuestionSources courseId={courseId} questionId={questionId} view={q} />
+        <p className="ll-measure mt-2 text-sm text-muted">Open the original to see all sub-parts, givens and figures exactly as set. {q.criteria_note}
+          {q.criteria_authorship === "tutor_authored" ? " The criteria for this question were written by the tutor; they are not the instructor's point scheme." : ""}</p>
         {!q.rubric_available && <Callout tone="caution" className="mt-2" title="No reviewed rubric is linked">An answer is still retained in full, but it stays "assessment pending" instead of being graded.</Callout>}
       </section>
 

@@ -32,6 +32,7 @@ export function ReviewHome() {
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [availableShown, setAvailableShown] = useState(20);
 
   if (!courseId) return <EmptyState title="No course selected">Choose a course in the header.</EmptyState>;
   if (review.isLoading) return <LoadingState label="Loading review…" />;
@@ -76,7 +77,7 @@ export function ReviewHome() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="ll-page">
       <PageHeader title="Review" subtitle={data.note} actions={<Button onClick={() => { setPrompt(""); setCreateOpen(true); }}>Create my own question</Button>} />
       {notice && <Callout tone="accent" role="status" className="mb-3" title="Review">{notice}</Callout>}
 
@@ -123,17 +124,20 @@ export function ReviewHome() {
       </section>
 
       <section aria-labelledby="avail-h">
-        <h2 id="avail-h" className="mb-2 text-lg font-semibold">Course questions you can add ({data.available_questions.length})</h2>
+        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 id="avail-h" className="text-lg font-semibold">Course questions you can add ({data.available_total})</h2>
+          <Link className="text-accent hover:underline" to={`/courses/${courseId}/questions`}>Browse the question bank by lecture and collection</Link>
+        </div>
         {data.available_questions.length === 0 ? <p className="text-muted">This course has no question catalog to choose from, or every question is already in your list.</p> : (
           <ul className="flex flex-col gap-2">
-            {data.available_questions.slice(0, 40).map((q) => {
+            {data.available_questions.slice(0, availableShown).map((q) => {
               const record: QuestionRecord = { question_id: q.question_id, family_id: q.family_id, family_revision: q.family_revision, prompt: q.prompt, sources: [], attachments: [] };
               const itemId = `item-${q.question_id.toLowerCase()}`;
               return (
                 <li key={q.question_id} className="ll-card flex flex-wrap items-center justify-between gap-2 p-3">
                   <div className="min-w-0 flex-1">
                     <Link className="font-medium hover:underline" to={`/courses/${courseId}/questions/${encodeURIComponent(q.question_id)}`}>{q.title ?? q.question_id}</Link>
-                    <p className="text-sm text-muted">{q.origin === "course_source" ? "from course material" : "generated practice"} · {q.prompt.slice(0, 120)}{q.prompt.length > 120 ? "…" : ""}</p>
+                    <p className="text-sm text-muted">{q.collection ? `${q.collection} · ` : ""}{q.origin === "course_source" ? "from course material" : "generated practice"} · {q.prompt_in_index ? `${q.prompt.slice(0, 120)}${q.prompt.length > 120 ? "…" : ""}` : "wording is in the original source"}</p>
                   </div>
                   <div className="flex gap-2">
                     <Button size="sm" busy={busy === `${itemId}-saved_only`} onClick={() => add(record, "saved_only", itemId)}>Save only</Button>
@@ -143,6 +147,12 @@ export function ReviewHome() {
               );
             })}
           </ul>
+        )}
+        {data.available_total > 0 && (
+          <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted" data-testid="available-count">
+            Showing {Math.min(availableShown, data.available_total)} of {data.available_total}
+            {availableShown < data.available_total && <Button size="sm" onClick={() => setAvailableShown((n) => n + 20)}>Show 20 more</Button>}
+          </p>
         )}
       </section>
 
@@ -196,7 +206,7 @@ export function ReviewSession() {
 
   if (finished || !item) {
     return (
-      <div className="mx-auto max-w-3xl">
+      <div className="ll-page ll-page-reading">
         <PageHeader title="Review session finished" subtitle="Only items you actually answered were recorded as reviews." />
         <dl className="ll-card grid grid-cols-2 gap-2 p-4" data-testid="review-summary">
           <dt>Answered</dt><dd className="font-semibold">{answered}</dd>
@@ -240,7 +250,7 @@ export function ReviewSession() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="ll-page ll-page-reading">
       <PageHeader title="Review session" subtitle={`Item ${index + 1} of ${items.length}`} actions={<Button onClick={() => setFinished(true)}>Stop here</Button>} />
       <article className="ll-card flex flex-col gap-3 p-4" aria-label="Review item">
         <p className="whitespace-pre-wrap text-lg" data-testid="review-prompt">{item.question.prompt}</p>
@@ -255,7 +265,7 @@ export function ReviewSession() {
               <Button onClick={() => { setDone((d) => ({ ...d, [item.item_id]: "skipped" })); next(); }}>Skip</Button>
               <Button variant="primary" busy={busy} disabled={!text.trim()} onClick={submitAnswer} data-testid="submit-review">Submit</Button>
             </div>
-            <p className="text-xs text-muted">Skipping records nothing. With a hint, your answer is kept as practice and is not fed to the scheduler as a rating.</p>
+            <p className="text-sm text-muted">Skipping records nothing. With a hint, your answer is kept as practice and is not fed to the scheduler as a rating.</p>
           </>
         ) : (
           <>

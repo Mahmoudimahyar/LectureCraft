@@ -23,7 +23,7 @@ describe("contract cases", () => {
   const cases = JSON.parse(readFileSync(resolve(repo, "fixtures/contracts/cases.json"), "utf8")).cases as Array<{
     id: string; schema: string; fixture: string; expected_valid: boolean;
   }>;
-  it("has all 84 supplied cases", () => expect(cases).toHaveLength(84));
+  it("has all 97 supplied cases", () => expect(cases).toHaveLength(97));
   it.each(cases.map((c) => [c.id, c] as const))("%s", (_id, c) => {
     const errors = validate(c.schema, parseStrictJson(bytes(c.fixture)));
     expect(errors.length === 0, errors.join("; ")).toBe(c.expected_valid);
@@ -95,7 +95,7 @@ describe("generated artifacts", () => {
     expect(new TextDecoder().decode(canonicalJsonBytes({ b: 1, a: "é", n: [true, null, 1.5] }))).toBe('{"a":"é","b":1,"n":[true,null,1.5]}');
   });
   it("were generated from the current schema files", () => {
-    const names = ["annotation", "bundle", "common", "context", "control", "message", "native-result", "publication", "request", "resume", "review-event", "review-item", "signature", "submission", "view"];
+    const names = ["annotation", "bundle", "common", "context", "control", "derived-manifest", "derived-segments", "message", "native-result", "publication", "request", "resume", "review-event", "review-item", "signature", "submission", "view"];
     const h = createHash("sha256");
     for (const n of names) h.update(readFileSync(resolve(repo, `contracts/v1/${n}.schema.json`)));
     h.update(readFileSync(resolve(repo, "contracts/index.json")));

@@ -25,7 +25,7 @@ import { TutorPanel } from "@/features/tutor/TutorPanel";
 import { ClipPlayer, type ClipPlayerHandle } from "./ClipPlayer";
 import { SlideCanvas, SlideThumb } from "./SlideCanvas";
 import { AddMatchDialog, EditMatchDialog, SourcesPanel, type NewMatchDraft } from "./SourcesPanel";
-import { TranscriptPanel } from "./TranscriptPanel";
+import { GeneratedTextPanel, TranscriptPanel } from "./TranscriptPanel";
 
 type Panel = "slide" | "tutor" | "transcript" | "sources" | "questions";
 const PANELS: Panel[] = ["slide", "tutor", "transcript", "sources", "questions"];
@@ -334,7 +334,8 @@ export function LectureWorkspace() {
         <TutorPanel courseId={courseId} lecture={lecture} page={page} slideRef={slideRef} pinned={pinned} onUnpin={(i) => setPinned((p) => p.filter((_, n) => n !== i))}
           onPauseMedia={() => playerRef.current?.pause()} onGoToPage={goTo} hideSlide={hideSlide} onHideSlide={setHideSlide} />
       </TabPanel>
-      <TabPanel value="transcript" className="min-h-0 flex-1 pt-3">
+      <TabPanel value="transcript" className="flex min-h-0 flex-1 flex-col gap-2 pt-3">
+        <GeneratedTextPanel recordings={lecture.recordings} onSeek={(ms) => playerRef.current?.seekTo(ms)} />
         <TranscriptPanel transcripts={lecture.transcripts} slideRanges={slide?.transcript_ranges ?? []} positionMs={position.ms} playing={position.playing} focusLine={focusLine}
           onSeek={(ms) => playerRef.current?.seekTo(ms)}
           onQuote={(source, text) => {
@@ -349,7 +350,7 @@ export function LectureWorkspace() {
       </TabPanel>
       <TabPanel value="sources" className="min-h-0 flex-1 overflow-y-auto pt-3">
         <SourcesPanel courseId={courseId} slide={slide} others={lecture.other_materials} relatedByConcept={relatedByConcept} lectureQuestionCount={lectureQuestionCount}
-          onShowLectureQuestions={() => update({ panel: "questions" }, true)}
+          onShowLectureQuestions={() => update({ panel: "questions" }, true)} outlineHref={`/courses/${courseId}/outline?scope=${encodeURIComponent(`slide:${lectureId}:${page}`)}`}
           onPin={(source, label) => { setPinned((p) => [...p, { source, label }]); update({ panel: "tutor" }, true); }} />
         {slideNotes.length > 0 && (
           <section className="mt-4" aria-labelledby="notes-heading">

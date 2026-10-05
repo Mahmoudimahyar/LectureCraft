@@ -6,26 +6,20 @@ import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useApp } from "@/app/state";
 import { Button, Callout, EmptyState, ErrorState, formatWhen, LoadingState, OUTCOME_LABEL, PageHeader, StatusChip, Tab, TabList, TabPanel, Tabs } from "@/components/ui";
-import { ASSISTANCE_LABEL, NODE_TYPE_LABEL, REFERENCE_LABEL, RELATION_LABEL, TIME_BASIS_LABEL } from "@/lib/labels";
+import { ASSISTANCE_LABEL, CONDITION_LABEL, NODE_TYPE_LABEL, REFERENCE_LABEL, RELATION_LABEL, SKILL_STATUS, TIME_BASIS_LABEL } from "@/lib/labels";
 import { useConcepts, useHistory, useProgress } from "@/lib/queries";
 import type { ConceptEdge, ConceptNode, SkillRow } from "@/lib/types";
 import { ReturnLink } from "@/features/search/SearchOverlay";
 import { useSubmitActions } from "@/features/tutor/actions";
 
-const STATUS: Record<SkillRow["status"], { label: string; tone: "success" | "caution" | "unassessed" | "danger" | "neutral" }> = {
-  not_assessed: { label: "Not assessed", tone: "unassessed" },
-  not_observed_only: { label: "Not observed yet", tone: "unassessed" },
-  current_gap: { label: "Gap seen in latest response", tone: "caution" },
-  uncertain: { label: "Latest assessment uncertain", tone: "unassessed" },
-  demonstrated_latest: { label: "Shown in latest response", tone: "success" },
-};
+const STATUS = SKILL_STATUS as Record<SkillRow["status"], { label: string; tone: "success" | "caution" | "unassessed" | "danger" | "neutral" }>;
 
 function EvidenceLine({ row }: { row: SkillRow }) {
   if (!row.latest) return <p className="text-sm text-muted">No attempt has observed this skill.</p>;
   const e = row.latest;
   return (
     <p className="text-sm text-muted">
-      Latest: {OUTCOME_LABEL[e.outcome]?.label ?? e.outcome} · {ASSISTANCE_LABEL[e.assistance] ?? e.assistance} · {REFERENCE_LABEL[e.reference_access] ?? e.reference_access} · recorded {formatWhen(e.recorded_at)} ({TIME_BASIS_LABEL[e.time_basis] ?? e.time_basis})
+      Latest: {OUTCOME_LABEL[e.outcome]?.label ?? e.outcome} · <strong className="font-medium text-ink">{CONDITION_LABEL[e.condition] ?? e.condition}</strong> · {ASSISTANCE_LABEL[e.assistance] ?? e.assistance} · {REFERENCE_LABEL[e.reference_access] ?? e.reference_access} · recorded {formatWhen(e.recorded_at)} ({TIME_BASIS_LABEL[e.time_basis] ?? e.time_basis})
       {e.revised ? " · corrected assessment in effect" : ""}{e.conflict ? " · correction chain needs reconciliation" : ""}
     </p>
   );
@@ -42,8 +36,7 @@ export function ProgressPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const rows = useMemo(() => (progress.data?.skills ?? []).filter((row) => {
     if (status !== "all" && row.status !== status) return false;
-    if (conditions === "unaided") return row.history.some((e) => e.assistance === "none" && e.reference_access === "none");
-    if (conditions === "assisted") return row.history.some((e) => e.assistance !== "none");
+    if (conditions !== "all") return row.history.some((e) => e.condition === conditions);
     return true;
   }), [progress.data, status, conditions]);
 
@@ -55,7 +48,8 @@ export function ProgressPage() {
 
   return (
     <div className="ll-page">
-      <PageHeader title="Progress" subtitle="What your recorded responses showed — not a score." actions={<Link className="ll-btn" to="/history">Study history</Link>} />
+      <PageHeader title="Progress" subtitle="What your recorded responses showed — not a score."
+        actions={<><Link className="ll-btn" to={`/courses/${courseId}/outline`}>Concept outline</Link><Link className="ll-btn" to="/history">Study history</Link></>} />
       {data.owner_view_status === "stale" && <Callout tone="caution" className="mb-3" title="The course's own summary view is out of date">Its original attempt records are intact and are what you see here; only the generated summary lags. <Link className="text-accent underline" to="/settings/maintenance">Maintenance</Link></Callout>}
       <ul className="mb-4 flex flex-wrap gap-2" aria-label="Evidence summary">
         <li><StatusChip tone="neutral">{data.recorded_attempts} recorded attempt{data.recorded_attempts === 1 ? "" : "s"}</StatusChip></li>
@@ -63,6 +57,33 @@ export function ProgressPage() {
         <li><StatusChip tone="caution">{s.current_gap ?? 0} gap{(s.current_gap ?? 0) === 1 ? "" : "s"} in latest responses</StatusChip></li>
         <li><StatusChip tone="unassessed">{(s.not_assessed ?? 0) + (s.not_observed_only ?? 0)} of {s.skills} skills not assessed</StatusChip></li>
       </ul>
+      <section aria-labelledby="facets-h" className="ll-card mb-4 p-4" data-testid="facet-summary">
+        <h2 id="facets-h" className="text-lg font-semibold">Recorded evidence by kind of performance</h2>
+        <p className="ll-measure mb-2 text-sm text-muted">Unit: distinct skills of this course's catalog ({s.skills}). "Unaided" means an observed, demonstrated response recorded with no assistance, no reference and no known prior exposure.
+          Rules: conditions {data.rules.evidence_conditions}, facet mapping v{data.rules.facet_mapping}.</p>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[44rem] border-collapse text-left">
+            <thead><tr className="border-b border-line/40 text-sm text-muted">
+              <th scope="col" className="py-1 pr-3 font-medium">Kind of performance</th><th scope="col" className="px-2 font-medium">Skills</th><th scope="col" className="px-2 font-medium">With an unaided demonstration</th>
+              <th scope="col" className="px-2 font-medium">Observed otherwise</th><th scope="col" className="px-2 font-medium">Uncertain</th><th scope="col" className="px-2 font-medium">Not assessed</th>
+              <th scope="col" className="pl-2 font-medium">Recorded observations</th></tr></thead>
+            <tbody>
+              {data.facets.rows.map((row) => (
+                <tr key={row.facet} className="border-b border-line/20 align-top" data-facet={row.facet}>
+                  <th scope="row" className="py-1.5 pr-3 font-medium">{row.label}{row.note && <span className="block text-sm font-normal text-muted">{row.note}</span>}</th>
+                  <td className="px-2 tabular-nums">{row.target_skills}</td>
+                  <td className="px-2 tabular-nums">{row.target_skills ? `${row.qualifying_unaided_skills} of ${row.target_skills}` : "—"}</td>
+                  <td className="px-2 tabular-nums">{row.target_skills ? row.observed_other_skills : "—"}</td>
+                  <td className="px-2 tabular-nums">{row.target_skills ? row.uncertain_skills : "—"}</td>
+                  <td className="px-2 tabular-nums">{row.target_skills ? row.unassessed_skills : "—"}</td>
+                  <td className="pl-2 text-sm">{Object.entries(row.observations_by_condition).filter(([, n]) => n > 0).map(([c, n]) => `${n} ${CONDITION_LABEL[c] ?? c}`).join(", ") || "none"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="ll-measure mt-2 text-sm text-muted" data-testid="criterion-evidence">{data.criterion_evidence.criteria_in_catalog} criteria are listed in the catalog; {data.criterion_evidence.attempts_with_criterion_observations} recorded attempts carry observations per criterion. {data.criterion_evidence.note}</p>
+      </section>
       {data.recorded_attempts === 0 && <Callout tone="unassessed" className="mb-3" title="Not assessed">No attempt is recorded for this course. That is not a score of zero — nothing has been measured yet.</Callout>}
 
       <div className="mb-3 flex flex-wrap gap-3 text-sm">
@@ -74,7 +95,8 @@ export function ProgressPage() {
         </label>
         <label className="flex items-center gap-2">Conditions
           <select className="ll-input w-auto" value={conditions} onChange={(e) => setConditions(e.target.value)}>
-            <option value="all">any</option><option value="unaided">has unaided, no-reference evidence</option><option value="assisted">has assisted evidence</option>
+            <option value="all">any</option><option value="unaided">has unaided evidence (no help, no reference, not seen before)</option><option value="assisted">has assisted evidence</option>
+            <option value="prior_exposure">has evidence after prior exposure</option><option value="conditions_unknown">has evidence with conditions not recorded</option>
           </select>
         </label>
       </div>
@@ -111,7 +133,8 @@ export function ProgressPage() {
                             <li key={e.attempt_id} className="rounded border border-line/40 p-2">
                               <div className="flex flex-wrap items-center gap-2">
                                 <StatusChip tone={OUTCOME_LABEL[e.outcome]?.tone ?? "neutral"}>{OUTCOME_LABEL[e.outcome]?.label ?? e.outcome}</StatusChip>
-                                <span className="text-muted">{formatWhen(e.recorded_at)} · {ASSISTANCE_LABEL[e.assistance]} · {REFERENCE_LABEL[e.reference_access]} · confidence {e.confidence}</span>
+                                <StatusChip tone={e.condition === "unaided" ? "success" : "neutral"}>{CONDITION_LABEL[e.condition] ?? e.condition}</StatusChip>
+                                <span className="text-muted">{formatWhen(e.recorded_at)} · {ASSISTANCE_LABEL[e.assistance]} · {REFERENCE_LABEL[e.reference_access]} · prior exposure: {e.prior_exposure.replace(/_/g, " ")} · confidence {e.confidence}</span>
                               </div>
                               <p className="mt-1">{e.question_prompt}</p>
                               <p className="text-muted">{e.analysis}</p>

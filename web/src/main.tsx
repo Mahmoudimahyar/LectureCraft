@@ -8,6 +8,7 @@ import { AppProvider, useApp } from "@/app/state";
 import { Shell } from "@/app/Shell";
 import { EmptyState, LoadingState } from "@/components/ui";
 import { ActivityPage, ConflictResolution } from "@/features/activity/ActivityPages";
+import { ConceptOutlinePage } from "@/features/concepts/ConceptOutline";
 import { ConnectPage } from "@/features/connect/ConnectPage";
 import { LectureWorkspace } from "@/features/lecture/LectureWorkspace";
 import { ConceptDetail, HistoryPage, ProgressPage } from "@/features/progress/ProgressPages";
@@ -60,6 +61,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="courses/:courseId/sources/:sourceId" element={<SourceDetail />} />
               <Route path="courses/:courseId/questions" element={<QuestionBankPage />} />
               <Route path="courses/:courseId/questions/:questionId" element={<QuestionPractice />} />
+              <Route path="courses/:courseId/outline" element={<ConceptOutlinePage />} />
               <Route path="courses/:courseId/concepts/:typedId" element={<ConceptDetail />} />
               <Route path="review" element={<ReviewHome />} />
               <Route path="review/sessions/:sessionId" element={<ReviewSession />} />

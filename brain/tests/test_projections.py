@@ -114,7 +114,10 @@ def test_gap_view_uses_effective_corrections_and_keeps_counterevidence(projector
     view = projector.gaps_view("be505")
     rows = {r["skill_id"]: r for r in view["skills"]}
     ori = rows["be505.skill.ori.explain"]
-    assert ori["status"] == "demonstrated_latest" and ori["episodes"] == 3 and ori["unaided_demonstrated"] == 1
+    # The latest demonstration was given after a hint, and the earlier one on a question already seen: neither is recorded
+    # unaided performance (the earlier rule counted the second one because it looked only at assistance and reference).
+    assert ori["status"] == "demonstrated_assisted" and ori["episodes"] == 3 and ori["unaided_demonstrated"] == 0
+    assert [e["condition"] for e in ori["history"]] == ["unaided", "prior_exposure", "assisted"]
     assert {e["outcome"] for e in ori["counterevidence"]} == {"partial", "demonstrated"} - {ori["latest"]["outcome"]} | {"partial"}
     integrate = rows["be505.skill.ori-vs-promoter.integrate"]
     assert integrate["status"] == "current_gap" and integrate["latest"]["outcome"] == "partial" and integrate["latest"]["revised"] is True  # the regrade is effective

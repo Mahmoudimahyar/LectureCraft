@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Callout, cn, formatMs, StatusChip } from "@/components/ui";
 import type { SourceRef } from "@/lib/db";
-import type { TranscriptRange, TranscriptView } from "@/lib/types";
+import type { GeneratedText, TranscriptRange, TranscriptView } from "@/lib/types";
 
 interface TranscriptPanelProps {
   transcripts: TranscriptView[];
@@ -136,5 +136,42 @@ export function TranscriptPanel({ transcripts, slideRanges, positionMs, playing,
         </div>
       )}
     </div>
+  );
+}
+
+/** Speech text generated outside the app (imported from a verified manifest). Shown apart from the course transcript:
+ *  it is new text with its own times, it is not reviewed, and it says nothing about which slide was on screen. */
+export function GeneratedTextPanel({ recordings, onSeek }: { recordings: Array<{ filename: string; generated_text?: GeneratedText | null }>; onSeek: (ms: number) => void }) {
+  const [open, setOpen] = useState(false);
+  const withText = recordings.filter((r) => r.generated_text);
+  if (withText.length === 0) return null;
+  return (
+    <section aria-label="Generated speech text" className="ll-card flex flex-col gap-1 p-2" data-testid="generated-text">
+      {withText.map((r) => {
+        const g = r.generated_text!;
+        return (
+          <div key={g.generation} className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusChip tone="unassessed">Generated speech text · not reviewed</StatusChip>
+              <span className="text-sm text-muted" data-testid="generated-window">covers {formatMs(g.window.start_ms)}–{formatMs(g.window.end_ms)}{g.duration_ms ? ` of ${formatMs(g.duration_ms)}` : ""}{g.covers_whole_recording ? "" : " (part of the recording)"}</span>
+              <Button size="sm" variant="quiet" aria-expanded={open} onClick={() => setOpen((o) => !o)}>{open ? "Hide" : "Show"} {g.segments_total} segments</Button>
+            </div>
+            {open && (
+              <>
+                <p className="text-sm text-muted">{g.note}</p>
+                <ol className="max-h-[14rem] overflow-y-auto">
+                  {g.segments.map((s) => (
+                    <li key={s.start_ms} className="flex gap-2 px-1 py-0.5">
+                      <button type="button" className="shrink-0 text-sm tabular-nums text-accent underline" onClick={() => onSeek(s.start_ms)} aria-label={`Go to ${formatMs(s.start_ms)} in the recording (generated timing, not reviewed)`}>{formatMs(s.start_ms)}</button>
+                      <span className="min-w-0 flex-1">{s.text}</span>
+                    </li>
+                  ))}
+                </ol>
+              </>
+            )}
+          </div>
+        );
+      })}
+    </section>
   );
 }

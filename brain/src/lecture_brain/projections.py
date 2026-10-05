@@ -19,6 +19,8 @@ import yaml
 from . import contracts as c
 from .annotations import AnnotationStore, media_duration_ms, precision_of
 from .config import Settings
+from .evidence import CONDITIONS, CONDITIONS_VERSION, condition_of, facet_of, facet_summary, load_facet_mapping
+from .outline import OUTLINE_VERSION, OutlineModel
 from .fsutil import replace_atomic
 from .journal import Journal, JobState as S, TERMINAL
 from .ownerio import OwnerReadError
@@ -57,6 +59,7 @@ class Projector:
         self._rejections = rejections or (lambda: [])
         self._now = now or (lambda: "1970-01-01T00:00:00Z")
         self._hashes: dict[str, str] = {}  # path|size|mtime -> sha256, for files compared as bytes
+        self._mapping: dict[str, Any] | None = None
 
     # ---- shared readers ------------------------------------------------------------------------
     def _catalogs(self, course_id: str) -> dict[str, Any]:
@@ -348,7 +351,8 @@ class Projector:
                     # The file itself as a citable artifact: a link the learner creates names it as its support.
                     artifact = ({"path": item["path"], "sha256": sha256, "bytes": item["bytes"], "media_type": item["media_type"] or "application/octet-stream"}
                                 if sha256 and item["bytes"] else None)
-                    recordings.append(dict(base, content=f"sources/{course_id}/{item['source_id']}/content", duration_ms=media_duration_ms(root / item["path"]), artifact=artifact))
+                    recordings.append(dict(base, content=f"sources/{course_id}/{item['source_id']}/content", duration_ms=media_duration_ms(root / item["path"]), artifact=artifact,
+                                           generated_text=self._generated_text(course_id, item["source_id"])))
                 elif item["kind"] == "lecture_transcript" and item["path"] and item["rendition"] == "native_text":
                     try:
                         lines = (root / item["path"]).read_text(encoding="utf-8-sig", errors="replace").splitlines()[:MAX_TRANSCRIPT_LINES]
@@ -361,6 +365,11 @@ class Projector:
                 "deck": ({"source_id": deck["source_id"], "version_id": deck_identity[0], "sha256": deck_identity[1], "filename": deck["filename"], "state": deck["state"],
                           "registration": deck["registration"], "rendition": deck["rendition"]} if deck else None),
                 "deck_choice": choice, "questions": lecture_questions,
+                # Four separate facts about timing; none implies another (R1-T2).
+                "timing_summary": {"reviewed_links": sum(1 for s_ in slides for o in s_["occurrences"] if o["review_state"] == "confirmed"),
+                                   "suggested_links": sum(1 for s_ in slides for o in s_["occurrences"] if o["review_state"] != "confirmed"),
+                                   "text_match_suggestions": sum(1 for s_ in slides for r in s_["transcript_ranges"] if r["review_state"] != "confirmed"),
+                                   "generated_text_recordings": sum(1 for r in recordings if r["generated_text"]), "scheduled_preparation": "not_active"},
                 "display": display, "page_count": page_count, "slides": slides, "recordings": recordings, "transcripts": transcripts,
                 "sessions": [{"session_id": s["session_id"], "state": s["state"]} for s in lecture["sessions"]], "preparation": stages,
                 "other_materials": other_materials(dict(lecture, deck_choice=choice)),
@@ -431,6 +440,13 @@ class Projector:
                 edges.append({"from": skill_id, "to": fid, "relation": "skill_practiced_by_family", "provenance": "question families catalog"})
         for question in index["questions"].values():
             node(question["question_id"], "question", question.get("title") or question["question_id"], collection=question.get("collection"))
+            # Criteria are objects of the catalog too. Their wording stays out of browse views; identity and bindings are kept.
+            for number, criterion in enumerate(question.get("criteria") or [], start=1):
+                node(criterion["criterion_id"], "criterion", f"Criterion {number} of {question['question_id']}", question_id=question["question_id"], skill_id=criterion.get("skill_id"),
+                     concept_id=criterion.get("concept_id"), action_types=list(criterion.get("action_types") or []))
+                edges.append({"from": question["question_id"], "to": criterion["criterion_id"], "relation": "question_has_criterion", "provenance": "question index"})
+                if criterion.get("skill_id"):
+                    edges.append({"from": criterion["skill_id"], "to": criterion["criterion_id"], "relation": "skill_assessed_by_criterion", "provenance": "question index"})
             edges.append({"from": f"{question.get('family_id')}@r{question.get('family_revision')}", "to": question["question_id"], "relation": "family_instance", "provenance": "question index"})
         for rel in index["relationships"]:  # owner labels kept verbatim; containment is between questions, never a concept prerequisite
             edges.append({"from": rel["from_question"], "to": rel["to_question"], "relation": rel["relation"], "provenance": "question index", "rationale": rel.get("rationale"),
@@ -440,10 +456,98 @@ class Projector:
             edges.append({"from": link["concept_id"], "to": link["skill_id"], "relation": f"shared_{link['relation']}", "provenance": "shared-learning overlay (reviewed)",
                           "automatic_credit": False, "other_courses": link["other_courses"]})
         edges = [e for e in edges if e["from"] in nodes and e["to"] in nodes]
-        children = {e["to"] for e in edges if e["relation"] in {"topic_includes_concept", "topic_includes_skill", "concept_assessed_as_skill", "skill_practiced_by_family", "family_instance"}}
+        children = {e["to"] for e in edges if e["relation"] in {"topic_includes_concept", "topic_includes_skill", "concept_assessed_as_skill", "skill_practiced_by_family", "family_instance",
+                                                                 "question_has_criterion", "skill_assessed_by_criterion"}}
         roots = sorted(n for n, v in nodes.items() if v["type"] in {"topic", "shared_concept"} or (v["type"] in {"concept", "skill"} and n not in children))
         return {"course_id": course_id, "nodes": nodes, "edges": edges, "roots": roots, "catalog_problems": catalogs["problems"],
                 "note": "A projection of the course's own catalogs. Repeated appearances refer to one id. Relations keep the owner's labels; none grants automatic credit."}
+
+    def _generated_text(self, course_id: str, source_id: str) -> dict[str, Any] | None:
+        """Speech text generated elsewhere and imported from a verified manifest. Its times belong to that text only."""
+        from .derived import Derived
+
+        try:
+            current = Derived(self.settings, self.journal, preparation=self.preparation).current(course_id, source_id)
+        except Exception:  # noqa: BLE001 - a damaged derived store must never break reading a lecture
+            return None
+        if current is None:
+            return None
+        return {**{k: current[k] for k in ("generation", "created_at", "window", "duration_ms", "coverage_fraction", "covers_whole_recording", "text_origin", "review_state", "establishes", "note")},
+                "producer": {k: current["producer"].get(k) for k in ("tool", "model", "language")},
+                "segments": [{"start_ms": s["start_ms"], "end_ms": s["end_ms"], "text": s["text"]} for s in current["segments"][:4000]], "segments_total": len(current["segments"])}
+
+    def _facet_mapping(self) -> dict[str, Any]:
+        if self._mapping is None:
+            self._mapping = load_facet_mapping(self.settings.repo)
+        return self._mapping
+
+    def _outline(self, course_id: str) -> tuple[OutlineModel, dict, dict, dict]:
+        binding = self.settings.course(course_id)
+        inventory = build_inventory(binding)
+        catalogs = self._catalogs(course_id)
+        bank = self._bank(course_id, catalogs, inventory)
+        decks = {l["lecture_id"]: (primary_deck(l) or {}).get("source_id") for l in inventory["lectures"]}
+        return OutlineModel(catalogs, bank), bank, decks, catalogs
+
+    def outline_view(self, course_id: str, *, scope: str = "course", parent: str | None = None, limit: int = 200) -> dict[str, Any]:
+        """One level of the typed outline for a scope (R1-G1…G4). Raises ``ValueError`` for a scope that does not exist."""
+        model, bank, decks, catalogs = self._outline(course_id)
+        resolved = model.scope(scope, decks.get)
+        skills = {r["skill_id"]: r for r in self.gaps_view(course_id)["skills"]}
+
+        def decorate(node_id: str, kind: str | None) -> dict:
+            if kind == "skill":
+                row = skills[node_id]
+                return {"status": row["status"], "facet": row["facet"]["facet"] or row["facet"]["state"], "episodes": row["episodes"]}
+            if kind == "question":
+                link = bank["questions"][node_id]
+                return {"collection": link["collection"], "slide_anchor": link["slide_anchor"], "prompt_in_index": link["prompt_in_index"]}
+            if kind in {"topic", "concept"}:
+                return {"questions": len(set(model.questions_of(node_id)) & resolved["question_ids"]) if resolved["question_ids"] is not None else len(model.questions_of(node_id)),
+                        "skills": len(model.skills_of(node_id))}
+            return {}
+
+        page = model.rows(resolved, parent, limit=limit, decorate=decorate)
+        public = {k: v for k, v in resolved.items() if k != "question_ids"}
+        public["questions_in_scope"] = len(resolved["question_ids"]) if resolved["question_ids"] is not None else model.canonical_counts["question"]
+        return {"course_id": course_id, "outline_version": OUTLINE_VERSION, "scope": public, "canonical_counts": model.canonical_counts, **page, "catalog_problems": catalogs["problems"],
+                "note": "An outline of the course's own catalogs. One object can appear on several branches; it is counted once. Relations between questions are links, not branches, and grant no credit."}
+
+    def outline_node(self, course_id: str, node_id: str) -> dict[str, Any] | None:
+        """Sources, Questions and Evidence of one catalog object."""
+        model, bank, _decks, catalogs = self._outline(course_id)
+        kind = model.kind_of(node_id)
+        if kind is None:
+            return None
+        gaps = self.gaps_view(course_id)
+        skills = {r["skill_id"]: r for r in gaps["skills"]}
+        index = (catalogs["questions"] or {}).get("questions", {})
+        node: dict[str, Any] = {"node_id": node_id, "kind": kind, "label": model.label_of(node_id)}
+        if kind == "criterion":
+            node.update({k: model.criteria[node_id][k] for k in ("question_id", "skill_id", "concept_id", "action_types", "number")})
+        elif kind == "skill":
+            node.update(ability=model.skills[node_id].get("ability"), facet=skills[node_id]["facet"])
+        elif kind == "question":
+            node.update(collection=bank["questions"][node_id]["collection"], lecture_ids=bank["questions"][node_id]["lecture_ids"])
+        question_ids = model.questions_of(node_id)
+        sources: list[dict] = []
+        for skill_id in model.skills_of(node_id):
+            for ref in model.skills[skill_id].get("source_refs") or []:
+                locator = ref.get("locator") if isinstance(ref.get("locator"), str) else ""
+                sources.append({"source_id": ref.get("source_id"), "basis": "skill source reference", "from": skill_id, "locator_text": locator, "pages": sorted(_pages_in(locator))})
+        for question_id in question_ids:
+            for anchor in bank["questions"][question_id]["anchors"]:
+                sources.append({"source_id": anchor.get("source_id"), "basis": f"question anchor ({anchor['basis']})", "from": question_id, "kind": anchor["kind"], "ranges": anchor["ranges"],
+                                "lecture_id": anchor.get("lecture_id")})
+        evidence_skills = [{"skill_id": s_, "label": skills[s_]["label"], "status": skills[s_]["status"], "facet": skills[s_]["facet"]["facet"] or skills[s_]["facet"]["state"],
+                            "episodes": skills[s_]["episodes"], "observations_by_condition": skills[s_]["observations_by_condition"], "unaided_demonstrated": skills[s_]["unaided_demonstrated"]}
+                           for s_ in model.skills_of(node_id) if s_ in skills]
+        evidence: dict[str, Any] = {"unit": "skill", "rules": gaps["rules"], "skills": evidence_skills[:60], "skills_total": len(evidence_skills)}
+        if kind == "criterion":
+            evidence.update(criterion_observations=0, note="No attempt records an observation for this criterion itself. Evidence is recorded on its skill, shown here.")
+        return {"course_id": course_id, "outline_version": OUTLINE_VERSION, "node": node, "parents": model.parents(node_id), "sources": sources[:80], "sources_total": len(sources),
+                "questions": [self._question_row(bank["questions"][q], index[q]) for q in question_ids[:50]], "questions_total": len(question_ids), "evidence": evidence,
+                "links": model.links(node_id)}
 
     def _shared_links(self, course_id: str) -> list[dict]:
         path = self.settings.planner_root / "shared-learning" / "concepts.yaml"
@@ -490,13 +594,16 @@ class Projector:
         for attempt_id, attempt in records["attempts"].items():
             effective = records["effective"][attempt_id]
             for obs in effective["observations"]:
+                recorded = condition_of(obs, attempt)
                 episodes.setdefault(obs["skill_id"], []).append({
+                    "condition": recorded["condition"], "condition_reasons": recorded["reasons"], "prior_exposure": recorded["prior_exposure"], "qualifying_unaided": recorded["qualifying_unaided"],
                     "attempt_id": attempt_id, "assessment_id": effective["assessment_id"], "revised": len(effective["chain"]) > 1, "conflict": effective["conflict"],
                     "outcome": obs["outcome"], "assistance": obs["assistance"], "reference_access": obs["reference_access"], "confidence": obs["assessment_confidence"],
                     "analysis": obs["analysis"], "missing_or_incorrect": obs["missing_or_incorrect"], "error_types": obs["error_types"], "recorded_at": attempt["recorded_at"],
                     "occurred_at": attempt["occurred_at"], "time_basis": attempt["time_basis"], "mode": attempt["mode"], "evidence_kind": attempt["evidence_kind"],
                     "question_prompt": attempt["question"]["prompt"], "question_id": attempt["question"].get("question_id")})
         rows = []
+        mapping = self._facet_mapping()
         for skill_id, skill in catalogs["skills"]["skills"].items():
             history = sorted(episodes.get(skill_id, []), key=lambda e: (e["recorded_at"], e["attempt_id"]))
             observed = [e for e in history if e["outcome"] != "not_observed"]
@@ -509,8 +616,9 @@ class Projector:
                 status = "current_gap"
             elif latest["outcome"] == "uncertain":
                 status = "uncertain"
-            else:
-                status = "demonstrated_latest"
+            else:  # demonstrated: say under which recorded condition, never an undifferentiated "shown"
+                status = {"unaided": "demonstrated_unaided", "assisted": "demonstrated_assisted", "prior_exposure": "demonstrated_after_exposure",
+                          "conditions_unknown": "demonstrated_conditions_unknown"}[latest["condition"]]
             gap = None
             if status == "current_gap":
                 gap = {"observed": {k: latest[k] for k in ("attempt_id", "assessment_id", "outcome", "missing_or_incorrect", "error_types", "analysis", "assistance", "reference_access", "recorded_at", "time_basis", "confidence")},
@@ -518,15 +626,23 @@ class Projector:
             rows.append({
                 "skill_id": skill_id, "label": skill.get("performance_target") or skill_id, "ability": skill.get("ability"), "topic_ids": skill.get("topic_ids", []),
                 "concept_id": skill.get("concept_id"), "status": status, "episodes": len(history), "latest": latest, "gap": gap,
-                "counterevidence": [{k: e[k] for k in ("attempt_id", "outcome", "assistance", "recorded_at")} for e in observed[:-1] if latest and e["outcome"] != latest["outcome"]],
-                "unaided_demonstrated": sum(1 for e in history if e["outcome"] == "demonstrated" and e["assistance"] == "none" and e["reference_access"] == "none" and e["evidence_kind"] == "observed_response"),
+                "counterevidence": [{k: e[k] for k in ("attempt_id", "outcome", "assistance", "recorded_at", "condition")} for e in observed[:-1] if latest and e["outcome"] != latest["outcome"]],
+                "unaided_demonstrated": sum(1 for e in history if e["qualifying_unaided"]),
+                "observations_by_condition": {c_: sum(1 for e in observed if e["condition"] == c_) for c_ in CONDITIONS},
+                "facet": facet_of(skill, mapping),
                 "study": {"priority": skill.get("priority"), "priority_reason": skill.get("priority_reason"), "need_basis": skill.get("need_basis"), "study_decision": skill.get("study_decision"),
                           "note": "Priority and study decision are planning choices, not competence measurements."},
                 "history": history,
             })
         summary = Counter(r["status"] for r in rows)
         view_status = learning_view_status(self.settings.course(course_id).root)
+        criteria = sum(len(q.get("criteria") or []) for q in ((catalogs["questions"] or {}).get("questions") or {}).values())
+        with_criterion = sum(1 for a in records["attempts"].values() if a.get("criterion_observations") or any(o.get("criterion_id") for o in records["effective"][a["attempt_id"]]["observations"]))
         return {"course_id": course_id, "skills": rows, "summary": {"skills": len(rows), **summary}, "recorded_attempts": len(records["attempts"]),
+                "facets": facet_summary(rows, mapping), "rules": {"evidence_conditions": CONDITIONS_VERSION, "facet_mapping": mapping["mapping_version"]},
+                "criterion_evidence": {"criteria_in_catalog": criteria, "attempts_with_criterion_observations": with_criterion,
+                                       "note": ("The catalog lists criteria; the recorded attempts carry observations per skill only. A listed criterion is not an assessed criterion."
+                                                if not with_criterion else "Some attempts carry observations per criterion; the rest are recorded per skill only.")},
                 "assessment_revisions": len(records["revisions"]), "owner_view_status": view_status, "record_problems": records["problems"], "catalog_problems": catalogs["problems"],
                 "notes": ["Zero records means not assessed, not zero ability.", "No mastery percentage, forgetting curve or exam probability is computed.",
                           "The owner's learning-state view is stale; original attempts shown here remain the evidence." if view_status == "stale" else "Evidence shown comes from the original attempt records."]}

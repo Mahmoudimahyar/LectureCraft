@@ -77,3 +77,20 @@ export const RELATION_LABEL: Record<string, string> = {
   family_instance: "question family has question", shared_related: "related across courses (reviewed)", shared_equivalent: "equivalent across courses (reviewed)",
 };
 export const NODE_TYPE_LABEL: Record<string, string> = { topic: "Topic", concept: "Concept", skill: "Skill", question_family: "Question family", question: "Question", shared_concept: "Shared concept" };
+
+/** Skill status: a demonstration always says under which recorded condition it was given (R1-F1). */
+export const SKILL_STATUS: Record<string, { label: string; tone: Tone }> = {
+  not_assessed: { label: "Not assessed", tone: "unassessed" },
+  not_observed_only: { label: "Not observed yet", tone: "unassessed" },
+  current_gap: { label: "Gap seen in latest response", tone: "caution" },
+  uncertain: { label: "Latest assessment uncertain", tone: "unassessed" },
+  demonstrated_unaided: { label: "Demonstrated unaided", tone: "success" },
+  demonstrated_assisted: { label: "Demonstrated with assistance", tone: "neutral" },
+  demonstrated_after_exposure: { label: "Demonstrated on a question seen before", tone: "neutral" },
+  demonstrated_conditions_unknown: { label: "Demonstrated; conditions not recorded", tone: "unassessed" },
+};
+export const CONDITION_LABEL: Record<string, string> = { unaided: "unaided", assisted: "with assistance", prior_exposure: "after prior exposure", conditions_unknown: "conditions not recorded" };
+export const FACET_LABEL: Record<string, string> = {
+  recall: "Recall", conceptual_explanation: "Conceptual explanation", formulation_method_choice: "Formulation and method choice", algebra_numerical_execution: "Algebra and numerical execution",
+  coding_execution: "Coding and execution", interpretation: "Interpretation", transfer: "Transfer", combined: "Combined target (not separately observed)", unclassified: "Unclassified",
+};

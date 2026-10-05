@@ -72,7 +72,8 @@ export function LectureQuestionsPanel({ courseId, lecture, onGoToPage }: { cours
       <section aria-labelledby="lq-all">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h3 id="lq-all" className="ll-label">All lecture questions ({all.length})</h3>
-          <Link className="text-sm text-accent hover:underline" to={`/courses/${courseId}/questions?lecture=${encodeURIComponent(lecture.lecture_id)}`}>Open in the question bank</Link>
+          <span className="flex gap-3 text-sm"><Link className="text-accent hover:underline" to={`/courses/${courseId}/outline?scope=${encodeURIComponent(`lecture:${lecture.lecture_id}`)}`}>Concept outline</Link>
+            <Link className="text-accent hover:underline" to={`/courses/${courseId}/questions?lecture=${encodeURIComponent(lecture.lecture_id)}`}>Open in the question bank</Link></span>
         </div>
         {lecture.questions.gap ? (
           <Callout tone="unassessed" title="No question collection for this lecture">{lecture.questions.gap} Nothing was generated to fill the gap.</Callout>

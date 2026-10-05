@@ -272,7 +272,23 @@ export interface SlideView {
   related: RelatedLink[];
 }
 
+/** Speech text generated outside the app and imported from a verified manifest. Its times belong to this text only. */
+export interface GeneratedText {
+  generation: string;
+  created_at: string;
+  window: { start_ms: number; end_ms: number };
+  duration_ms: number | null;
+  coverage_fraction: number | null;
+  covers_whole_recording: boolean | null;
+  text_origin: string;
+  review_state: string;
+  note: string;
+  producer: { tool?: string | null; model?: string | null; language?: string | null };
+  segments: Array<{ start_ms: number; end_ms: number; text: string }>;
+  segments_total: number;
+}
 export interface RecordingView {
+  generated_text?: GeneratedText | null;
   source_id: string;
   version_id: string | null;
   sha256: string | null;
@@ -311,6 +327,8 @@ export interface LectureView {
     candidates: Array<{ source_id: string; filename: string; bytes: number | null; registration: string; rendition: string; state: string }> };
   /** The lecture's own questions (by collection), questions reached through a relationship, and the gap when there is no collection. */
   questions: { collections: QuestionCollection[]; all: QuestionRow[]; gap: string | null; related_by_relationship: QuestionRow[]; note: string };
+  /** Four separate facts about timing: reviewed links, suggested links, text-match suggestions, generated speech text. None implies another. */
+  timing_summary: { reviewed_links: number; suggested_links: number; text_match_suggestions: number; generated_text_recordings: number; scheduled_preparation: string };
   page_count: number | null;
   slides: SlideView[];
   recordings: RecordingView[];
@@ -401,6 +419,62 @@ export interface Episode {
   mode: string;
   question_prompt: string;
   question_id?: string | null;
+  /** The condition this observation was recorded under; only "unaided" observed demonstrations qualify as unaided performance. */
+  condition: "unaided" | "assisted" | "prior_exposure" | "conditions_unknown";
+  condition_reasons: string[];
+  prior_exposure: string;
+  qualifying_unaided: boolean;
+}
+export interface SkillFacet { facet: string | null; state: "mapped" | "combined" | "unclassified"; tokens: string[]; token_basis: string; candidates: string[]; rationale: string; mapping_version: number }
+export interface FacetRow {
+  facet: string;
+  label: string;
+  target_skills: number;
+  qualifying_unaided_skills: number;
+  observed_other_skills: number;
+  uncertain_skills: number;
+  unassessed_skills: number;
+  observations_by_condition: Record<string, number>;
+  observations_by_outcome: Record<string, number>;
+  note?: string;
+}
+export interface OutlineRow {
+  instance_id: string;
+  node_id: string;
+  kind: "topic" | "concept" | "skill" | "question" | "criterion";
+  label: string;
+  relation: string;
+  depth: number;
+  repeated_on_path: boolean;
+  has_children: boolean;
+  questions?: number;
+  skills?: number;
+  status?: string;
+  facet?: string;
+  episodes?: number;
+  collection?: string | null;
+  slide_anchor?: string;
+  on_parent_skill?: boolean;
+}
+export interface OutlineView {
+  course_id: string;
+  scope: { kind: string; basis: string; note: string; questions_in_scope: number; gap?: string | null; lecture_id?: string; page?: number; anchored_questions?: string[]; related_questions?: string[];
+    questions_without_slide_anchor?: string[] };
+  canonical_counts: Record<"topic" | "concept" | "skill" | "question_family" | "question" | "criterion" | "question_relationship", number>;
+  rows: OutlineRow[];
+  total_children: number;
+  truncated: boolean;
+  note: string;
+}
+export interface OutlineNodeView {
+  node: { node_id: string; kind: string; label: string };
+  parents: Array<{ node_id: string; kind: string; label: string }>;
+  sources: Array<{ source_id: string | null; basis: string; from: string; kind?: string; ranges?: Array<[number, number]>; locator_text?: string; lecture_id?: string | null }>;
+  sources_total: number;
+  questions: QuestionRow[];
+  questions_total: number;
+  evidence: { unit: string; note?: string; skills: Array<{ skill_id: string; label: string; status: string; facet: string; episodes: number; observations_by_condition: Record<string, number>; unaided_demonstrated: number }>; skills_total: number };
+  links: Array<{ relation: string; other: string; other_label: string; direction: string; automatic_credit: boolean }>;
 }
 
 export interface SkillRow {
@@ -409,7 +483,9 @@ export interface SkillRow {
   ability: string | null;
   topic_ids: string[];
   concept_id: string | null;
-  status: "not_assessed" | "not_observed_only" | "current_gap" | "uncertain" | "demonstrated_latest";
+  status: "not_assessed" | "not_observed_only" | "current_gap" | "uncertain" | "demonstrated_unaided" | "demonstrated_assisted" | "demonstrated_after_exposure" | "demonstrated_conditions_unknown";
+  facet: SkillFacet;
+  observations_by_condition: Record<string, number>;
   episodes: number;
   latest: Episode | null;
   gap: { observed: Record<string, unknown>; cause_status: string; note: string } | null;
@@ -427,6 +503,9 @@ export interface ProgressView {
   assessment_revisions: number;
   owner_view_status: string;
   notes: string[];
+  facets: { mapping_version: number; conditions_version: string; unit: string; target_set: string; numerator: string; rows: FacetRow[]; notes: string[] };
+  rules: { evidence_conditions: string; facet_mapping: number };
+  criterion_evidence: { criteria_in_catalog: number; attempts_with_criterion_observations: number; note: string };
 }
 
 export interface HistoryAttempt {

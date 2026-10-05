@@ -850,3 +850,29 @@ def test_a_course_that_is_missing_from_the_planner_does_not_make_the_working_fol
     # The course that has no folder has no recordings to attach anything to.
     other = Derived(settings).import_generation(write_root(tmp_path / "asr-out" / "gen-0002", settings, generation="gen-0002", edit_manifest=lambda m: (m.update(course_id="cs542"), refingerprint(m))), course_id="cs542")
     assert (other["status"], other["reason"]) == ("rejected", "unknown_source")
+
+
+# ---- the lecture view is the consumer (R1-T1, R1-T2) ---------------------------------------------------
+def test_imported_generated_timing_reaches_the_lecture_view_labelled_and_changes_nothing_else(settings, derived, journal, tmp_path):
+    from lecture_brain.projections import Projector
+
+    projector = Projector(settings, journal)
+    before = projector.lecture_view("be505", "lecture-01")
+    assert all(r["generated_text"] is None for r in before["recordings"])
+    item = recording(settings)
+    assert derived.import_generation(write_root(tmp_path / "out", settings, item=item, window=(0, 20_000)), course_id="be505")["status"] == "imported"
+    after = projector.lecture_view("be505", "lecture-01")
+    generated = next(r["generated_text"] for r in after["recordings"] if r["source_id"] == item["source_id"])
+    assert generated["review_state"] == "generated_unreviewed" and generated["text_origin"] == "generated_speech_text" and generated["establishes"] == []
+    assert generated["window"] == {"start_ms": 0, "end_ms": 20_000} and generated["covers_whole_recording"] is False and 0 < generated["coverage_fraction"] < 1
+    assert generated["segments"] and all(0 <= s["start_ms"] < s["end_ms"] <= 20_000 and s["text"] for s in generated["segments"])
+    # Generated times belong to the generated text: the course transcript stays untimed where it was, no slide gains a link,
+    # and the unit's preparation state does not change (the first seconds of speech text are not "the lecture processed").
+    assert [t["timing"] for t in after["transcripts"]] == [t["timing"] for t in before["transcripts"]]
+    assert [t["line_times"] for t in after["transcripts"]] == [t["line_times"] for t in before["transcripts"]]
+    assert [s["occurrences"] for s in after["slides"]] == [s["occurrences"] for s in before["slides"]]
+    assert after["preparation"] == before["preparation"]
+    assert after["timing_summary"] == {"reviewed_links": sum(1 for s in after["slides"] for o in s["occurrences"] if o["review_state"] == "confirmed"),
+                                       "suggested_links": sum(1 for s in after["slides"] for o in s["occurrences"] if o["review_state"] != "confirmed"),
+                                       "text_match_suggestions": sum(1 for s in after["slides"] for r in s["transcript_ranges"] if r["review_state"] != "confirmed"),
+                                       "generated_text_recordings": 1, "scheduled_preparation": "not_active"}

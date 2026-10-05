@@ -1,0 +1,32 @@
+{
+  "contract": "ll.facet-mapping/1",
+  "mapping_version": 1,
+  "applies_to": "action tokens of a skill in a course's own catalog (action_types; the older ability field where a skill has no tokens)",
+  "facets": [
+    {"facet": "recall", "label": "Recall"},
+    {"facet": "conceptual_explanation", "label": "Conceptual explanation"},
+    {"facet": "formulation_method_choice", "label": "Formulation and method choice"},
+    {"facet": "algebra_numerical_execution", "label": "Algebra and numerical execution"},
+    {"facet": "coding_execution", "label": "Coding and execution"},
+    {"facet": "interpretation", "label": "Interpretation"},
+    {"facet": "transfer", "label": "Transfer"}
+  ],
+  "rules": [
+    {"token": "recall", "facet": "recall", "rationale": "The target is stating a fact or definition from memory."},
+    {"token": "explain", "facet": "conceptual_explanation", "rationale": "The target is explaining a mechanism or reason in words."},
+    {"token": "interpret", "facet": "interpretation", "rationale": "The target is reading meaning from a result, figure or situation."},
+    {"token": "select_method", "facet": "formulation_method_choice", "rationale": "The target is choosing the approach, not carrying it out."},
+    {"token": "calculate", "facet": "algebra_numerical_execution", "rationale": "The target is carrying out a calculation to a value."},
+    {"token": "derive", "facet": null, "candidates": ["formulation_method_choice", "algebra_numerical_execution"],
+     "rationale": "Deriving a relation mixes setting up the model and carrying out the algebra. The catalog does not record which part was observed, so it is not assigned to either."},
+    {"token": "design", "facet": null, "candidates": ["formulation_method_choice", "transfer"],
+     "rationale": "Designing is not by itself coding, method choice or transfer; the catalog does not say which the target requires."},
+    {"token": "critique", "facet": null, "candidates": ["interpretation", "conceptual_explanation"],
+     "rationale": "Critiquing may rest on interpretation or on explanation; the catalog does not separate them."},
+    {"token": "integrate", "facet": null, "candidates": ["transfer"],
+     "rationale": "Marks a target that combines several actions; a combined target is not evidence about one facet."}
+  ],
+  "combined_rule": "A skill with more than one action token is one combined target. Its observations are reported as combined and are not divided among facets.",
+  "coding_rule": "No action token is read as coding or execution. A skill is counted under that facet only when a course catalog marks it so explicitly.",
+  "absence_rule": "A missing error tag is never read as success in a facet."
+}

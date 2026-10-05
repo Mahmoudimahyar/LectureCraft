@@ -153,6 +153,23 @@ def create_app(runtime: Runtime, *, extra_hosts: set[str] | None = None, static_
             raise HTTPException(404, "Unknown concept or skill")
         return hood
 
+    @app.get("/api/courses/{course_id}/outline")
+    def outline(course_id: str, scope: str = Query("course", max_length=120, pattern=r"^(course|lecture:[A-Za-z0-9._-]+|slide:[A-Za-z0-9._-]+:[0-9]{1,5})$"),
+                parent: str | None = Query(None, max_length=1200), limit: int = Query(200, ge=1, le=200)):
+        course(course_id)
+        try:
+            return locked(lambda: projector.outline_view(course_id, scope=scope, parent=parent, limit=limit))
+        except ValueError:
+            raise HTTPException(404, "Unknown scope") from None
+
+    @app.get("/api/courses/{course_id}/outline/node")
+    def outline_node(course_id: str, id: str = Query(..., max_length=300)):
+        course(course_id)
+        view = locked(lambda: projector.outline_node(course_id, id))
+        if view is None:
+            raise HTTPException(404, "Unknown catalog object")
+        return view
+
     @app.get("/api/courses/{course_id}/progress")
     def progress(course_id: str):
         course(course_id)

@@ -35,10 +35,12 @@ interface SourcesPanelProps {
   /** How many questions the lecture's collections hold, so "nothing on this slide" is never read as "no questions". */
   lectureQuestionCount?: number;
   onShowLectureQuestions?: () => void;
+  /** Link to the concept outline scoped to this slide (and its lecture). */
+  outlineHref?: string;
   onPin: (source: SourceRef, label: string) => void;
 }
 
-export function SourcesPanel({ courseId, slide, others = [], relatedByConcept = [], lectureQuestionCount = 0, onShowLectureQuestions, onPin }: SourcesPanelProps) {
+export function SourcesPanel({ courseId, slide, others = [], relatedByConcept = [], lectureQuestionCount = 0, onShowLectureQuestions, outlineHref, onPin }: SourcesPanelProps) {
   const location = useLocation();
   const back = { returnTo: location.pathname + location.search, returnLabel: "Return to slide" };
   if (!slide && others.length === 0) return <Callout tone="unassessed" title="No slide selected" />;
@@ -118,7 +120,8 @@ export function SourcesPanel({ courseId, slide, others = [], relatedByConcept = 
       <OtherFiles courseId={courseId} others={others} back={back} />
       {slide.concepts.length > 0 && (
         <section aria-labelledby="src-concepts">
-          <h3 id="src-concepts" className="ll-label mb-1 flex items-center gap-1"><Network aria-hidden className="size-4" /> On this slide</h3>
+          <h3 id="src-concepts" className="ll-label mb-1 flex items-center gap-1"><Network aria-hidden className="size-4" /> On this slide
+            {outlineHref && <Link className="ml-auto text-sm font-normal normal-case tracking-normal text-accent hover:underline" to={outlineHref} state={back}>Concept outline for this slide</Link>}</h3>
           <ul className="flex flex-wrap gap-2">
             {slide.concepts.map((c) => (
               <li key={c.concept_id}><Link className="ll-chip hover:underline" to={`/courses/${courseId}/concepts/${encodeURIComponent(c.concept_id)}`} state={back} title={`Linked through a ${c.basis}`}>{c.label}</Link></li>

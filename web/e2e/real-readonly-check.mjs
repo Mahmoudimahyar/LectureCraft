@@ -49,7 +49,9 @@ for (const course of workspace.courses) {
       row.first_slide_ms = Date.now() - started;
       row.position = await page.getByTestId("slide-position").textContent().catch(() => null);
     } else {
-      row.slide = (await page.getByText("These slides cannot be displayed here").count()) ? "explained as unavailable" : "no explanation shown";
+      // A unit with several equal candidate files offers them for a local choice instead of picking one by name or size.
+      row.slide = (await page.getByText("These slides cannot be displayed here").count()) ? "explained as unavailable"
+        : (await page.getByText("Choose the file to read for this unit").count()) && (await page.getByRole("button", { name: "Show this file" }).count()) >= 2 ? "choice offered" : "no explanation shown";
     }
     row.player = (await page.getByTestId("clip-player").count()) ? "player" : (await page.getByText(/link no recorded session to these slides/).count()) ? "no recording (explained)" : "none";
     row.overflow_px = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -236,6 +238,7 @@ report.summary = {
   rendered: report.lectures.filter((l) => l.slide === "rendered").length,
   not_rendered: report.lectures.filter((l) => l.slide === "NOT rendered").map((l) => `${l.course_id}/${l.lecture_id}`),
   unavailable_explained: report.lectures.filter((l) => l.slide === "explained as unavailable").length,
+  deck_choice_offered: report.lectures.filter((l) => l.slide === "choice offered").length,
   unexplained: report.lectures.filter((l) => l.slide === "no explanation shown" || l.workspace || l.transcript === "missing without explanation").map((l) => `${l.course_id}/${l.lecture_id}`),
   with_transcript: report.lectures.filter((l) => l.transcript_lines > 0).length,
   overflow: report.lectures.filter((l) => l.overflow_px > 1).map((l) => `${l.course_id}/${l.lecture_id}`),

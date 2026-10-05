@@ -10,12 +10,17 @@ export interface Capability {
   installed?: boolean;
   configured?: boolean;
   last_proof_at?: string | null;
+  disposable_proof?: DisposableProof;
 }
+
+export interface DisposableProof { classification: string; checked_at: string; thread_id: string | null; meaning: string }
 
 export interface Capabilities {
   native: Capability;
   writer: Capability;
   drive: Capability;
+  speech?: Capability;
+  office_converter?: Capability;
   brain: { profile: string; paused: boolean; pause_reason?: { reason: string; at: string } | null };
   spending: { additional_paid_inference_budget_usd: number; paid_route_configured: boolean; note: string };
 }

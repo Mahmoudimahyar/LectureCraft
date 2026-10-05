@@ -226,6 +226,11 @@ test.describe("operations and recovery", () => {
     await expect(native).toContainText("Last proof");
     await expect(native).toContainText("none recorded");
     await expect(native).toContainText("This screen cannot grant permissions, install or restart anything, or copy credentials.");
+    // Tools this PC lacks are stated with the fallback that still works; nothing is claimed as supported.
+    const tools = native.getByLabel("Optional tools on this PC");
+    await expect(tools).toContainText("Automatic transcription not available");
+    await expect(tools).toContainText("you type or correct the transcript yourself");
+    await expect(tools).toContainText(/PowerPoint decks (cannot be shown yet|can be shown as PDF renditions)/);
     const dispatchesBefore = (await (await request.get("/api/activity")).json()).counts.dispatches;
     await native.getByRole("button", { name: "Inspect (sends nothing)" }).click();
     await expect(page.getByTestId("probe-result")).toContainText(/Inspection: /);

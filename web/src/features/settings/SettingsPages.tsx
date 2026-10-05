@@ -176,6 +176,15 @@ function AiAndBrain() {
           {caps.native.installed !== undefined && <><dt className="text-muted">Executable reachable</dt><dd>{caps.native.installed ? "yes" : "no"}</dd></>}
           {caps.native.configured !== undefined && <><dt className="text-muted">Binding configured</dt><dd>{caps.native.configured ? "yes" : "no"}</dd></>}
           <dt className="text-muted">Last proof</dt><dd>{caps.native.last_proof_at ? formatWhen(caps.native.last_proof_at) : "none recorded"}</dd>
+          {caps.native.disposable_proof && (
+            <><dt className="text-muted">Single test request</dt>
+              <dd data-testid="disposable-proof">{caps.native.disposable_proof.classification.replace(/_/g, " ").toLowerCase()} · {formatWhen(caps.native.disposable_proof.checked_at)}. {caps.native.disposable_proof.meaning}</dd></>
+          )}
+        </dl>
+        <dl className="grid gap-x-4 gap-y-1 border-t border-line/40 pt-2 text-sm sm:grid-cols-[auto_1fr]" aria-label="Optional tools on this PC">
+          {[caps.speech, caps.office_converter].map((tool) => tool && (
+            <div key={tool.label} className="contents"><dt className="text-muted">{tool.status === "available" ? "Available" : "Not installed"}</dt><dd><strong>{tool.label}.</strong> {tool.detail}</dd></div>
+          ))}
         </dl>
         <div><Button size="sm" onClick={async () => setProbe(await apiPost("probe-native"))}>Inspect (sends nothing)</Button></div>
         {probe && (

@@ -19,6 +19,7 @@ from .config import Settings
 from .journal import Journal, JournalError, JobState as S, assert_local_nonsynced
 from .native import executable_identity, load_proof, proof_is_current
 from .ownerio.attempts import learning_view_status, read_attempt_records
+from .preparation import find_converter
 
 BACKUP_CONTRACT = "ll.journal-backup/1"
 
@@ -72,12 +73,37 @@ class Maintenance:
             ok, reason = proof_is_current(settings, proof, executable) if settings.native_dispatch_enabled else (False, "Native dispatch is not enabled.")
             native_status = {"status": "verified" if ok else "not_verified", "label": "Native connection verified" if ok else "Native connection not verified", "detail": reason,
                              "installed": executable_identity(executable)["present"], "configured": bool(settings.native_binding), "last_proof_at": (proof or {}).get("checked_at")}
+            single = self._disposable_proof()
+            if single is not None:
+                native_status["disposable_proof"] = single
             writer = ({"status": "staged_only", "label": "Course writes not enabled", "detail": "Assessments are staged locally and reported as awaiting course save."}
                       if settings.writes_are_staged else {"status": "enabled", "label": "Course writer enabled", "detail": "Saves go through the bound owning writer."})
         return {"native": dict(native_status, adapter=native.get("adapter")), "writer": writer,
                 "drive": {"status": "not_configured", "label": "Drive access not configured on the Brain", "detail": "This PC reads its local course folders. Browser Drive access is set up per device."},
+                "speech": {"status": "not_installed", "label": "Automatic transcription not available",
+                           "detail": "No local speech-to-text model is installed and none is downloaded by this app. Spoken explanations are recorded on the device and you type or correct "
+                                     "the transcript yourself; that corrected text is what gets assessed."},
+                "office_converter": ({"status": "available", "label": "PowerPoint decks can be shown as PDF renditions", "detail": "LibreOffice was found on this PC. Renditions are labeled, versioned and kept in the app's private area; the original deck is only read."}
+                                     if find_converter() is not None else
+                                     {"status": "not_installed", "label": "PowerPoint decks cannot be shown yet",
+                                      "detail": "Showing a .pptx deck needs a PDF rendition made by LibreOffice, which is not installed on this PC. Until then such a deck is listed and its original "
+                                                "can be opened outside the app; nothing is regenerated from other material."}),
                 "brain": {"profile": settings.profile, "paused": bool(self._journal.get_value("supervisor-paused", False)), "pause_reason": self._journal.get_value("supervisor-pause-reason")},
                 "spending": self.spending_policy()}
+
+    def _disposable_proof(self) -> dict[str, Any] | None:
+        """The single-request proof, reported for what it is. It never changes the connection status above."""
+        from .native.disposable_proof import proof_report_path
+
+        try:
+            report = json.loads(proof_report_path(self._settings).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        meaning = {"SEPARATE_WORKER_ONLY": "One synthetic request was answered through a separate worker process on a new disposable thread. This does not connect the tutor: "
+                                           "no course thread is bound and the desktop app's own threads were not reached.",
+                   "UNCERTAIN_COMPLETION": "One synthetic request was sent and its outcome is unknown. It was not sent again. This does not connect the tutor."}.get(
+            report.get("classification"), "The single-request proof did not complete. This does not connect the tutor.")
+        return {"classification": report.get("classification"), "checked_at": report.get("checked_at"), "thread_id": (report.get("target") or {}).get("thread_id"), "meaning": meaning}
 
     # ---- bounded repair ------------------------------------------------------------------------
     def issues(self) -> list[dict[str, Any]]:

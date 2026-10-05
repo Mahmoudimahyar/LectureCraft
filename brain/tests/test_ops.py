@@ -305,3 +305,21 @@ def test_live_profile_reports_blocked_gates_and_real_backlog_instead_of_mocked_s
         assert by_id["device-acceptance"]["status"] == "FAIL" and by_id["drive-oauth"]["status"] == "PASS"
     finally:
         journal.close()
+
+
+def test_capabilities_say_plainly_which_optional_tools_this_pc_lacks(env, monkeypatch, tmp_path):
+    """Speech-to-text and PowerPoint conversion are required capabilities that depend on tools this PC may not have.
+    Their absence is a stated status with the fallback that still works — never silence, never a claim of support."""
+    import lecture_brain.maintenance as maintenance
+
+    monkeypatch.setattr(maintenance, "find_converter", lambda: None)
+    caps = Maintenance(env.settings, env.journal).capabilities(env.adapter)
+    assert caps["speech"]["status"] == "not_installed" and caps["speech"]["label"] == "Automatic transcription not available"
+    assert "type or correct" in caps["speech"]["detail"] and "none is downloaded" in caps["speech"]["detail"]
+    assert caps["office_converter"]["status"] == "not_installed" and "LibreOffice" in caps["office_converter"]["detail"]
+    assert "original" in caps["office_converter"]["detail"]
+    soffice = tmp_path / "soffice.exe"
+    soffice.write_bytes(b"x")
+    monkeypatch.setattr(maintenance, "find_converter", lambda: soffice)
+    caps = Maintenance(env.settings, env.journal).capabilities(env.adapter)
+    assert caps["office_converter"]["status"] == "available" and caps["office_converter"]["label"] == "PowerPoint decks can be shown as PDF renditions"

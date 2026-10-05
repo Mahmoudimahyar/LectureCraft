@@ -278,6 +278,19 @@ def test_disposable_proof_sends_exactly_one_request_after_reading_back_a_safe_sc
     assert proof_report_path(settings).is_file() and load_proof(settings) is None
     settings.native_binding["course_targets_confirmed"] = True
     assert isinstance(select_adapter(settings), UnverifiedNativeAdapter)
+    # Settings shows what was proven and, in the same breath, that tutoring is still not connected.
+    from lecture_brain.journal import Journal
+    from lecture_brain.maintenance import Maintenance
+
+    journal = Journal.open(settings.journal_path, synced_roots=[])
+    try:
+        native = Maintenance(settings, journal).capabilities(select_adapter(settings))["native"]
+    finally:
+        journal.close()
+    assert native["status"] == "not_verified" and native["label"] == "Native connection not verified"
+    assert native["disposable_proof"] == {"classification": "SEPARATE_WORKER_ONLY", "checked_at": report["checked_at"], "thread_id": report["target"]["thread_id"],
+                                          "meaning": native["disposable_proof"]["meaning"]}
+    assert "does not connect the tutor" in native["disposable_proof"]["meaning"]
 
 
 def test_disposable_proof_inspection_creates_no_thread_and_sends_nothing(settings, tmp_path):

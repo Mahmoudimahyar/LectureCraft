@@ -19,7 +19,7 @@ const consoleErrors = [];
 const sent = [];
 page.on("console", (m) => m.type() === "error" && consoleErrors.push(m.text().slice(0, 300)));
 page.on("request", (r) => !["GET", "HEAD"].includes(r.method()) && sent.push(`${r.method()} ${r.url().replace(base, "")}`));
-const api = async (path) => (await context.request.get(`${base}/api/${path}`)).json();
+const api = async (path) => (await context.request.get(`${base}/api/${path}`, { timeout: 180_000 })).json();
 const report = { base, plan: { ...plan, note: "all typed text is synthetic test input" }, started_at: new Date().toISOString(), turns: [], checks: {} };
 const save = () => writeFileSync(join(out, "pilot-run.json"), JSON.stringify(report, null, 2));
 const finish = async (code) => {
@@ -94,7 +94,7 @@ await page.getByText(/^Paired with Brain/).waitFor({ timeout: 30_000 });
 await page.goto(`${base}/courses/${plan.course}/lectures/${plan.lecture}?page=${plan.page}`);
 await page.waitForFunction((n) => document.querySelector('[data-testid="slide-canvas"]')?.getAttribute("data-rendered") === String(n), plan.page, { timeout: 60_000 });
 const tutor = page.getByTestId("tutor-panel");
-report.checks.label_shown_in_tutor_panel = (await tutor.getByText("Experimental Codex worker tutor").count()) > 0;
+report.checks.label_shown_in_tutor_panel = await tutor.getByText("Experimental Codex worker tutor").first().waitFor({ timeout: 20_000 }).then(() => true).catch(() => false);
 report.checks.fixture_wording_absent = !/Fixture tutor/.test((await page.locator("body").textContent()) ?? "");
 report.checks.context_chip = await tutor.getByTestId("context-chip").textContent();
 const ask = async (kind, text) => {
@@ -142,6 +142,9 @@ if (plan.question_id && plan.synthetic_answer) {
   if (job) knownJobs.add(job.request_id);
   const third = await collect("synthetic-explain-back", job);
   third.typed = plan.synthetic_answer;
+  const feedback = page.getByTestId("feedback").first();
+  third.feedback_shown_in_browser = await feedback.waitFor({ timeout: 40_000 }).then(() => true).catch(() => false);
+  third.feedback_text = third.feedback_shown_in_browser ? ((await feedback.textContent()) ?? "").slice(0, 1500) : null;
   third.page_text_after = ((await page.getByRole("region", { name: "Your work on this question" }).textContent({ timeout: 20_000 }).catch(() => "")) ?? "").slice(0, 4000);
   await page.screenshot({ path: join(out, "pilot-synthetic-explain-back.png"), fullPage: true });
   report.checks.assessment_recorded_nothing = JSON.stringify(await evidenceCounts()) === JSON.stringify(before);

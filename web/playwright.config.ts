@@ -19,7 +19,7 @@ export default defineConfig({
   workers: 1,
   // One retry absorbs OS-level loopback socket exhaustion seen on Windows in long runs (net::ERR_NO_BUFFER_SPACE).
   // A test that needed it is reported as "flaky", never as a plain pass; TEST_REPORT lists every such case.
-  retries: 1,
+  retries: Number(process.env.LL_E2E_RETRIES ?? 1), // set LL_E2E_RETRIES=0 for a run in which nothing can pass on a second try
   forbidOnly: !!process.env.CI,
   timeout: 60_000,
   expect: { timeout: 10_000 },

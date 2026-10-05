@@ -197,9 +197,14 @@ def test_a_pilot_assessment_is_synthetic_is_not_recorded_and_sees_no_learner_his
         env.explain("req-pilot-explain")
         env.coordinator.tick()
         job = env.job("req-pilot-explain")
-        assert job["state"] == S.WAITING_REVIEW and "Pilot" in job["waiting_reason"]
-        publication = env.result("req-pilot-explain")["publication"]
+        assert job["state"] == S.SUCCEEDED  # finished: nothing is left "awaiting a save" that will never come
+        result = env.result("req-pilot-explain")
+        publication = result["publication"]
         assert publication["status"] == "blocked" and "synthetic" in publication["reason"] and publication["canonical_record"] is None
+        assert result["message"]["assessment_disposition"] == "provisional" and '"outcome": "demonstrated"' in json.dumps(result, default=str)  # the feedback still reaches the browser
+        # No attempt candidate exists in any form: not as a file in the pilot's own store, not in its journal.
+        assert not [p for p in pilot.state_dir.rglob("*") if p.is_file() and ("candidate" in p.name or "proposals" in p.parts)]
+        assert not env.journal.receipts(job["job_id"], "candidate")
         assert _tree(root / "learning") == attempts_before and len(read_attempt_records(root, "be505")["attempts"]) == 4
         manifest = json.loads((pilot.state_dir / "pilot" / "manifests" / "req-pilot-explain.json").read_text(encoding="utf-8"))
         assert manifest["learner_history_supplied"] == 0 and manifest["assessor_guidance_supplied"] is False and manifest["rubric_criteria"]
@@ -243,3 +248,13 @@ def test_the_pilot_brain_starts_unpaused_and_its_own_gates_decide_each_turn(pilo
         assert "not your desktop course chats" in caps["native"]["detail"] and caps["writer"]["status"] == "staged_only"
     finally:
         runtime.journal.close()
+
+
+def test_the_pilot_writer_is_a_second_refusal_behind_the_coordinator(pilot, tmp_path):
+    """Even if a candidate ever reached the writer in this profile, it would be refused there too."""
+    from lecture_brain.writer import PilotSyntheticWriter, WriterFacade
+
+    writer = WriterFacade(pilot).writer_for("be505")
+    assert isinstance(writer, PilotSyntheticWriter)
+    outcome = writer.commit({}, b"{}", tmp_path / "never-written.json")
+    assert outcome.status == "blocked" and "synthetic" in outcome.reason and not (tmp_path / "never-written.json").exists()

@@ -341,6 +341,14 @@ class Coordinator:
             publication = self.writer.blocked(course_id, request["request_id"], "attempt", self.now(), reason, capture=capture)
             message, _ = self._tutor_message(request, out, material, reply_to_turn=submission["turn_id"], disposition="unavailable", session_id=submission["session_id"])
             return {"publication": publication, "message": message, "native-result": native_result, "context": context}, S.WAITING_REVIEW, reason, extra, capture
+        if self.settings.profile == "pilot":
+            # Pilot assessments judge synthetic test responses. The feedback is delivered; no attempt candidate is built,
+            # staged or stored anywhere, and the request is finished rather than left waiting for a save that never comes.
+            reason = ("Pilot: this assessment is synthetic pilot material. It is not an attempt of the learner, is not saved to the course, "
+                      "and does not enter Progress, history or review scheduling.")
+            publication = self.writer.blocked(course_id, request["request_id"], "attempt", self.now(), reason, capture=capture)
+            message, _ = self._tutor_message(request, out, material, reply_to_turn=submission["turn_id"], disposition="provisional", session_id=submission["session_id"])
+            return {"publication": publication, "message": message, "native-result": native_result, "context": context}, S.SUCCEEDED, None, extra, capture
         self._settle(job, lease, S.STAGED)
         observations = [cand.observation(o["skill_id"], o["outcome"], submission=submission, analysis=o["analysis"], missing=o["missing_or_incorrect"], error_types=o["error_types"],
                                          confidence=o["assessment_confidence"]) for o in out.observations]

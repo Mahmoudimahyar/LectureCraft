@@ -36,3 +36,14 @@ test does not need to exist before TDD, but release acceptance requires actual e
 All applicable [global cases](../../project/ui-global-acceptance.json) apply. Do not manufacture passing
 commands or silently skip required checks. Select exact existing-runner/JUnit mappings only after the
 application stack and real case identities exist; no fake test-map.json is created in this docs packet.
+
+
+## Remediation amendment R1 (2026-10-05)
+
+Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-10-05. Story, flow, workflow and task ids are unchanged and the original release requirements stay in force; where this section and older text differ, this section governs the listed behaviour only. Earlier LOCAL_TESTED results for the affected tasks do not cover the checks named `R1-…` below.
+
+| Check | How it is verified |
+|---|---|
+| R1-P1–P4 | Unit tests on synthetic policy files and a synthetic projection: inclusion, exclusion with reason, stale hash, missing required area, restriction that cannot be excluded, applicability by course and action. Consumer test through the labelled local double: the prompt and the context receipt list the clauses. Private read-only build against the current real files, recorded as ids, spans and hashes only. |
+| R1-P5 | Parser tests for segments (downgrade, malformed, absent); component check of the marker. |
+| R1-P6 | No live call; the pilot ledger file's hash is recorded before and after the run. |

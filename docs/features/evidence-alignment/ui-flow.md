@@ -254,3 +254,11 @@ independently of the canonical record. These flows replace older feature UI pros
 
 **Related existing planned cases:** AC20, AC33, AC49. These remain NOT_RUN and are not replaced by the new UI cases.
 
+
+## Remediation amendment R1 (2026-10-05)
+
+Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-10-05. Story, flow, workflow and task ids are unchanged and the original release requirements stay in force; where this section and older text differ, this section governs the listed behaviour only. Earlier LOCAL_TESTED results for the affected tasks do not cover the checks named `R1-…` below.
+
+**UI06 / UI07 / UI08 / UI09 — arrangement.** The steps of these flows are unchanged. Their surface is now: outline (left, collapsible) · slide stage with the single transport beneath · one context panel with tabs Tutor, Transcript, This slide, Questions. "Open linked questions" (UI09) starts from the **This slide** and **Questions** tabs; each entry shows its basis and opens the question, and a question without catalog wording offers Open original and, where verified, a display rendition.
+
+**UI07 — no timed link.** The transport shows "Whole recording · no timing for this slide" with "Link this slide" as the single action (when linking is permitted) and a details disclosure. Generated speech text, when imported, appears in the Transcript tab under its own heading with its covered window and "generated, not reviewed".

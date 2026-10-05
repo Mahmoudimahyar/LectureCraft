@@ -30,3 +30,13 @@ test does not need to exist before TDD, but release acceptance requires actual e
 All applicable [global cases](../../project/ui-global-acceptance.json) apply. Do not manufacture passing
 commands or silently skip required checks. Select exact existing-runner/JUnit mappings only after the
 application stack and real case identities exist; no fake test-map.json is created in this docs packet.
+
+
+## Remediation amendment R1 (2026-10-05)
+
+Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-10-05. Story, flow, workflow and task ids are unchanged and the original release requirements stay in force; where this section and older text differ, this section governs the listed behaviour only. Earlier LOCAL_TESTED results for the affected tasks do not cover the checks named `R1-…` below.
+
+| Check | How it is verified |
+|---|---|
+| R1-G1–G4 | Projection tests: id counts by kind equal the catalogs; criteria reachable; instance ids distinct per branch; bounded traversal with a synthetic cycle; scope filters. Browser test of expand-on-demand and node selection. Private read-only count parity on the real catalog. |
+| R1-F1–F4 | Projection tests with synthetic attempts covering each condition, a revised assessment chain, a combined multi-action skill and an attempt without criterion observations. Browser test of the wording. Private example extracted from real records with counts only. |

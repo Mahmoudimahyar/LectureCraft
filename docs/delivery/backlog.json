@@ -2069,5 +2069,88 @@
       ],
       "timebox": "One reviewable change per implementation turn; checkpoint and split when it exceeds the approved run budget; no invented duration estimate."
     }
+  ],
+  "remediation_changes": [
+    {
+      "change_id": "R1",
+      "recorded": "2026-10-05",
+      "baseline": "0.9.0",
+      "reason": "Owner-reported failures reproduced by the remediation audit of 2026-10-05: cramped UI and doubled player, no automatic recording timing, lecture and slide questions not visible, no concept views or separated evidence, tutoring policy withheld whole.",
+      "rule": "Carried by existing tasks; task ids, stories, flows, workflows and original release gates are unchanged. Prior LOCAL_TESTED results of the affected tasks do not cover the listed checks.",
+      "affected_tasks": {
+        "LL005": [
+          "R1-U1",
+          "R1-U5"
+        ],
+        "LL009": [
+          "R1-Q1",
+          "R1-Q3",
+          "R1-Q5",
+          "R1-Q6"
+        ],
+        "LL010": [
+          "R1-U6",
+          "R1-Q1"
+        ],
+        "LL011": [
+          "R1-U2"
+        ],
+        "LL012": [
+          "R1-U3",
+          "R1-U4"
+        ],
+        "LL015": [
+          "R1-T1",
+          "R1-T2"
+        ],
+        "LL016": [
+          "R1-G1",
+          "R1-G2",
+          "R1-G3",
+          "R1-G4"
+        ],
+        "LL022": [
+          "R1-P1",
+          "R1-P2",
+          "R1-P3",
+          "R1-P4",
+          "R1-P5",
+          "R1-P6"
+        ],
+        "LL023": [
+          "R1-P1",
+          "R1-P5",
+          "R1-Q6"
+        ],
+        "LL028": [
+          "R1-Q1b",
+          "R1-Q2",
+          "R1-Q4"
+        ],
+        "LL030": [
+          "R1-F1",
+          "R1-F2",
+          "R1-F3",
+          "R1-F4"
+        ],
+        "LL034": [
+          "R1-U1",
+          "R1-U2",
+          "R1-U3",
+          "R1-U4",
+          "R1-U5",
+          "R1-U6",
+          "R1-U7"
+        ]
+      },
+      "not_in_scope": [
+        "speech recognition runs",
+        "native sends",
+        "course writes",
+        "schedule activation",
+        "new model or system installs"
+      ],
+      "check_definitions": "docs/features/*/requirements.md and test-plan.md, sections 'Remediation amendment R1'"
+    }
   ]
 }

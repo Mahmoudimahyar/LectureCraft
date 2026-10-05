@@ -112,3 +112,17 @@ area, before inference. The tutor reply is a separate later immutable message. V
 actual bytes, item and course/question/family/assessment binding; the current validator checks
 only its string shape. Do not add error diagnosis to not_observed or widen the skills in a correction.
 Use existing canonical writers; global ROOT makes installed BE 505 fixture redirection unsafe.
+
+
+## Remediation amendment R1 (2026-10-05)
+
+Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-10-05. Story, flow, workflow and task ids are unchanged and the original release requirements stay in force; where this section and older text differ, this section governs the listed behaviour only. Earlier LOCAL_TESTED results for the affected tasks do not cover the checks named `R1-…` below.
+
+| Check | Requirement (stories) |
+|---|---|
+| R1-P1 | The tutor's standing rules are built from a clause-level projection of the common tutoring policy and the current course files. Each clause keeps its source hash, span, id, category and applicability; excluded clauses keep a reason (US021–US026). |
+| R1-P2 | Unrelated private context is removed clause by clause, never by withholding or sending a whole file. |
+| R1-P3 | A projection cannot relax a course restriction. A changed source or an unresolved required rule area is exposed as a policy gap, never silently dropped and never replaced by the whole file. |
+| R1-P4 | Rule areas that must be representable: mode and pacing, direct help, optional diagnostics, assistant-error and speech-recognition uncertainty, alternatives, assistance, source versus added clarification, owner save. |
+| R1-P5 | A citation attached to a reply is not support for every sentence. Replies may itemize support per segment; a segment claiming course support without a valid supplied source is shown as added explanation. No ritual uncertainty wording (US021, US023). |
+| R1-P6 | The spent pilot thread and ledger are never reused; no check in this amendment sends to a model. |

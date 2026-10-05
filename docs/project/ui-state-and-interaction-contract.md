@@ -138,3 +138,34 @@ References (external design guidance, not existing project facts):
 - [WAI tabs](https://www.w3.org/WAI/ARIA/apg/patterns/tabs/)
 - [WAI modal dialogs](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/)
 - [Interaction animation](https://www.w3.org/WAI/WCAG22/Understanding/animation-from-interactions.html)
+
+
+## Remediation amendment R1 (2026-10-05)
+
+Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-10-05. Story, flow, workflow and task ids are unchanged and the original release requirements stay in force; where this section and older text differ, this section governs the listed behaviour only. Earlier LOCAL_TESTED results for the affected tasks do not cover the checks named `R1-…` below.
+
+### Lecture context panel
+One panel, four tabs: **Tutor**, **Transcript**, **This slide**, **Questions**. Only one is visible at a time; switching tabs never unmounts the media element or clears a draft.
+
+### Question scopes in a lecture
+Three separate groups, each stating why a question is there:
+1. **This slide** — the course record names this physical page. Basis shown: `exact` (page basis reviewed) or `stated` (named by the catalog, page basis not reviewed).
+2. **Related concepts** — reached through shared concepts or a question-to-question relationship. Always labelled as related, never as belonging to the slide.
+3. **All lecture questions** — every question whose collection belongs to this lecture, whether or not it names a slide. A question with no exact anchor is listed here with "no slide named in the course record".
+
+A lecture with no catalogued collection shows that gap; nothing is generated to fill it.
+
+### Question bank
+Reachable from Review, from each course's lecture list and from the lecture context. Shows real totals per collection, search, filters (collection, origin, anchor state) and incremental loading with the true total always visible. No silent truncation anywhere.
+
+### Questions without wording in the catalog
+Identity, collection and rubric presence are kept. The page offers **Open original** (the authoritative file) and, when the course index relates a displayable copy to that original and the copy was verified, a **display rendition** labelled as such. Tutor-authored criteria are labelled as tutor-authored, not as the instructor's point scheme.
+
+### Deck selection
+The displayed deck of a unit is chosen from the course index's source kind and explicit references, never from file-name order or size. Other files of the unit stay listed as related sources. When the evidence conflicts the candidates are offered in a local selector and the choice is stored as app configuration.
+
+### Evidence wording
+"Shown" without its condition is not used. Each recorded demonstration states its condition: unaided, with assistance (which), after prior exposure, or conditions unknown. Only unaided, unexposed, observed responses count as recorded unaided performance.
+
+### Tutor replies
+When the tutor itemizes support, added explanation is marked quietly and course-supported text is left unmarked. No uncertainty phrase is added to supported statements.

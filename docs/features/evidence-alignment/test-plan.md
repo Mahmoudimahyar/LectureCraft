@@ -34,3 +34,18 @@ test does not need to exist before TDD, but release acceptance requires actual e
 All applicable [global cases](../../project/ui-global-acceptance.json) apply. Do not manufacture passing
 commands or silently skip required checks. Select exact existing-runner/JUnit mappings only after the
 application stack and real case identities exist; no fake test-map.json is created in this docs packet.
+
+
+## Remediation amendment R1 (2026-10-05)
+
+Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-10-05. Story, flow, workflow and task ids are unchanged and the original release requirements stay in force; where this section and older text differ, this section governs the listed behaviour only. Earlier LOCAL_TESTED results for the affected tasks do not cover the checks named `R1-…` below.
+
+| Check | How it is verified |
+|---|---|
+| R1-U2, R1-U3 | Browser geometry test on the fixture at 1440×900, 1920×1080 and 2560×1440: bounding boxes of slide and transport inside the viewport with no page scroll; counts of play controls, range inputs and time readouts; slide aspect ratio equals the source page's. Reflow check at 390×844, 768×1024 and with enlarged text. |
+| R1-U4 | Browser test: a slide without occurrences shows the one-line state and no clip interval. |
+| R1-Q2, R1-Q3 | Unit tests of the anchor normalizer on synthetic locators of every observed shape; projection tests of the three scopes; browser test of the context tabs. Private read-only parity run on the real catalog (counts taken from the catalog at run time). |
+| R1-Q5 | Unit tests of deck selection (kind, references, conflict → candidates, local override). Private check of the real lecture-05 unit. |
+| R1-T1, R1-T2 | Unit tests of the import (paths, hashes, identity, bounds, manifest-last, idempotence, invalidation, cancellation) on synthetic output roots. No speech run is part of this plan. |
+
+Screenshots are evidence only together with the measured geometry and a named human review; their presence alone verifies nothing.

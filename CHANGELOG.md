@@ -1,3 +1,7 @@
+# Remediation amendment R1 — 2026-10-05 (application build, baseline 0.9.0 unchanged)
+
+Bounded change after owner-reported failures: question bank and lecture question scopes by collection, typed anchors, deck selection by source kind, guidance join by entry id; lecture workspace direction B with one transport and a shared page frame; typed outline with criteria and evidence conditions; clause-level tutoring policy projection; import of generated timing from a verified manifest. Task, story, flow and workflow ids are unchanged; the affected tasks' earlier local results do not cover the new `R1-…` checks. No live integration, native send, course write or schedule is part of this change.
+
 # 0.9.0 — finalized engineering build baseline
 
 Adds one 38-task R0–R5 backlog, selected reusable stack and static-shell/local-Brain architecture, independent versioning policy, exact new adapter schemas with synthetic validation, safe defaults and quality targets, scoped first build and activation gates. Existing UI/story/workflow cases and academic ownership are preserved. No runtime installed or live grant manufactured.

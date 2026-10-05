@@ -61,3 +61,24 @@ Two tracks run concurrently: fixture/UI work and separately approved real-interf
 | LL038 | R5 | Package and approve the private whole-product release | LL034, LL035, LL036, LL037 |
 
 The machine-readable [backlog](backlog.json) supplies proposed edit roots, owners, actual checks, workflow/story references and approval gates. No task is marked done or activated by this document. Dependency and permission gates must both pass. Checkpoint after one reviewable result; do not have agents compete on the same feature branch or canonical writer.
+
+
+## Remediation amendment R1 (2026-10-05)
+
+Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-10-05. Story, flow, workflow and task ids are unchanged and the original release requirements stay in force; where this section and older text differ, this section governs the listed behaviour only. Earlier LOCAL_TESTED results for the affected tasks do not cover the checks named `R1-…` below.
+
+Remediation work is carried by the existing tasks; no task id is added or renumbered. The machine-readable record is `remediation_changes` in [backlog.json](backlog.json).
+
+| Existing task | Remediation scope | New checks |
+|---|---|---|
+| LL005 | shared page frame, type floor, shell | R1-U1, R1-U5 |
+| LL009 | collection membership, typed anchors, deck selection, guidance join | R1-Q1, R1-Q3, R1-Q5, R1-Q6 |
+| LL010 | Study page as a continue-studying workspace; question bank entry points | R1-U6, R1-Q1 |
+| LL011 | slide fitted to the stage | R1-U2 |
+| LL012 | single transport; no-match state | R1-U3, R1-U4 |
+| LL015 | import of generated timing from a verified manifest | R1-T1, R1-T2 |
+| LL016 | typed outline read model with criteria; course, lecture and slide scopes | R1-G1–R1-G4 |
+| LL022, LL023 | policy projection in the tutoring context; itemized support | R1-P1–R1-P6 |
+| LL028 | question bank and lecture question scopes; originals and renditions | R1-Q1b, R1-Q2, R1-Q4 |
+| LL030 | evidence conditions, facets, coverage records | R1-F1–R1-F4 |
+| LL034 | geometry, computed-style and reflow checks at five viewports | R1-U1–R1-U7 |

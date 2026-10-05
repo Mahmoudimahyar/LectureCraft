@@ -54,3 +54,15 @@ A Drive connector usable by one native agent does not establish a browser/compan
 or its write scope. Missing requested metadata stays unknown. Multiple same-name items need
 content/request identities; a locally complete bundle is not remote delivery/freshness proof.
 Filesystem notification is a rescan hint, not evidence that every file has synchronized.
+
+
+## Remediation amendment R1 (2026-10-05)
+
+Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-10-05. Story, flow, workflow and task ids are unchanged and the original release requirements stay in force; where this section and older text differ, this section governs the listed behaviour only. Earlier LOCAL_TESTED results for the affected tasks do not cover the checks named `R1-…` below.
+
+| Check | Requirement (stories) |
+|---|---|
+| R1-U1 | Every page uses the shared page frame; at 1920 px and 2560 px wide the content region uses the window (card collections at least 80% of the width beside navigation) while paragraphs keep a readable measure (US055, US005). |
+| R1-U5 | Body text is at least 16 px; at most a small share of visible text is below 14 px; nothing is below 12 px (US055). |
+| R1-U6 | The Study page leads with where to continue and shows readable course cards including questions available (US005, US006). |
+| R1-U7 | Drafts, focus, media position and source colours survive theme, outline and panel changes (US055, US056). |

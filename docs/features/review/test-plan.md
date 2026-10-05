@@ -28,3 +28,14 @@ test does not need to exist before TDD, but release acceptance requires actual e
 All applicable [global cases](../../project/ui-global-acceptance.json) apply. Do not manufacture passing
 commands or silently skip required checks. Select exact existing-runner/JUnit mappings only after the
 application stack and real case identities exist; no fake test-map.json is created in this docs packet.
+
+
+## Remediation amendment R1 (2026-10-05)
+
+Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-10-05. Story, flow, workflow and task ids are unchanged and the original release requirements stay in force; where this section and older text differ, this section governs the listed behaviour only. Earlier LOCAL_TESTED results for the affected tasks do not cover the checks named `R1-…` below.
+
+| Check | How it is verified |
+|---|---|
+| R1-Q1, R1-Q1b | Projection and API tests on the fixture catalog (extended with a collection that names no slide, a question without wording and a lecture without a collection); browser test of the bank (totals, load more, search, filter). Private read-only parity run: catalog → adapter → API → collection → rendered list, counts taken from the catalog at run time. |
+| R1-Q4 | Projection test and browser test of the original/rendition actions. |
+| R1-Q6 | Unit tests: id join, version mismatch, dual-identifier conflict, duplicate, unknown id; payload tests proving no guidance field in question, review, search or lecture views. Private count on the real maps. |

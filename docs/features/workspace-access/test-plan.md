@@ -38,3 +38,16 @@ test does not need to exist before TDD, but release acceptance requires actual e
 All applicable [global cases](../../project/ui-global-acceptance.json) apply. Do not manufacture passing
 commands or silently skip required checks. Select exact existing-runner/JUnit mappings only after the
 application stack and real case identities exist; no fake test-map.json is created in this docs packet.
+
+
+## Remediation amendment R1 (2026-10-05)
+
+Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-10-05. Story, flow, workflow and task ids are unchanged and the original release requirements stay in force; where this section and older text differ, this section governs the listed behaviour only. Earlier LOCAL_TESTED results for the affected tasks do not cover the checks named `R1-…` below.
+
+| Check | How it is verified |
+|---|---|
+| R1-U1, R1-U5 | Browser geometry and computed-style test on Study and a lecture at 390×844, 768×1024, 1440×900, 1920×1080 and 2560×1440 in both themes, plus enlarged text; share of characters by computed font size. Private before/after screenshots on real content with the measurements beside them. |
+| R1-U6 | Browser test of the Study page content. |
+| R1-U7 | Browser test: type a draft, start playback, switch theme, collapse the outline, switch tabs; draft, position and slide pixels unchanged. |
+
+The learner's own browser zoom was not measured and is not required for these checks.

@@ -74,3 +74,19 @@ Never create a second authoritative gap ledger or diagnose not_observed. Concept
 existing catalog IDs/revisions; repeated branches do not duplicate concepts or performances.
 Full-turn integrity is verified by the new operational wrapper and does not redefine the attempt
 format. A source/correction/projection version must remain visible where it affects interpretation.
+
+
+## Remediation amendment R1 (2026-10-05)
+
+Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-10-05. Story, flow, workflow and task ids are unchanged and the original release requirements stay in force; where this section and older text differ, this section governs the listed behaviour only. Earlier LOCAL_TESTED results for the affected tasks do not cover the checks named `R1-…` below.
+
+| Check | Requirement (stories) |
+|---|---|
+| R1-G1 | One typed read model serves Course, Lecture and Slide scopes and an accessible outline. Every admitted topic, concept, skill, family, question, criterion and relationship is present exactly once by canonical id; presentation rows carry separate instance ids (US037, US038). |
+| R1-G2 | Nodes are grouped and expanded on demand; traversal is bounded and visits a node once; cross-links and cycles are shown as links, not as tree children (US037). |
+| R1-G3 | Question relations keep the owner's labels and `automatic_credit: false`. Collection membership is not a slide or session anchor (US037, US038). |
+| R1-G4 | Selecting a node offers Sources, Questions and Evidence. Slide scope comes from typed anchors only; related items are separated; missing anchors are visible (US038). |
+| R1-F1 | Evidence is shown with its recorded condition. Solution shown, hints, notes, prior exposure and unknown conditions never count as recorded unaided performance (US038, US039). |
+| R1-F2 | Performance facets come from a versioned read-side mapping with a rationale per rule. Where the record does not support a finer conclusion the view says "Not separately observed" or "Unclassified". A missing error tag is never read as success (US039, US040). |
+| R1-F3 | Coverage figures always carry target set, unit (skills or criteria, never mixed), rule version, conditions, numerator, denominator and the unassessed / uncertain remainder. No mastery or exam probability. Importance stays ordinal (US040). |
+| R1-F4 | Listing criteria is not evidence about them: where attempts carry no criterion observations the view says so (US038). |

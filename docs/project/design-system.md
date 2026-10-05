@@ -48,3 +48,26 @@ sRGB contrast definition. It does not measure rendered interfaces, disabled stat
 transparency, images, focus geometry or overall accessibility. Actual browser and device
 verification remains required. References: [text contrast](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)
 and [nontext contrast](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html).
+
+
+## Remediation amendment R1 (2026-10-05)
+
+Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-10-05. Story, flow, workflow and task ids are unchanged and the original release requirements stay in force; where this section and older text differ, this section governs the listed behaviour only. Earlier LOCAL_TESTED results for the affected tasks do not cover the checks named `R1-…` below.
+
+### Layout (direction B)
+- **Lecture workspace:** three regions — a collapsible lecture outline on the left, the slide stage in the middle, ONE tabbed context panel on the right. Collapsing the outline is the focus arrangement; there is no second layout to choose.
+- **Slide stage:** the original slide is fitted inside the available height and width without distortion (contain); it never scrolls inside its own frame at 100% fit. The transport sits directly under it.
+- **Transport:** one Media Chrome control hierarchy over the one media element: one primary play/pause, one timeline, one time readout, speed, volume, scope (segment or whole recording), repeat. Secondary actions (link editing, file details) live behind an accessible disclosure. Default desktop height 96–128 CSS px and reachable without scrolling the page at 1440×900, 1920×1080 and 2560×1440.
+- **No timed match:** one short line with one action and optional details. No interval is invented to fill it.
+- **Narrow screens:** one usable pane at a time (slide, context); controls stay reachable; readable reflow has priority over the desktop dimensions.
+- **Content width:** one shared page frame with three tiers (default, wide ≥ 1280 px, extra-wide ≥ 1800 px). Collections of cards use the width; paragraphs keep a readable measure (about 60–80 characters).
+
+### Type
+- Body text starts at 16 CSS px. Ordinary secondary information is 14 px. Smaller text (never below 12 px) is reserved for sparse metadata such as keyboard hints and thumbnail numbers.
+- Verification uses computed styles of rendered text, not the root font size or a scaled image.
+
+### Study page
+A "continue studying" workspace: the place to resume first, then readable course cards showing lecture units, questions available and recorded evidence. Not an administrative grid.
+
+### Preserved
+Drafts, focus, media position and original image colours survive theme, outline and panel changes. Light/Dark/System and reduced motion apply to every new surface. Tokens and component families above are reused; no second motion or styling system is introduced.

@@ -165,3 +165,11 @@ independently of the canonical record. These flows replace older feature UI pros
 
 **Related existing planned cases:** AC24, AC31, AC32, AC40, AC72. These remain NOT_RUN and are not replaced by the new UI cases.
 
+
+## Remediation amendment R1 (2026-10-05)
+
+Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-10-05. Story, flow, workflow and task ids are unchanged and the original release requirements stay in force; where this section and older text differ, this section governs the listed behaviour only. Earlier LOCAL_TESTED results for the affected tasks do not cover the checks named `R1-…` below.
+
+**UI19 — See how ideas connect.** Entry points: Progress ("Concept outline"), a lecture's outline, and the This-slide tab. The outline opens at topic level for the chosen scope (course, lecture, slide); expanding a node loads its children. A selected node shows Sources, Questions and Evidence. The earlier single-node page remains as the detail view.
+
+**UI20 / UI21 — gaps and history.** Status wording now carries the recorded condition (unaided, with assistance, after prior exposure, conditions unknown). A facet summary groups recorded observations by facet and condition and lists what is not separately observed.

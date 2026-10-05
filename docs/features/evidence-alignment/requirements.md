@@ -98,3 +98,19 @@ chapter references are not specific passage links until actual source anchors ar
 An all-lecture inventory with unprocessed items is not a completed matching system. Acceptance
 tracks per-lecture supplied material, reviewed correspondence, usable time boundaries and
 explicit unresolved exceptions separately. Sampling validates the method, not the whole archive.
+
+
+## Remediation amendment R1 (2026-10-05)
+
+Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-10-05. Story, flow, workflow and task ids are unchanged and the original release requirements stay in force; where this section and older text differ, this section governs the listed behaviour only. Earlier LOCAL_TESTED results for the affected tasks do not cover the checks named `R1-…` below.
+
+| Check | Requirement (stories) |
+|---|---|
+| R1-U2 | The slide is fitted to the stage without distortion and without an inner scrollbar at 100% fit (US011, US012). |
+| R1-U3 | One transport: exactly one play/pause, one timeline, one time readout; 96–128 px tall on desktop; inside the window without page scrolling at 1440×900, 1920×1080, 2560×1440 (US013, US014). |
+| R1-U4 | With no timed link the transport says so in one line with one action; no interval is fabricated (US013). |
+| R1-Q2 | The lecture context lists This slide / Related concepts / All lecture questions with the basis of each entry (US017). |
+| R1-Q3 | Catalog locators are normalized at read time into typed anchors: slide pages, transcript line ranges, other-source pages. A page list is never widened into a range, and line numbers are never treated as pages or seconds. Coarse locators stay qualified (US017, US020). |
+| R1-Q5 | The displayed deck follows the course index's source kind and explicit references; a question sheet is a related source (US011, US017). |
+| R1-T1 | Generated speech timing is imported only from a verified manifest, applies to the generated text, states its window, and never marks a lecture as processed or a slide as matched (US015, US016, US019). |
+| R1-T2 | Reviewed timing, generated timing, text-similarity suggestions and scheduling are reported as four separate facts (US010, US019). |

@@ -149,3 +149,25 @@ disputes carry the existing attempt reference and reasons, not a second learner 
 that the tutor explain something. Asking for an explanation uses `ask` with standard/deep
 depth. A quick-depth response to a genuine submitted answer may still be assessed; reply
 length and evidence kind are independent. This avoids converting ordinary help into failure.
+
+
+## Remediation amendment R1 (2026-10-05)
+
+Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-10-05. Story, flow, workflow and task ids are unchanged and the original release requirements stay in force; where this section and older text differ, this section governs the listed behaviour only. Earlier LOCAL_TESTED results for the affected tasks do not cover the checks named `R1-…` below.
+
+### Question and source resolution (read side; nothing is written to the course)
+- **Admission** to a course's question bank is by the catalog's own `collection` field. A collection belongs to a lecture unit when the source ids its questions cite are files of that unit (exact id join against the inventory). No id or title substring and no slide match is used.
+- **Typed anchors.** Each catalog locator is normalized into zero or more anchors: `slide_pages` (one-based physical pages of the cited deck, as lists and closed ranges exactly as written), `transcript_lines` (line ranges of the unit's transcript), `source_page` (a page of another named source), plus `qualifiers` (free text kept verbatim). Each anchor has a `basis`: `exact` when the page basis of that collection is recorded as reviewed in app configuration, `stated` otherwise. A locator with no parsable anchor yields `anchor_state: "unresolved"` and the original text.
+- **Original and rendition.** `open_original` names the authoritative source. A `display_rendition` is offered only when the course index relates a displayable file to that original and a recorded verification of the two exists; it is labelled a rendition.
+- **Deck selection.** Candidates of a unit are ranked by (displayable) × (index kind is the lecture-slides kind) × (cited by the unit's questions or related transcript). File order and size are never criteria. Equal best candidates produce `deck_choice: "unresolved"` with the candidate list; a local override in the app's private configuration selects one.
+- **Guidance.** The assessor-guidance adapter is versioned. It joins by the owner's entry id, accepts `id` or `question_id` (both present and different is an error), checks the entry or file version against the question version, and reports duplicate and unknown entries. Guidance is returned only to the assessment context builder.
+
+### Outline and evidence read model
+- One model: nodes `{id, kind, label, …}` for topic, concept, skill, family, question, criterion; typed edges with provenance; scopes `course`, `lecture:<id>`, `slide:<lecture>:<page>`. Presentation rows are `{instance_id, node_id, parent_instance_id}`. Children are returned per expansion with a traversal bound and a visited set.
+- Evidence conditions per observation: `unaided`, `assisted` (with the recorded kind), `prior_exposure`, `conditions_unknown`. `qualifying_unaided` requires demonstrated ∧ no assistance ∧ no reference ∧ no prior exposure ∧ an observed response, read from the effective assessment revision.
+- Facet mapping: a versioned document (`mapping_version`, rules `{action token → facet | unclassified, rationale}`) applied at read time. Observations on skills with several action tokens stay combined.
+- Coverage records: `{target_set, unit, rule_version, conditions, numerator, denominator, unassessed, uncertain}`.
+
+### Policy context
+- Projection document: `{projection_version, review_state, sources[{label, scope, sha256}], clauses[{clause_id, source, span, text_sha256, category, applies_to, include, exclusion_reason, restriction}], required_categories}`. The context receipt records projection version, included and excluded clause ids, source hashes and gaps.
+- Tutor output may carry `segments[{text, support, sources}]`; `support` is `course_source` or `added_explanation`.

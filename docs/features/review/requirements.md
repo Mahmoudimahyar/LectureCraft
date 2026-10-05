@@ -64,3 +64,15 @@ P06 found no installed adaptive scheduler. Any review selection/event log is a p
 operational feature referencing existing questions and canonical attempts, not another source of
 learner outcomes. Due dates and unresolved diagnostic notes do not imply failed knowledge. Exact
 new path/schema and its writer need review; the previous learning/review authority proposal is withdrawn.
+
+
+## Remediation amendment R1 (2026-10-05)
+
+Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-10-05. Story, flow, workflow and task ids are unchanged and the original release requirements stay in force; where this section and older text differ, this section governs the listed behaviour only. Earlier LOCAL_TESTED results for the affected tasks do not cover the checks named `R1-…` below.
+
+| Check | Requirement (stories) |
+|---|---|
+| R1-Q1 | A complete question bank per course: every catalogued question is listed under its collection with the real total; collections are joined to lecture units by the files their questions cite, not by a slide match (US043, US017). |
+| R1-Q1b | Lists load incrementally with the true total shown; search and filters operate on the whole collection; no list is silently cut (US043). |
+| R1-Q4 | A question without catalog wording keeps its identity and its source-opening actions (US043, US045). |
+| R1-Q6 | Assessor guidance is joined by the owner's entry id with revision applicability checked; conflicting, duplicate and unknown entries are reported as errors; guidance never reaches question-only views, search or the learner's context (US045). |

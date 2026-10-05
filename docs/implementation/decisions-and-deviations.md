@@ -70,3 +70,19 @@ unit of all five configured courses and cannot be filtered.
   code, not performed (`DRIVE_OAUTH`, `STATIC_DEPLOYMENT`, `DEVICE_PAIRING`, `DEVICE_ACCEPTANCE`, `LIVE_WRITE`,
   `PREPARATION_EXECUTION`).
 - **Seed foundation**: the upstream archive was not available; its tools and tests are not bundled or claimed.
+
+## Remediation amendment R1 (2026-10-05) — decisions
+
+| # | Decision | Why |
+|---|---|---|
+| D40 | **Remediation is carried by the existing tasks.** The 38-task backlog and its ids are unchanged; the change is recorded as `remediation_changes` in the backlog, as amendment sections in the affected specs, and as `R1-…` checks. Affected tasks were moved from LOCAL_TESTED to IMPLEMENTED_UNVERIFIED on the board until the new checks ran. | The owner asked for a bounded change against the baseline, stable ids and no competing specification tree. |
+| D41 | **Four navigation destinations stay.** The question bank is a page under Review and the concept outline a page under Progress, each also reachable from a lecture. | The design system fixes four destinations; the missing views are sub-pages, not new top-level areas. |
+| D42 | **A collection belongs to a lecture through the files its questions cite.** Slide attachment is a separate, weaker-or-stronger fact with its own basis. | The catalog names collections and source ids exactly; slide numbers exist only in prose for some collections. |
+| D43 | **A slide anchor is `exact` only for collections whose page basis is recorded as reviewed** (app configuration); otherwise `stated`. | The owner confirmed the page basis for one collection; the others use the same wording but were not reviewed. |
+| D44 | **The displayed deck is the unit's lecture-slides source in the course index,** supported by explicit references; ties are not broken by name or size but shown as an unresolved choice with a local override. | File order chose a three-page question sheet over the deck. |
+| D45 | **A display rendition needs an index relation and a recorded verification.** | A copy is useful to read, but the original stays authoritative. |
+| D46 | **No graph library is added.** The outline is the selected native nested disclosure list over one typed read model; cross-links are listed, not drawn. | The component selection already chose it; a canvas of 1,000+ nodes is not readable. |
+| D47 | **Facet rules are a versioned read-side mapping with "unclassified" as a first-class result.** `derive`, `design`, `critique` and combined skills are not forced into a facet; no token is read as coding. | The owner rejected a universal "mathematical" rule; the catalog does not separate formulation from algebra or mark coding. |
+| D48 | **The tutoring context is built from a clause-level projection in every profile.** The pilot's whole-file withholding is removed. | Whole-file handling either leaked private context or dropped the teaching rules. |
+| D49 | **Generated timing enters only through a verified manifest import** into the app's own area and is labelled generated, with its window. It creates no slide link and no "processed" state. | The owner runs speech recognition separately; the app is a consumer. |
+| D50 | **Receipts may be bound to declared inputs.** A task's check can declare the paths it depends on; its receipt then stays current while those inputs are unchanged. Receipts without a declared scope keep the whole-tree rule. | The owner asked not to re-record everything to refresh timestamps. |

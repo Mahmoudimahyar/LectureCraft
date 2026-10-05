@@ -48,6 +48,8 @@ class Maintenance:
         """
         if self._settings.profile == "fixture" or not self._settings.native_dispatch_enabled:
             return {"checked": False, "reason": "No live native route is enabled."}
+        if self._settings.profile == "pilot":
+            return {"checked": False, "reason": "Pilot: the worker's scope is read back before every turn and the budget is enforced per turn; there is no standing proof to compare."}
         native = self._settings.native_binding
         executable = Path(native["executable"]) if native.get("executable") else None
         ok, reason = proof_is_current(self._settings, load_proof(self._settings), executable)
@@ -67,6 +69,15 @@ class Maintenance:
         if settings.profile == "fixture":
             native_status = {"status": "fixture_double", "label": "Fixture tutor (labeled test double)", "detail": "Synthetic replies for testing. Not a real tutor; cannot satisfy native acceptance."}
             writer = {"status": "fixture_isolated", "label": "Synthetic course roots", "detail": "Saves go to generated fixture folders owned by this workspace."}
+        elif settings.profile == "pilot":
+            from .native.pilot import PilotLedger
+
+            budget = PilotLedger(settings).state()
+            native_status = {"status": "pilot", "label": settings.pilot["label"],
+                             "detail": (f"Pilot only: a restricted Codex worker started by this app answers for {', '.join(settings.pilot['courses']).upper()}. It is not your desktop course chats, and "
+                                        f"connecting those remains unresolved. {budget['remaining_turns']} of {budget['max_turns']} pilot turns left; when they are used nothing answers."),
+                             "installed": bool(native.get("adapter") == "codex-worker-pilot"), "configured": True, "last_proof_at": None, "pilot_budget": {k: budget[k] for k in ("max_turns", "remaining_turns")}}
+            writer = {"status": "staged_only", "label": "Nothing is recorded in the pilot", "detail": "Pilot assessments are synthetic test material: no attempt is staged or saved, and Progress and review are untouched."}
         else:
             proof = load_proof(settings)
             executable = Path(settings.native_binding["executable"]) if settings.native_binding.get("executable") else None

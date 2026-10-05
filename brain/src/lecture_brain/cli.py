@@ -19,7 +19,7 @@ def _print(value) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="lecture-brain", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--profile", choices=["fixture", "local", "live"], help="fixture (synthetic, default) | local (real roots, read-only, staged writes) | live")
+    parser.add_argument("--profile", choices=["fixture", "local", "live", "pilot"], help="fixture (synthetic, default) | local (real roots, read-only, staged writes) | live | pilot (allow-listed course, budgeted Codex worker, no recording)")
     parser.add_argument("--state-dir", type=Path, help="Local nonsynced state directory (journal, keys, staging)")
     sub = parser.add_subparsers(dest="command", required=True)
     serve = sub.add_parser("serve", help="Run the loopback API and supervisor in the foreground")

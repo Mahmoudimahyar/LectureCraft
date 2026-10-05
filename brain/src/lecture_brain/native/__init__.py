@@ -120,6 +120,13 @@ def resolve_target(settings: Settings, *, course_id: str, request_binding_revisi
         return NativeTarget(course_id, f"fixture-binding-{course_id}", settings.binding_revision, f"fixture-thread-{course_id}", "read-only", "never")
     if not settings.native_dispatch_enabled:
         raise NativeBlocked("native_disabled", "Native dispatch is not enabled for this profile.")
+    if settings.profile == "pilot":
+        if course_id not in settings.pilot.get("courses", []):
+            raise NativeBlocked("pilot_course_not_allowed", f"The pilot is limited to {', '.join(settings.pilot.get('courses', []))}; {course_id} is not sent to the worker.", job_state="FAILED_FINAL")
+        from .pilot import PilotLedger
+
+        thread = PilotLedger(settings).state()["thread"]
+        return NativeTarget(course_id, "pilot-worker", settings.binding_revision, thread["thread_id"] if thread else "pilot-thread-not-created-yet", "read-only", "never")
     native = settings.native_binding
     thread_id = binding.native_thread_id
     if not thread_id:
@@ -184,6 +191,13 @@ def select_adapter(settings: Settings, *, journal=None) -> NativeAdapter:
         return FixtureTutorAdapter(journal=journal)
     if not settings.native_dispatch_enabled:
         return UnverifiedNativeAdapter("Native dispatch is not enabled. Reading and drafting remain available.")
+    if settings.profile == "pilot":
+        executable = Path(settings.native_binding["executable"]) if settings.native_binding.get("executable") else None
+        if executable is None or not executable.is_file():
+            return UnverifiedNativeAdapter("The pilot worker executable is not present at the bound path. Nothing else answers in its place.")
+        from .pilot import PilotWorkerAdapter
+
+        return PilotWorkerAdapter(settings)
     native = settings.native_binding
     executable = Path(native["executable"]) if native.get("executable") else None
     ok, reason = proof_is_current(settings, load_proof(settings), executable)

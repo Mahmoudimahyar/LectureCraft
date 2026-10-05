@@ -17,7 +17,8 @@ import yaml
 from .contracts import dump_json, sha256_hex
 
 TERM = "2026-fall"
-PROFILES = ("fixture", "local", "live")
+PROFILES = ("fixture", "local", "live", "pilot")
+PILOT_MAX_TURNS = 4  # the size of the one grant given for the pilot; a larger number in a file is refused, not honoured
 
 
 class ConfigError(RuntimeError):
@@ -61,6 +62,7 @@ class Settings:
     native_dispatch_enabled: bool = False
     native_binding: dict[str, Any] = field(default_factory=dict)
     fixture_label: str | None = None
+    pilot: dict[str, Any] = field(default_factory=dict)
 
     # ---- derived locations -------------------------------------------------------------------
     @property
@@ -123,6 +125,7 @@ class Settings:
             "native": {k: self.native_binding.get(k) for k in sorted(self.native_binding) if k != "notes"},
             "course_writes_enabled": self.course_writes_enabled,
             "native_dispatch_enabled": self.native_dispatch_enabled,
+            "pilot": self.pilot if self.profile == "pilot" else None,
         }
         return sha256_hex(dump_json(material))
 
@@ -166,7 +169,7 @@ def _bind_course(course_id: str, root: Path, native_threads: Mapping[str, str]) 
 
 
 def load_settings(profile: str | None = None, *, env: Mapping[str, str] | None = None, repo: Path | None = None,
-                  planner_config: Path | None = None, state_dir: Path | None = None) -> Settings:
+                  planner_config: Path | None = None, state_dir: Path | None = None, pilot: dict[str, Any] | None = None) -> Settings:
     env = os.environ if env is None else env
     repo = repo or repo_root()
     profile = profile or env.get("LL_PROFILE", "fixture")
@@ -187,6 +190,7 @@ def load_settings(profile: str | None = None, *, env: Mapping[str, str] | None =
         planner_config = planner_config or ensure_fixture_workspace(fixture_root)
         state_dir = state_dir or Path(env.get("LL_LOCAL_STATE_DIR") or (repo / ".local" / "state" / "fixture"))
         fixture_label = "FIXTURE PROFILE — synthetic course data and a labeled test tutor; not live evidence"
+        pilot = {}
     else:
         candidate = planner_config or env.get("LL_PLANNER_CONFIG") or workspace.get("planner_config") or workspace.get("planner_config_candidate")
         if not candidate:
@@ -197,7 +201,27 @@ def load_settings(profile: str | None = None, *, env: Mapping[str, str] | None =
         configured = workspace.get("local_state_dir")
         if configured and not Path(configured).is_absolute():
             configured = repo / configured  # a relative path stays inside the code workspace
-        state_dir = state_dir or Path(env.get("LL_LOCAL_STATE_DIR") or configured or default_state)
+        if profile == "pilot":
+            # The pilot keeps its own history. It never shares a folder with the read-only profile, so synthetic pilot
+            # turns can never be taken for the learner's own later work there.
+            pilot_file = repo / "config" / "local-bindings" / "pilot.json"
+            grant = dict(pilot) if pilot is not None else (json.loads(pilot_file.read_text(encoding="utf-8")) if pilot_file.is_file() else {})
+            if not grant.get("courses") or not grant.get("label") or grant.get("max_threads") != 1 or not isinstance(grant.get("max_turns"), int) or grant["max_turns"] < 1:
+                raise ConfigError("The pilot profile needs an explicit grant (config/local-bindings/pilot.json): label, courses, max_threads 1 and max_turns")
+            if grant["max_turns"] > PILOT_MAX_TURNS:
+                raise ConfigError(f"The pilot grant allows no more than {PILOT_MAX_TURNS} turns; {grant['max_turns']} was configured")
+            if any(course not in allowed for course in grant["courses"]):
+                raise ConfigError("The pilot grant names a course that is not one of the configured courses")
+            pilot_state = grant.get("state_dir")
+            if pilot_state and not Path(pilot_state).is_absolute():
+                pilot_state = repo / pilot_state
+            state_dir = state_dir or Path(env.get("LL_PILOT_STATE_DIR") or pilot_state or (repo / ".local" / "state" / "pilot"))
+            if configured and Path(state_dir).resolve() == Path(configured).resolve():
+                raise ConfigError("The pilot state directory must not be the read-only profile's state directory")
+            pilot = {k: grant[k] for k in ("label", "courses", "max_threads", "max_turns")}
+        else:
+            pilot = {}
+            state_dir = state_dir or Path(env.get("LL_LOCAL_STATE_DIR") or configured or default_state)
 
     planner = read_planner_config(planner_config)
     declared = planner.get("courses") or {}
@@ -242,9 +266,11 @@ def load_settings(profile: str | None = None, *, env: Mapping[str, str] | None =
         writes, native = True, False  # fixture roots are synthetic and owned by this workspace
     elif profile == "local":
         writes, native = False, False  # read-only against real roots; app files staged locally
+    elif profile == "pilot":
+        writes, native = False, True  # course writes can never be switched on here; dispatch only through the pilot worker and its budget
     else:
         writes = flag("LL_COURSE_WRITES_ENABLED", bool(workspace.get("course_writes_enabled", False)))
         native = flag("LL_NATIVE_ENABLED", bool(workspace.get("native_dispatch_enabled", False)))
     return Settings(profile=profile, repo=repo, state_dir=Path(state_dir), planner_root=planner_config.parent, planner_config=planner_config,
                     courses=courses, policy=policy, course_writes_enabled=writes, native_dispatch_enabled=native, native_binding=native_binding,
-                    fixture_label=fixture_label)
+                    fixture_label=fixture_label, pilot=pilot or {})

@@ -229,7 +229,7 @@ class Coordinator:
             cancelled = self.journal.job(job["job_id"])["cancel_requested"]
             raise _Pause(S.CANCELLED if cancelled else S.SUPERSEDED, "A late result arrived after cancellation; it is kept as late and was not published or saved.")
         native_result = {"contract": "ll.native-result/1", "request_id": request["request_id"], "dispatch_id": dispatch_id, "scope": request["scope"], "binding_id": target.binding_id,
-                         "binding_revision": target.binding_revision, "native_thread_id": target.native_thread_id, "native_turn_id": observation.native_turn_id, "state": "completed",
+                         "binding_revision": target.binding_revision, "native_thread_id": observation.detail.get("native_thread_id") or target.native_thread_id, "native_turn_id": observation.native_turn_id, "state": "completed",
                          "terminal": True, "output_files": [output], "context_receipt": context_ref, "observed_at": self.now(), "failure_code": None}
         c.require_valid("native-result", native_result)
         return observation.text, native_result, context_ref
@@ -362,6 +362,8 @@ class Coordinator:
             return records, S.SUCCEEDED, None, extra, capture
         if publication["status"] == "incomplete":
             return records, S.UNCERTAIN_COMPLETION, publication["reason"], extra, capture
+        if self.settings.profile == "pilot":
+            return records, S.WAITING_REVIEW, f"Pilot: {publication['reason']}", extra, capture
         return records, S.WAITING_REVIEW, f"Awaiting course save: {publication['reason']}", extra, capture
 
     def _capture_correction(self, job, lease, request, submission, capture, prior):

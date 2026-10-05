@@ -52,6 +52,8 @@ def parse_tutor_output(text: str, *, expect_assessment: bool, intended_skill_ids
     used = data.get("sources_used")
     if isinstance(used, list):
         out.sources_used = sorted({i for i in used if isinstance(i, int) and not isinstance(i, bool) and 0 <= i < max_sources})
+        if len(out.sources_used) != len(set(map(str, used))):
+            out.problems.append("the reply cited a source that was not supplied; that citation was dropped")
     if isinstance(data.get("uncertainty"), str) and data["uncertainty"].strip():
         out.uncertainty = data["uncertainty"].strip()[:2000]
     diagnostic = data.get("diagnostic")

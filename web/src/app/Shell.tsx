@@ -138,6 +138,7 @@ export function NativeChip() {
   const native = workspace?.capabilities.native;
   if (!native) return null;
   if (native.status === "verified") return <StatusChip tone="success">Native tutor connected</StatusChip>;
+  if (native.status === "pilot") return <StatusChip tone="caution" title={native.detail}>{native.label}</StatusChip>;
   if (native.status === "fixture_double") return <StatusChip tone="unassessed" title={native.detail}>Fixture tutor (test double)</StatusChip>;
   return <StatusChip tone="caution" title={native.detail}>Native connection not verified</StatusChip>;
 }

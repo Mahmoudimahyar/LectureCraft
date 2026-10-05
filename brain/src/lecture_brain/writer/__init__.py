@@ -102,6 +102,16 @@ class StagedOnlyWriter:
         return CommitOutcome("blocked", "Course writes are not enabled; the candidate is staged for the owning writer, not saved.")
 
 
+class PilotSyntheticWriter(StagedOnlyWriter):
+    """The pilot assesses synthetic test responses only. Nothing becomes an attempt, here or later."""
+
+    writer_id = "pilot-no-record"
+
+    def commit(self, record: dict, data: bytes, staged_path: Path) -> CommitOutcome:
+        return CommitOutcome("blocked", "this assessment is synthetic pilot material. It is not an attempt of the learner, is not saved to the course, "
+                                        "and does not enter Progress, history or review scheduling.")
+
+
 class CoordinatedCourseWriter:
     """Exclusive-create + readback under the course learning lock (courses without a save helper)."""
 
@@ -223,6 +233,8 @@ class WriterFacade:
     # ---- writer selection -------------------------------------------------------------------
     def writer_for(self, course_id: str):
         settings = self._settings
+        if settings.profile == "pilot":
+            return PilotSyntheticWriter()
         if not settings.course_writes_enabled:
             return StagedOnlyWriter()
         root = settings.course(course_id).root

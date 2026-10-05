@@ -7,6 +7,7 @@ is blind to its own history (``native_history_blind`` is always false).
 from __future__ import annotations
 
 from pathlib import Path
+import json
 from typing import Any
 
 from pypdf import PdfReader
@@ -20,6 +21,9 @@ from ..ownerio.inventory import build_inventory
 from ..preparation import current_identity
 
 MAX_SPAN_CHARS = 6000
+# Not supplied to the pilot worker, with the reason recorded in each context manifest.
+PILOT_WITHHELD = {"learning-strategy.md": "speaks about the state of the learner's own attempts (learner history is not supplied in the pilot)",
+                  "planner/protocols/tutoring-policy.md": "names the learner and carries planner preferences (personal planner data is not supplied in the pilot)"}
 
 
 def _all_items(inventory: dict):
@@ -73,6 +77,8 @@ def _instruction_artifacts(settings: Settings, course_id: str) -> tuple[list[dic
     artifacts, texts = [], []
     for rel, base, label in (("AGENTS.md", root, "AGENTS.md"), ("learning-strategy.md", root, "learning-strategy.md"),
                              ("protocols/tutoring-policy.md", settings.planner_root, "planner/protocols/tutoring-policy.md")):
+        if settings.profile == "pilot" and label in PILOT_WITHHELD:
+            continue  # the pilot worker gets the course's own agent guidance only
         path = base / rel
         if path.is_file():
             data = path.read_bytes()
@@ -117,7 +123,10 @@ def select_context(settings: Settings, *, request: dict, sources: list[dict], sk
             spans.append({"index": len(spans), "source": source, "filename": item["filename"], "text": None})
 
     attempts_refs, attempt_summaries = [], []
+    pilot = settings.profile == "pilot"  # the pilot worker is given policy and the cited source only: no learner history, no answer guidance
     try:
+        if pilot:
+            raise OwnerReadError("pilot_scope", "learner history is not supplied to the pilot worker")
         records = read_attempt_records(root, course_id)
         relevant = []
         for attempt_id, attempt in records["attempts"].items():
@@ -151,7 +160,7 @@ def select_context(settings: Settings, *, request: dict, sources: list[dict], sk
                         ref = {"source_id": original["source_id"], "version_id": version_id, "sha256": sha256, "locator": locator}
                         supplied_sources.append(ref)
                         spans.append({"index": len(spans), "source": ref, "filename": original["filename"], "text": text})
-        guidance = read_answer_guidance(root, question_id)  # assessor-only material; never echoed to the client
+        guidance = None if pilot else read_answer_guidance(root, question_id)  # assessor-only material; never echoed to the client
     exposure = {"seen_solution": "yes", "unseen_reported": "no_known_exposure"}.get(prior_exposure or "", "unknown")
     receipt = {
         "contract": "ll.context/1", "context_id": f"ctx-{request['request_id']}"[:128], "request_id": request["request_id"], "scope": request["scope"],
@@ -161,8 +170,30 @@ def select_context(settings: Settings, *, request: dict, sources: list[dict], sk
                            + (" Assessor guidance was supplied to the tutor for grading and withheld from the client." if guidance else "")),
     }
     c.require_valid("context", receipt)
+    if pilot:
+        _write_pilot_manifest(settings, request, receipt, spans, rubric)
+        instruction_text = (f"[{settings.pilot['label']}: a restricted worker started by the Lecture Learning app for a limited pilot. You are not the learner's desktop course chat "
+                            "and have no earlier conversation with the learner beyond this thread.]\n\n" + instruction_text)
     return receipt, {"instruction_text": instruction_text, "spans": spans, "attempts": attempt_summaries, "rubric": rubric, "assessor_guidance": guidance,
                      "source_problems": source_problems}
+
+
+def _write_pilot_manifest(settings: Settings, request: dict, receipt: dict, spans: list[dict], rubric: list[dict]) -> None:
+    """What the pilot worker is given, by version and hash. Source text is listed apart from instructions; nothing is invented."""
+    manifest = {
+        "contract": "ll.pilot-context-manifest/1", "request_id": request["request_id"], "course_id": request["scope"]["course_id"], "action": request["action"], "created_at": receipt["created_at"],
+        "policy_revision": receipt["policy_revision"],
+        "instructions": [{"label": a["path"], "sha256": a["sha256"], "bytes": a["bytes"], "supplied_chars_at_most": 8000} for a in receipt["instructions"]],
+        "source_spans": [{"source_id": s["source"]["source_id"], "version_id": s["source"]["version_id"], "sha256": s["source"]["sha256"], "locator": s["source"]["locator"], "filename": s["filename"],
+                          "text_chars": len(s["text"] or ""), "text_sha256": c.sha256_hex((s["text"] or "").encode("utf-8")) if s["text"] else None} for s in spans],
+        "rubric_criteria": [{"criterion_id": r.get("criterion_id"), "skill_id": r["skill_id"]} for r in rubric],
+        "instructions_withheld": [{"label": label, "reason": reason} for label, reason in PILOT_WITHHELD.items()],
+        "learner_history_supplied": 0, "assessor_guidance_supplied": False, "audio_or_video_supplied": False,
+        "note": "Instruction files and source spans are identified by the bytes they were read from. Prompt digest is added when the turn is sent.",
+    }
+    path = settings.state_dir / "pilot" / "manifests" / f"{request['request_id']}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
 
 def question_version_for(settings: Settings, course_id: str, question_id: str | None) -> int | None:

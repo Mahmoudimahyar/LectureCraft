@@ -82,6 +82,8 @@ for raw in sys.stdin:
         if params.get("sandboxPolicy", {}).get("type") == "dangerFullAccess":
             send({"id": mid, "error": {"code": -32001, "message": "test double refuses full access"}})
             continue
+        if mode == "no-ack":
+            continue  # the request is swallowed: neither accepted nor refused
         turn_id = f"turn-{len(turns) + 1}"
         text = params["input"][0]["text"]
         turns[turn_id] = {"id": turn_id, "status": "inProgress", "items": []}
@@ -107,6 +109,11 @@ for raw in sys.stdin:
             send({"method": "item/completed", "params": {"item": {"type": "commandExecution", "id": "item-0", "command": "dir"}}})
         asks_for_marker = "previous message" in text and "nothing else: " not in text
         reply = "LL-PROOF 0000000000000000" if mode == "wrong-answer" else ("I have no earlier message from you." if mode == "forgets" or not memory["marker"] else memory["marker"]) if asks_for_marker else text.split("nothing else: ", 1)[1] if "nothing else: " in text else json.dumps({"reply_markdown": "double reply", "sources_used": [], "uncertainty": None, "assessment": None, "diagnostic": None})
+        spec = re.search(r"TASK_SPEC_JSON\s+```json\s+(\{.*?\})\s+```", text, flags=re.S)
+        if spec and json.loads(spec.group(1)).get("expect_assessment"):  # a well-formed assessment for exactly the intended skills
+            reply = json.dumps({"reply_markdown": "double assessment", "sources_used": [0], "uncertainty": None, "diagnostic": None, "assessment": {"observations": [
+                {"skill_id": skill, "outcome": "demonstrated", "analysis": "double", "missing_or_incorrect": [], "error_types": [], "assessment_confidence": "medium"}
+                for skill in json.loads(spec.group(1)).get("intended_skill_ids", [])]}})
         item = {"type": "agentMessage", "id": "item-1", "text": reply}
         turns[turn_id].update(status="completed", items=[item])
         save()

@@ -214,7 +214,7 @@ if (draftLecture) {
   const where = `${base}/courses/${draftLecture.course_id}/lectures/${draftLecture.lecture_id}`;
   await page.goto(`${where}?page=1`);
   await page.waitForFunction(() => document.querySelector('[data-testid="slide-canvas"]')?.getAttribute("data-rendered") === "1", null, { timeout: 45_000 });
-  const tutor = page.getByRole("region", { name: "Tutor" });
+  const tutor = page.getByTestId("tutor-panel");
   const composer = page.locator("#tutor-composer");
   await composer.fill("read-only check: unfinished draft");
   await page.getByText("Draft saved on this device").waitFor({ timeout: 15_000 }).catch(() => undefined);

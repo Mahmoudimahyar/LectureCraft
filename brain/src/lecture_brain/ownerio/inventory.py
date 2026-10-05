@@ -17,6 +17,7 @@ import re
 from typing import Any
 
 from ..config import CourseBinding, Settings
+from ..contracts import ContractError, resolve_inside
 from . import OwnerReadError
 from .source_index import read_source_index
 
@@ -104,7 +105,11 @@ def _registered_item(root: Path, entry: dict) -> dict:
     rel = entry["path"]
     current = entry["current"]
     size = None
-    if rel is None:
+    declared_name = Path(rel).name if rel else None
+    if rel is not None and not _path_in_course(root, rel):
+        # The index is the owner's, but a path is only followed inside this course folder. It is reported, not read.
+        rel, state = None, "registered_path_outside_course"
+    elif rel is None:
         state = "registered_unavailable"
     else:
         path = root / rel
@@ -118,13 +123,22 @@ def _registered_item(root: Path, entry: dict) -> dict:
                 state = "registered_unreadable"
             else:
                 state = "registered_readable"
-    name = Path(rel).name if rel else entry.get("original_filename")
+    name = declared_name or entry.get("original_filename")
     return {
         "source_id": entry["source_id"], "version_id": current["version_id"], "sha256": current["sha256"], "kind": entry["kind"], "kind_basis": "owner_index",
         "role": entry["role"], "path": rel, "filename": name, "media_type": media_type_for(name) if name else None, "bytes": size, "state": state,
         "registration": "registered", "rendition": _rendition(name), "disclosure": _disclosure(entry["kind"], name), "source_date": entry["source_date"],
         "historical_versions": [dict(v, bytes_available=False) for v in entry["historical_versions"]],
     }
+
+
+def _path_in_course(root: Path, rel: Any) -> bool:
+    """True only for a portable relative path that stays inside the course folder without passing through a link."""
+    try:
+        resolve_inside(root, rel)
+    except (ContractError, OSError):
+        return False
+    return True
 
 
 def _disk_item(root: Path, rel: str, kind: str) -> dict:
@@ -154,7 +168,8 @@ def _session_state(items: list[dict]) -> str:
 def build_inventory(binding: CourseBinding) -> dict[str, Any]:
     root = binding.root
     result: dict[str, Any] = {"course_id": binding.course_id, "term": binding.term, "display_name": binding.display_name, "binding": binding.status,
-                              "lectures": [], "sessions": [], "unlinked_sessions": [], "other_sources": [], "enumeration_truncated": False}
+                              "lectures": [], "sessions": [], "unlinked_sessions": [], "other_sources": [], "enumeration_truncated": False,
+                              "skipped_outside_course": []}
     if not binding.usable:
         result["index"] = {"status": "unavailable", "reason": binding.problem}
         return result
@@ -185,15 +200,32 @@ def build_inventory(binding: CourseBinding) -> dict[str, Any]:
         except OSError:
             return []
 
+    root_resolved = root.resolve()
+    scope: dict[Path, bool] = {}
+
+    def in_course(directory: Path) -> bool:
+        """A folder reached through a symlink or junction that leads out of the course is listed as skipped and never entered."""
+        known = scope.get(directory)
+        if known is None:
+            try:
+                known = not directory.is_symlink() and directory.resolve().is_relative_to(root_resolved)
+            except OSError:
+                known = False
+            scope[directory] = known
+            rel = directory.relative_to(root).as_posix()
+            if not known and not any(rel == s or rel.startswith(s + "/") for s in result["skipped_outside_course"]):
+                result["skipped_outside_course"].append(rel)
+        return known
+
     materials = root / "materials"
     # --- sessions ------------------------------------------------------------------------------
     sessions: dict[str, dict] = {}
     session_of_source: dict[str, str] = {}
     sessions_dir = materials / "sessions"
-    if sessions_dir.is_dir():
+    if sessions_dir.is_dir() and in_course(sessions_dir):
         for directory in sorted(p for p in sessions_dir.iterdir() if p.is_dir()):
             match = _SESSION_DIR.match(directory.name)
-            if not match:
+            if not match or not in_course(directory):
                 continue
             items = []
             for path in files_in(directory):
@@ -209,8 +241,10 @@ def build_inventory(binding: CourseBinding) -> dict[str, Any]:
 
     # --- lecture units -------------------------------------------------------------------------
     lectures_dir = materials / "lectures"
-    if lectures_dir.is_dir():
+    if lectures_dir.is_dir() and in_course(lectures_dir):
         for directory in sorted((p for p in lectures_dir.iterdir() if p.is_dir() and _LECTURE_DIR.match(p.name)), key=lambda p: p.name.lower()):
+            if not in_course(directory):
+                continue
             decks, extras = [], []
             for path in files_in(directory):
                 item = item_for(path.relative_to(root).as_posix(), "lecture_slides" if path.suffix.lower() in _DECK else "lecture_material")
@@ -238,11 +272,13 @@ def build_inventory(binding: CourseBinding) -> dict[str, Any]:
     # --- everything else under materials/ ------------------------------------------------------
     if materials.is_dir():
         for top in sorted(p for p in materials.iterdir() if p.is_dir() and p.name not in {"lectures", "sessions"}):
+            if not in_course(top):
+                continue
             for path in sorted(top.rglob("*")):
                 if count >= MAX_ENUMERATED_FILES:
                     result["enumeration_truncated"] = True
                     break
-                if path.is_file() and not path.is_symlink():
+                if path.is_file() and not path.is_symlink() and in_course(path.parent):
                     rel = path.relative_to(root).as_posix()
                     kind = _FOLDER_KIND.get(top.name, "material")
                     if kind == "assignment_brief" and _SOLUTION.search(path.name):
@@ -280,7 +316,7 @@ def coverage_summary(settings: Settings) -> dict[str, Any]:
                               "sources": sum(by_state.values()), "by_state": by_state, "session_states": session_states,
                               "lectures_without_linked_session": sum(1 for l in inventory["lectures"] if not l["sessions"]),
                               "decks_needing_rendition": sum(1 for l in inventory["lectures"] for d in l["decks"] if d["rendition"] == "needs_rendition"),
-                              "enumeration_truncated": inventory["enumeration_truncated"]}
+                              "enumeration_truncated": inventory["enumeration_truncated"], "skipped_outside_course": len(inventory["skipped_outside_course"])}
         totals["lecture_units"] += len(inventory["lectures"])
         totals["sessions"] += len(inventory["sessions"])
         totals["sources"] += sum(by_state.values())

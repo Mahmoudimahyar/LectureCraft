@@ -43,11 +43,24 @@ _REQUEST_DIR = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,100}")
 MAX_UPLOAD_BYTES = 32 * 1024 * 1024
 
 
+_AUTHORITY = re.compile(r"(?P<host>\[[0-9A-Fa-f:]+\]|[A-Za-z0-9.-]+)(?::(?P<port>[0-9]{1,5}))?")
+
+
 def _host_ok(value: str | None, extra: set[str]) -> bool:
-    if not value:
+    """Exactly a loopback name with an optional numeric port. Anything merely starting with one is refused."""
+    match = _AUTHORITY.fullmatch(value or "")
+    if not match:
         return False
-    host = value.rsplit(":", 1)[0] if not value.startswith("[") else value.split("]")[0] + "]"
+    host = match["host"].lower()
     return host in LOOPBACK_HOSTS or value in extra or host in extra
+
+
+def _same_origin(origin: str, host: str | None, extra: set[str]) -> bool:
+    """The page that sends a request must be this app's own page: same host and same port."""
+    scheme, _, authority = origin.partition("://")
+    if scheme not in {"http", "https"} or not _host_ok(authority, extra):
+        return False
+    return authority.lower() == (host or "").lower() or authority in extra or authority.rsplit(":", 1)[0] in extra
 
 
 class LoopbackOnly(BaseHTTPMiddleware):
@@ -58,9 +71,13 @@ class LoopbackOnly(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         if not _host_ok(request.headers.get("host"), self._extra):
             return JSONResponse({"detail": "This surface is loopback-only."}, status_code=403)
+        # Being on loopback is not being the user: another local page, a sandboxed document or another site must not
+        # drive this surface or read private evidence from it.
         origin = request.headers.get("origin")
-        if origin and not _host_ok(origin.split("://", 1)[-1], self._extra):
+        if origin is not None and not _same_origin(origin, request.headers.get("host"), self._extra):
             return JSONResponse({"detail": "Cross-origin requests are not accepted."}, status_code=403)
+        if request.url.path.startswith("/api/") and request.headers.get("sec-fetch-site", "same-origin") not in {"same-origin", "none"}:
+            return JSONResponse({"detail": "Cross-site requests are not accepted."}, status_code=403)
         response = await call_next(request)
         response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -215,7 +232,10 @@ def create_app(runtime: Runtime, *, extra_hosts: set[str] | None = None, static_
             raise HTTPException(403, "This is answer material. It opens only after a deliberate, recorded reveal.")
         if not item["path"]:
             raise HTTPException(404, "This source has no file (not supplied or unavailable).")
-        path = c.resolve_inside(settings.course(course_id).root, item["path"])
+        try:
+            path = c.resolve_inside(settings.course(course_id).root, item["path"])
+        except c.ContractError as exc:
+            raise HTTPException(404, "This source is not a file inside the course folder.") from exc
         if not path.is_file() or path.stat().st_size == 0:
             raise HTTPException(404, "The file is missing or empty.")
         return FileResponse(path, media_type=item["media_type"] or "application/octet-stream", headers={"Content-Disposition": "inline", "Content-Security-Policy": "sandbox"})

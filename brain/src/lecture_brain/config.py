@@ -216,6 +216,19 @@ def load_settings(profile: str | None = None, *, env: Mapping[str, str] | None =
             continue
         courses[course_id] = _bind_course(course_id, Path(entry["root"]), native_threads)
 
+    if profile == "fixture":
+        # The fixture profile writes directly and answers with a labeled keyword double. It may only ever see folders
+        # this workspace generated as synthetic fixtures: the generator's marker must sit above everything it binds.
+        from .fixtures.builder import MARKER
+
+        config_path = planner_config.resolve()
+        marked = next((p for p in config_path.parents if (p / MARKER).is_file()), None)
+        outside = [b.course_id for b in courses.values() if b.status != "missing_root" and (marked is None or not b.root.resolve().is_relative_to(marked))]
+        if marked is None or outside:
+            raise ConfigError("The fixture profile runs only on a generated synthetic fixture workspace; these folders are not one"
+                              + (f" (courses outside it: {', '.join(outside)})" if marked is not None else "")
+                              + ". Use --profile local for real course folders.")
+
     # Journal, staged candidates and derived files must never live inside a course or the planner folder.
     resolved_state = Path(state_dir).resolve()
     for owned in [planner_config.parent, *(b.root for b in courses.values() if b.status != "missing_root")]:

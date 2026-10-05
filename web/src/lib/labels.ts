@@ -9,6 +9,7 @@ export const SOURCE_STATE: Record<string, { label: string; tone: Tone; detail: s
   registered_empty: { label: "Empty file", tone: "caution", detail: "Registered, but the file has zero bytes. Nothing can be shown from it." },
   registered_unavailable: { label: "Not supplied yet", tone: "unassessed", detail: "The course lists this source but no file has been supplied." },
   registered_missing_on_disk: { label: "Inaccessible", tone: "danger", detail: "Registered, but the file is not at its recorded location on this PC." },
+  registered_path_outside_course: { label: "Outside the course folder", tone: "danger", detail: "The course index points this source at a location outside the course folder. It is listed but never opened from there." },
   registered_unreadable: { label: "Unreadable", tone: "danger", detail: "Registered, but it could not be read." },
 };
 

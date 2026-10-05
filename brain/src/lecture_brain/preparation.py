@@ -268,7 +268,7 @@ class Preparation:
         if deck["state"] in {"registered_empty", "present_unindexed_empty"}:
             stages["rendition"] = {"status": "no_source", "reason": "The deck file is empty (zero bytes)."}
             return None
-        if deck["state"] in {"registered_unavailable", "registered_missing_on_disk", "registered_unreadable"}:
+        if deck["state"] in {"registered_unavailable", "registered_missing_on_disk", "registered_unreadable", "registered_path_outside_course"}:
             stages["rendition"] = {"status": "no_source", "reason": f"The deck is {deck['state'].replace('_', ' ')}."}
             return None
         source = root / deck["path"]
@@ -428,7 +428,8 @@ class Preparation:
                 rows.append({"lecture_id": lecture["lecture_id"], "title": lecture["title"], "deck_state": deck["state"] if deck else "no_deck", "session_link": lecture["session_link"],
                              "pages": pages, "pages_confirmed": confirmed, "pages_suggested": suggested, "pages_unresolved": unresolved, "disposition": disposition,
                              "stages": (state or {}).get("stages")})
-            courses[course_id] = {"lecture_units": len(rows), "unlinked_sessions": len(inventory["unlinked_sessions"]), "lectures": rows}
+            courses[course_id] = {"lecture_units": len(rows), "unlinked_sessions": len(inventory["unlinked_sessions"]), "lectures": rows,
+                                  "skipped_outside_course": len(inventory["skipped_outside_course"])}
             totals["lecture_units"] += len(rows)
         return {"tool_version": TOOL_VERSION, "courses": courses, "totals": dict(totals),
                 "note": "Preparation coverage only. 'links_reviewed' means every page has a human-confirmed link; suggestions are not counted as reviewed."}

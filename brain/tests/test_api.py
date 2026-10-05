@@ -60,7 +60,9 @@ def test_non_loopback_hosts_and_foreign_origins_are_refused(runtime):
     assert strict.get("/api/health", headers={"host": "127.0.0.1:8765"}).status_code == 200
     assert strict.get("/api/health", headers={"host": "evil.example:8765"}).status_code == 403
     assert strict.get("/api/health", headers={"host": "localhost:8765", "origin": "https://evil.example"}).status_code == 403
-    assert strict.get("/api/health", headers={"host": "localhost:8765", "origin": "http://127.0.0.1:5173"}).status_code == 200
+    # The development server forwards its own Host unchanged, so its pages are same-origin; a page on another local port is not.
+    assert strict.get("/api/health", headers={"host": "127.0.0.1:5173", "origin": "http://127.0.0.1:5173"}).status_code == 200
+    assert strict.get("/api/health", headers={"host": "localhost:8765", "origin": "http://127.0.0.1:5173"}).status_code == 403
 
 
 def test_views_are_served_and_unknown_ids_are_404_not_guessed(client):

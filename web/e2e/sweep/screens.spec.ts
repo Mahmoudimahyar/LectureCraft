@@ -24,6 +24,8 @@ const SCREENS: Array<{ id: string; name: string; path: string; ready: RegExp | s
   { id: "SC13f", name: "settings-maintenance", path: "/settings/maintenance", ready: "Settings" },
   { id: "SC16", name: "session-summary", path: `/study/sessions/session-none/summary?course=${COURSE}&lecture=lecture-02&page=2`, ready: "Session summary" },
   { id: "sources", name: "sources", path: "/sources", ready: "Sources" },
+  { id: "R1-bank", name: "question-bank", path: `/courses/${COURSE}/questions`, ready: "Question bank" },
+  { id: "R1-outline", name: "concept-outline", path: `/courses/${COURSE}/outline`, ready: "Concept outline" },
 ];
 
 test.describe("every screen", () => {
@@ -70,7 +72,7 @@ test.describe("every screen", () => {
     expect(effects).toEqual([]);
 
     const narrow = (page.viewportSize()?.width ?? 0) < 1024;
-    for (const pane of ["Transcript", "Sources", "Tutor"] as const) {
+    for (const pane of ["Transcript", "This slide", "Questions", "Tutor"] as const) {
       await page.getByRole("tab", { name: pane, exact: true }).click();
       await expectNoHorizontalOverflow(page);
       await expectAccessible(page, testInfo, `lecture-${pane.toLowerCase()}`);

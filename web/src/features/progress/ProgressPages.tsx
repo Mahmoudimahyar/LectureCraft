@@ -61,7 +61,7 @@ export function ProgressPage() {
         <h2 id="facets-h" className="text-lg font-semibold">Recorded evidence by kind of performance</h2>
         <p className="ll-measure mb-2 text-sm text-muted">Unit: distinct skills of this course's catalog ({s.skills}). "Unaided" means an observed, demonstrated response recorded with no assistance, no reference and no known prior exposure.
           Rules: conditions {data.rules.evidence_conditions}, facet mapping v{data.rules.facet_mapping}.</p>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Evidence by kind of performance (scrolls sideways on a narrow screen)">
           <table className="w-full min-w-[44rem] border-collapse text-left">
             <thead><tr className="border-b border-line/40 text-sm text-muted">
               <th scope="col" className="py-1 pr-3 font-medium">Kind of performance</th><th scope="col" className="px-2 font-medium">Skills</th><th scope="col" className="px-2 font-medium">With an unaided demonstration</th>

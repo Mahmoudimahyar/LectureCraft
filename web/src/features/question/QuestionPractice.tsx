@@ -42,7 +42,7 @@ function QuestionSources({ courseId, questionId, view }: { courseId: string; que
   return (
     <div className="mt-3 flex flex-col gap-2" data-testid="question-sources">
       <p className="text-sm text-muted" data-testid="question-membership">
-        {view.lecture_ids.length ? <>Belongs to {view.lecture_ids.map((id, i) => <span key={id}>{i ? ", " : ""}<Link className="text-accent hover:underline" to={`/courses/${courseId}/lectures/${id}?panel=questions`}>{id.replace("-", " ")}</Link></span>)} through its collection{view.collection ? ` ${view.collection}` : ""}. </>
+        {view.lecture_ids.length ? <>Belongs to {view.lecture_ids.map((id, i) => <span key={id}>{i ? ", " : ""}<Link className="text-accent underline" to={`/courses/${courseId}/lectures/${id}?panel=questions`}>{id.replace("-", " ")}</Link></span>)} through its collection{view.collection ? ` ${view.collection}` : ""}. </>
           : <>Collection {view.collection ?? "none"}: not tied to a lecture unit. </>}
         {anchorSummary(view).text}
       </p>

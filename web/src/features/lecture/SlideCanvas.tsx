@@ -137,7 +137,7 @@ export function SlideCanvas({ url, page, label, onPageCount, hidden, header, con
   const fitLabel = contain ? "Fit to window" : "Fit width";
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-1">
         {header ?? <span className="flex-1" />}
         <span className="shrink-0 text-sm text-muted tabular-nums" aria-live="polite" data-testid="slide-zoom">{Math.round(zoom * 100)}% of {contain ? "fit" : "fit width"}</span>
         <IconButton label="Zoom out" size="sm" onClick={() => step(-1)} disabled={zoom === ZOOMS[0]}><Minus aria-hidden className="size-4" /></IconButton>

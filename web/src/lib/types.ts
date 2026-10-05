@@ -126,6 +126,8 @@ export interface QuestionAnchor {
   /** "exact": this collection's slide numbers were confirmed as physical pages; "stated": named by the catalog, not yet confirmed. */
   basis: "exact" | "stated";
   from: "locator" | "page_field";
+  /** True when the pages are slides of the deck the lecture is shown with; false for pages of any other file. */
+  on_displayed_deck?: boolean;
   resolution?: string;
   named_source?: string;
 }

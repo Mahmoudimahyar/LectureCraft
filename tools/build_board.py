@@ -55,6 +55,27 @@ def fingerprint(root:Path)->str:
             entries[p.relative_to(root).as_posix()]=digest(p.read_bytes())
     return digest(dump(entries).encode())
 
+def scoped_fingerprint(root:Path,patterns)->str:
+    """Digest of the files a check declared as its inputs (D50). Patterns are repository-relative; ``*`` also crosses ``/``.
+    Every pattern must be safe and must match at least one file: a scope that matches nothing would never go stale."""
+    import fnmatch
+    if not isinstance(patterns,(list,tuple)) or not patterns:raise ValueError('A declared input scope cannot be empty')
+    for pat in patterns:
+        if not isinstance(pat,str) or not pat or '\\' in pat or ':' in pat or pat.startswith('/') or any(x in {'','.','..'} for x in pat.split('/')):raise ValueError('Unsafe input pattern')
+    entries={};matched=set()
+    for parent,dirs,files in os.walk(root,followlinks=False):
+        dirs[:]=sorted(d for d in dirs if d not in IGNORE and not (Path(parent)/d).is_symlink())
+        for name in sorted(files):
+            p=Path(parent)/name
+            if p.is_symlink() or (name.startswith('.env') and name!='.env.example') or name.endswith(('.pyc','.log','.sqlite','.db')):continue
+            rel=p.relative_to(root).as_posix()
+            hit=[pat for pat in patterns if fnmatch.fnmatchcase(rel,pat)]
+            if hit:
+                matched.update(hit);entries[rel]=digest(p.read_bytes())
+    missing=[pat for pat in patterns if pat not in matched]
+    if missing:raise ValueError('Input pattern matches no file: '+', '.join(missing))
+    return digest(dump({'patterns':sorted(patterns),'files':entries}).encode())
+
 def plan(root:Path):
     value=read(safe(root,'config/implementation-plan.json'))
     tasks=value['tasks']; ids=[t['id'] for t in tasks]
@@ -94,7 +115,8 @@ def status(root:Path):
             try:
                 ref=item['receipt'];receipt=read(safe(root,ref['path']))
                 if digest(dump(receipt).encode())!=ref['sha256']:raise ValueError('Receipt changed')
-                item['test_freshness']='CURRENT' if receipt['source_sha256']==current else 'STALE'
+                if receipt.get('inputs_scope'):item['test_freshness']='CURRENT' if receipt['inputs_sha256']==scoped_fingerprint(root,receipt['inputs_scope']) else 'STALE'
+                else:item['test_freshness']='CURRENT' if receipt['source_sha256']==current else 'STALE'
             except (OSError,ValueError,KeyError):item['test_freshness']='INVALID'
     implemented={k for k,v in tasks.items() if v['state'] in {'LOCAL_TESTED','IMPLEMENTED_UNVERIFIED'}}
     runnable=[t['id'] for t in p['tasks'] if tasks[t['id']]['state'] in {'TODO','IN_PROGRESS'} and set(t['dependencies'])<=implemented]
@@ -152,10 +174,11 @@ def execute(argv,cwd,log_path,timeout,stop_file,max_bytes=12_000_000):
     if log_path.stat().st_size>max_bytes:result='OUTPUT_LIMIT'
     return {'status':result or ('PASS' if p.returncode==0 else 'FAIL'),'exit_code':p.returncode,'seconds':round(time.monotonic()-start,3)}
 
-def run_test(root,task,argv,timeout=600):
+def run_test(root,task,argv,timeout=600,inputs=None):
     with lock(root):
         p,s=load_state(root)
         if task not in s['tasks']:raise ValueError('Unknown task')
+        scope=scoped_fingerprint(root,inputs) if inputs is not None else None
         before=fingerprint(root);rid=uuid.uuid4().hex
         log=safe(root,'.local/build/checks/'+rid+'.log')
         result=execute(argv,root,log,timeout,safe(root,'.local/STOP'))
@@ -164,6 +187,7 @@ def run_test(root,task,argv,timeout=600):
         receipt={'kind':'trusted-local-command','id':rid,'task':task,'status':state,'execution_status':result['status'],'execution':result,
           'command':argv,'source_sha256':before,'source_unchanged':unchanged,'at':now(),'log':log.relative_to(root).as_posix(),
           'scope':'This command only. Not semantic task adequacy, live integration or human approval.'}
+        if scope is not None:receipt.update(inputs_scope=list(inputs),inputs_sha256=scope)
         path=safe(root,'.local/build/checks/'+rid+'.json');write(path,receipt)
         ref={'path':path.relative_to(root).as_posix(),'sha256':digest(dump(receipt).encode())}
         _change(root,task,'LOCAL_TESTED' if state=='PASS' else 'IN_PROGRESS', 'Executed command '+state+'; review test adequacy independently.',ref)
@@ -173,7 +197,9 @@ def main():
     p=argparse.ArgumentParser(description=__doc__);s=p.add_subparsers(dest='cmd',required=True)
     s.add_parser('status');s.add_parser('next')
     u=s.add_parser('update');u.add_argument('task');u.add_argument('state',choices=sorted(STATES-{'LOCAL_TESTED'}));u.add_argument('--note',required=True)
-    t=s.add_parser('test');t.add_argument('task');t.add_argument('--timeout',type=float,default=600);t.add_argument('argv',nargs=argparse.REMAINDER)
+    t=s.add_parser('test');t.add_argument('task');t.add_argument('--timeout',type=float,default=600)
+    t.add_argument('--scoped',action='store_true',help='bind the receipt to the inputs declared for this task in config/task-checks.json (input_scopes)')
+    t.add_argument('argv',nargs=argparse.REMAINDER)
     a=p.parse_args()
     try:
         if a.cmd=='status':r=status(ROOT)
@@ -183,7 +209,11 @@ def main():
         else:
             argv=a.argv[1:] if a.argv[:1]==['--'] else a.argv
             argv=[sys.executable if x=='{python}' else x for x in argv]
-            r=run_test(ROOT,a.task,argv,a.timeout)
+            inputs=None
+            if a.scoped:
+                inputs=read(safe(ROOT,'config/task-checks.json')).get('input_scopes',{}).get(a.task)
+                if not inputs:raise ValueError('No input scope is declared for this task; record it without --scoped')
+            r=run_test(ROOT,a.task,argv,a.timeout,inputs)
         print(dump(r),end='');return 0 if r.get('status') not in {'FAIL','BLOCKED'} else 2
     except (OSError,ValueError,TypeError,KeyError) as exc:print(dump({'status':'BLOCKED','reason':str(exc)}),end='');return 2
 if __name__=='__main__':raise SystemExit(main())

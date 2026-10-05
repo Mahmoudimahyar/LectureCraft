@@ -12,12 +12,12 @@ const rangesText = (ranges: Array<[number, number]>) => ranges.map(([a, b]) => (
 
 /** Where the catalog says a question points, in words, without claiming more than the catalog does. */
 export function anchorSummary(row: Pick<QuestionRow, "anchors" | "anchor_state" | "slide_anchor" | "locator_text">): { text: string; tone: "neutral" | "unassessed" | "caution" } {
-  const slides = row.anchors.filter((a) => a.kind === "pages" && a.lecture_id && !a.named_source && a.from === "locator");
+  const slides = row.anchors.filter((a) => a.kind === "pages" && a.on_displayed_deck);
   const lines = row.anchors.filter((a) => a.kind === "transcript_lines");
   const pages = row.anchors.filter((a) => a.kind === "pages" && !slides.includes(a));
   const parts: string[] = [];
   if (slides.length) parts.push(`slides ${slides.map((a) => rangesText(a.ranges)).join(", ")}${slides.some((a) => a.basis === "stated") ? " (as stated; page numbers not yet confirmed)" : ""}`);
-  if (pages.length) parts.push(`page ${pages.map((a) => rangesText(a.ranges)).join(", ")} of ${pages.some((a) => a.named_source) ? "the question sheet" : "its source"}`);
+  if (pages.length) parts.push(`page ${pages.map((a) => rangesText(a.ranges)).join(", ")} of ${pages.some((a) => a.named_source) ? "the question sheet" : "its source file (not a slide of the deck)"}`);
   if (lines.length) parts.push(`transcript lines ${lines.map((a) => rangesText(a.ranges)).join(", ")}`);
   if (!parts.length) return { text: "No slide is named in the course record for this question.", tone: "unassessed" };
   return { text: `Course record: ${parts.join(" · ")}`, tone: slides.length ? "neutral" : "unassessed" };

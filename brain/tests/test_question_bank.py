@@ -114,6 +114,9 @@ def test_listed_slides_stay_a_list_and_transcript_lines_are_not_slides(projector
     assert lines[0]["source_id"] is None and lines[0]["resolution"] == "no_transcript_linked_to_unit"
     sheet = next(a for a in everything["BE505-L04-CLASS-Q01"]["anchors"] if a["kind"] == "pages")
     assert sheet["source_id"] == "src-lecture-04-in-class-questions" and sheet["pages"] == [1]
+    # a page of the question sheet is a page of that file, not a slide of the lecture deck
+    assert sheet["on_displayed_deck"] is False and everything["BE505-L04-CLASS-Q01"]["slide_anchor"] == "none"
+    assert all(a["on_displayed_deck"] for a in everything["BE505-L04-Q01"]["anchors"] if a["kind"] == "pages") and everything["BE505-L04-Q01"]["slide_anchor"] == "named"
 
 
 def test_related_questions_are_separate_from_the_lectures_own(projector):

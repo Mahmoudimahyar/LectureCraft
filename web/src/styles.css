@@ -362,6 +362,8 @@ body {
   }
   html:not([data-text-scale="large"]) .ll-workspace-grid {
     flex: 1;
+    /* One row exactly as tall as the workspace: each pane scrolls inside itself, the page does not grow. */
+    grid-template-rows: minmax(0, 1fr);
     grid-template-columns: var(--ll-outline-w, 17rem) minmax(0, 1fr) clamp(22rem, 28vw, 32rem);
   }
   html:not([data-text-scale="large"]) .ll-workspace-grid[data-outline="closed"] {
@@ -395,6 +397,28 @@ body {
     overflow: hidden;
     display: flex;
     flex-direction: column;
+  }
+}
+
+/* One line of chips under the transport on wide screens: a long chip is shortened with an ellipsis instead of adding a row
+   (its full text stays in the page for assistive technology and on hover). Narrow screens wrap as usual. */
+.ll-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+@media (min-width: 64rem) {
+  html:not([data-text-scale="large"]) .ll-chip-row {
+    flex-wrap: nowrap;
+    overflow: hidden;
+  }
+  html:not([data-text-scale="large"]) .ll-chip-row > .ll-chip {
+    display: inline-block;
+    flex: 0 1 auto;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 

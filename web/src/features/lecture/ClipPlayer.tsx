@@ -183,7 +183,7 @@ export const ClipPlayer = forwardRef<ClipPlayerHandle, ClipPlayerProps>(function
           </select>
         </MediaControlBar>
         <MediaControlBar data-testid="scope-row">
-          <select className="ll-input max-w-[12rem]" value={choice} aria-label="Which part of the recording to play"
+          <select className="ll-input max-w-[10rem]" value={choice} aria-label="Which part of the recording to play"
             onChange={(e) => {
               mediaRef.current?.pause();
               setChoice(e.target.value);
@@ -199,9 +199,7 @@ export const ClipPlayer = forwardRef<ClipPlayerHandle, ClipPlayerProps>(function
             {clip ? `${formatMs(clip.start)} – ${formatMs(clip.end)}` : durationMs ? `0:00 – ${formatMs(durationMs)}` : "length unknown until loaded"}
           </span>
           {review && occurrence && (
-            <StatusChip tone={review.tone} title={`Basis: ${occurrence.basis.replace(/_/g, " ")}`}>
-              {occurrence.relation === "displayed_during" ? "Shown during" : "Discussed during"} · {review.label}
-            </StatusChip>
+            <StatusChip tone={review.tone} title={`${occurrence.relation === "displayed_during" ? "Shown during" : "Discussed during"} this interval · basis: ${occurrence.basis.replace(/_/g, " ")}`}>{review.label}</StatusChip>
           )}
           {occurrences.length === 0 && <StatusChip tone="unassessed">No timed match for this slide</StatusChip>}
           {occurrences.length === 0 && onAddMatch && <Button size="sm" onClick={onAddMatch} aria-label="Link this slide to the recording">Link this slide</Button>}
@@ -211,10 +209,10 @@ export const ClipPlayer = forwardRef<ClipPlayerHandle, ClipPlayerProps>(function
               <Repeat aria-hidden className="size-4" />
             </IconButton>
             <MediaMuteButton />
-            <MediaVolumeRange className="hidden 2xl:inline-block" />
-            <Button size="sm" variant="quiet" aria-expanded={details} aria-controls={detailsId} onClick={() => setDetails((d) => !d)}>
-              Details <ChevronDown aria-hidden className={cn("size-4", details && "rotate-180")} />
-            </Button>
+            <MediaVolumeRange className="hidden min-[2200px]:inline-block" />
+            <IconButton label="Details" size="sm" variant="quiet" aria-expanded={details} aria-controls={detailsId} onClick={() => setDetails((d) => !d)}>
+              <ChevronDown aria-hidden className={cn("size-4", details && "rotate-180")} />
+            </IconButton>
           </span>
         </MediaControlBar>
       </MediaController>
@@ -225,7 +223,8 @@ export const ClipPlayer = forwardRef<ClipPlayerHandle, ClipPlayerProps>(function
             <p className="text-muted">No reviewed or suggested interval links this slide to the recording. You can browse the whole recording; no start time is guessed.
               {onAddMatch ? " When you reach the part where this slide is discussed, you can record that yourself." : ""}</p>
           ) : (
-            <p className="text-muted">A segment is one bounded interval of the recording. Playback stops at its end unless Repeat is on.</p>
+            <p className="text-muted">{occurrence ? `${occurrence.relation === "displayed_during" ? "Shown during" : "Discussed during"} ${formatMs(occurrence.start_ms)}–${formatMs(occurrence.end_ms)} · ${review?.label ?? ""} · basis: ${occurrence.basis.replace(/_/g, " ")}. ` : ""}
+              A segment is one bounded interval of the recording. Playback stops at its end unless Repeat is on.</p>
           )}
           {occurrences.length > 0 && onAddMatch && <div><Button size="sm" variant="quiet" onClick={onAddMatch}>Add another link</Button></div>}
         </div>

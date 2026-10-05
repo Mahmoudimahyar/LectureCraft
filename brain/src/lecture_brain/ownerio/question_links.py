@@ -119,6 +119,7 @@ def build_question_bank(index: dict | None, inventory: dict, *, reviewed_collect
             unit_of[item["source_id"]] = lecture_id
     transcripts: dict[str, list[dict]] = {}
     sheets: dict[str, list[dict]] = {}
+    shown_decks = {(lecture.get("deck_choice") or {}).get("source_id") for lecture in inventory["lectures"]} - {None}
     for lecture in inventory["lectures"]:
         transcripts[lecture["lecture_id"]] = [i for s in lecture["sessions"] for i in s["items"] if i["kind"] == "lecture_transcript"]
         sheets[lecture["lecture_id"]] = [i for i in [*lecture["decks"], *lecture["extra_materials"]] if i["kind"] == "in_class_question_sheet"]
@@ -173,7 +174,10 @@ def build_question_bank(index: dict | None, inventory: dict, *, reviewed_collect
                                  note="A copy for reading. The original file remains the authoritative source.")
             else:
                 related_copy = dict(copy, note="A copy exists but has not been checked against the original" if related else "A file named by the catalog; the course index does not relate it to the original")
-        deck_pages = [a for a in anchors if a["kind"] == "pages" and a.get("lecture_id")]
+        for anchor in anchors:  # a page is a *slide* only when its file is the deck the unit is shown with
+            if anchor["kind"] == "pages":
+                anchor["on_displayed_deck"] = anchor.get("source_id") in shown_decks
+        deck_pages = [a for a in anchors if a["kind"] == "pages" and a["on_displayed_deck"]]
         questions[question["question_id"]] = {
             "question_id": question["question_id"], "version": question.get("version"), "collection": collection, "number": question.get("number"), "title": question.get("title"),
             "origin": question.get("origin"), "topic": question.get("topic"), "prompt_in_index": bool(question.get("prompt_in_index", bool(question.get("prompt")))),

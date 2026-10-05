@@ -181,7 +181,7 @@ export function TutorPanel({ courseId, lecture, page, slideRef, pinned, onUnpin,
         <NativeChip />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto" aria-label="Conversation on this lecture">
+      <div className="min-h-[12rem] flex-1 overflow-y-auto" aria-label="Conversation on this lecture">
         {thread.length === 0 ? <p className="text-muted">No questions or explanations on this lecture yet. Reading a slide is never counted as an assessment.</p> : (
           <>
             <label className="mb-2 flex items-center gap-2 text-sm"><input type="checkbox" className="size-4" checked={onlyThisSlide} onChange={(e) => setOnlyThisSlide(e.target.checked)} /> Only this slide</label>

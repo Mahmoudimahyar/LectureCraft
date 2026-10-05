@@ -8,7 +8,7 @@ const L1 = `/courses/${COURSE}/lectures/lecture-01`;
 const L2 = `/courses/${COURSE}/lectures/lecture-02`;
 
 /** Show a pane: a context-panel tab on wide screens, a single-pane tab on narrow ones. */
-async function pane(page: Page, name: "Slide" | "Tutor" | "Transcript" | "Sources"): Promise<void> {
+async function pane(page: Page, name: "Slide" | "Tutor" | "Transcript" | "This slide" | "Questions"): Promise<void> {
   if (name === "Slide" && !isNarrow(page)) return; // the slide is always visible on wide layouts
   await page.getByRole("tab", { name, exact: true }).click();
 }
@@ -43,11 +43,11 @@ test.describe("lecture workspace", () => {
     const width = () => page.getByTestId("slide-canvas").evaluate((c: HTMLCanvasElement) => c.getBoundingClientRect().width);
     const fit = await width();
     await page.getByRole("button", { name: "Zoom in" }).click();
-    await expect(page.getByText("125% of fit width")).toBeVisible();
+    await expect(page.getByTestId("slide-zoom")).toHaveText(/^125% of fit/);
     await expect.poll(width).toBeGreaterThan(fit * 1.2);
     await expectNoHorizontalOverflow(page);
-    await page.getByRole("button", { name: "Fit width" }).click();
-    await expect(page.getByText("100% of fit width")).toBeVisible();
+    await page.getByRole("button", { name: /^Fit (width|to window)$/ }).click(); // the whole slide in the stage on wide screens, the width on narrow ones
+    await expect(page.getByTestId("slide-zoom")).toHaveText(/^100% of fit/);
 
     // The readable text is a separate, labeled derivative — never a replacement for the original.
     await page.getByRole("button", { name: "Show readable text" }).click();
@@ -56,7 +56,9 @@ test.describe("lecture workspace", () => {
     await expect(readable).toContainText("Origin of replication");
 
     if (!isNarrow(page)) {
-      const navigator = page.getByRole("complementary", { name: "Slide navigator" });
+      const navigator = page.getByRole("complementary", { name: "Lecture outline" });
+      const closed = page.getByRole("button", { name: "Open lecture outline" });
+      if (await closed.isVisible()) await closed.click(); // the outline starts folded below 1600px wide
       await navigator.getByLabel("Find a slide").fill("marker");
       await expect(navigator.getByRole("listitem")).not.toHaveCount(4); // filtered by title and slide text
       await navigator.getByRole("button", { name: "Slide 4: Selectable marker" }).click();
@@ -83,7 +85,7 @@ test.describe("lecture workspace", () => {
   test("UI07 the recording plays only this slide's segment, never autoplays, and stops at the segment end", async ({ page }) => {
     await page.goto(`${L1}?page=3`);
     await expect(page.getByTestId("clip-label")).toContainText("0:30 – 0:45");
-    await expect(page.getByTestId("clip-player")).toContainText("Shown during · Reviewed link");
+    await expect(page.getByTestId("clip-player")).toContainText("Reviewed link");
     expect(await media(page).evaluate((m: HTMLMediaElement) => m.paused), "no autoplay").toBe(true);
 
     // Jump near the end of the segment and play: it must stop at 0:45 instead of running into the next slide.
@@ -161,7 +163,7 @@ test.describe("lecture workspace", () => {
 
   test("UI09 linked material says why it is linked and how precisely; restricted solutions stay closed until revealed", async ({ page }) => {
     await page.goto(`${L1}?page=2`);
-    await pane(page, "Sources");
+    await pane(page, "This slide");
     const related = page.getByRole("region", { name: "Connected material" });
     // A chapter-level relation is not dressed up as an exact page.
     await expect(related.getByRole("listitem")).toContainText("chapter-level reference — no exact page has been reviewed");
@@ -169,7 +171,7 @@ test.describe("lecture workspace", () => {
     await expect(page.getByRole("region", { name: "Questions on this slide" }).getByRole("link")).toHaveCount(2);
 
     await page.goto(`${L1}?page=3`);
-    await pane(page, "Sources");
+    await pane(page, "This slide");
     const exact = page.getByRole("region", { name: "Connected material" }).getByRole("listitem");
     await expect(exact).toContainText("Reviewed link");
     await expect(exact).toContainText(/location: .*34/);
@@ -244,7 +246,7 @@ test.describe("lecture workspace", () => {
     await expect(card.getByTestId("publication-line")).toContainText(/source annotation: (saved|already saved)/, { timeout: 20_000 });
     await settle(request);
     await page.reload();
-    await expect(page.getByTestId("clip-player")).toContainText("Shown during · Reviewed link");
+    await expect(page.getByTestId("clip-player")).toContainText("Reviewed link");
     await expect(page.getByTestId("clip-label")).toContainText(label);
     await page.getByRole("button", { name: "Edit match" }).click();
     await expect(dialog).toContainText(`revision ${revisionBefore + 1} · Reviewed link`);
@@ -282,6 +284,7 @@ test.describe("lecture workspace", () => {
     await expect(page.getByTestId("slide-canvas")).toHaveAttribute("data-rendered", String(slide));
     const player = page.getByTestId("clip-player");
     await expect(player).toContainText("No timed match for this slide");
+    await player.getByRole("button", { name: "Details" }).click(); // the explanation is optional detail, one line by default
     await expect(player).toContainText("no start time is guessed");
     await expect(page.getByTestId("clip-label")).toContainText("0:00 – 0:06"); // the whole recording, by default
     await page.getByTestId("clip-scrubber").fill("1000"); // listen to where the slide is discussed…
@@ -304,12 +307,14 @@ test.describe("lecture workspace", () => {
 
     await page.reload();
     await expect(page.getByTestId("clip-label")).toContainText("0:01 – 0:04");
-    await expect(player).toContainText("Shown during · Reviewed link");
+    await expect(player).toContainText("Reviewed link");
     await player.getByRole("button", { name: "Edit match" }).click();
     const edit = page.getByRole("dialog", { name: "Edit match" });
     await expect(edit).toContainText("revision 1 · Reviewed link");
     await expect(edit).toContainText("manual review");
     await page.keyboard.press("Escape");
+    await player.getByRole("button", { name: "Details" }).click();
+    await expect(page.getByTestId("transport-details")).toContainText("Shown during 0:01–0:04 · Reviewed link · basis: manual review");
     await expect(player.getByRole("button", { name: "Add another link" })).toBeVisible(); // a slide the lecturer returns to can have several
     // The other slide of this deck is untouched: nothing was inferred for it.
     const other = slide === 1 ? "Next slide" : "Previous slide";
@@ -335,7 +340,7 @@ test.describe("lecture workspace", () => {
     await settle(request);
 
     await page.reload();
-    await pane(page, "Sources");
+    await pane(page, "This slide");
     await expect(page.getByRole("region", { name: "Your notes on this slide" })).toContainText(text);
     // The note did not become an attempt, and no tutor turn was dispatched for it.
     const activity = await (await request.get("/api/activity")).json();

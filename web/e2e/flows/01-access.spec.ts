@@ -59,7 +59,7 @@ test.describe("workspace access", () => {
     await pair(page);
     await page.goto("/study");
     await expect(page.getByRole("heading", { name: "Study", level: 1 })).toBeVisible();
-    await expect(page.getByRole("listitem").filter({ has: page.getByRole("heading", { level: 2 }) })).toHaveCount(5);
+    await expect(page.getByRole("listitem").filter({ has: page.getByRole("heading", { level: 3 }) })).toHaveCount(5);
     await expect(page.getByText("reading or replaying a lecture is never treated as an assessment")).toBeVisible();
     // The course selector stays compact however long a course name is, so the header keeps to one row on wide screens.
     const selector = (await page.getByLabel("Active course").boundingBox())!;
@@ -73,9 +73,9 @@ test.describe("workspace access", () => {
 
     await page.getByRole("link", { name: "FIXTURE BE 505 - Molecular Systems (synthetic)" }).click();
     await expect(page).toHaveURL(/\/courses\/be505$/);
-    await expect(page.getByText("3 lecture units in the inventory")).toBeVisible();
+    await expect(page.getByText("4 lecture units in the inventory")).toBeVisible();
     // A lecture with no linked session says so instead of guessing a pairing by date.
-    await expect(page.getByText("No dated session is linked to this lecture by the course records (not guessed).")).toBeVisible();
+    await expect(page.getByText("No dated session is linked to this lecture by the course records (not guessed).").first()).toBeVisible(); // lecture 03 and lecture 04 have no linked session
     await expect(page.getByRole("region", { name: "Dated sessions without a recorded lecture link" })).toContainText("no pairing is assumed");
 
     await page.getByRole("link", { name: "Fixture Lecture 02 - Expression control" }).click();
@@ -179,10 +179,10 @@ test.describe("workspace access", () => {
     await page.goto(`/courses/${COURSE}/lectures/lecture-02?page=2`);
     await expect(page.getByTestId("slide-canvas")).toHaveAttribute("data-rendered", "2");
     const narrow = isNarrow(page);
-    if (narrow) await page.getByRole("tab", { name: "Tutor" }).click();
+    if (narrow) await page.getByRole("tab", { name: "Tutor", exact: true }).click();
     await page.locator("#tutor-composer").fill("draft that must survive a theme change");
     await expect(page.getByText("Draft saved on this device")).toBeVisible();
-    if (narrow) await page.getByRole("tab", { name: "Slide" }).click();
+    if (narrow) await page.getByRole("tab", { name: "Slide", exact: true }).click();
     await expect(page.getByTestId("slide-canvas")).toHaveAttribute("data-rendered", "2");
 
     const pixels = () => page.getByTestId("slide-canvas").evaluate((canvas: HTMLCanvasElement) => {
@@ -220,7 +220,7 @@ test.describe("workspace access", () => {
     await choose("Dark");
     await page.reload();
     expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBe("dark");
-    if (narrow) await page.getByRole("tab", { name: "Tutor" }).click();
+    if (narrow) await page.getByRole("tab", { name: "Tutor", exact: true }).click();
     await expect(page.locator("#tutor-composer")).toHaveValue("draft that must survive a theme change");
     await page.locator("#tutor-composer").fill("");
   });

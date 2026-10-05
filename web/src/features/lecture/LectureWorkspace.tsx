@@ -366,7 +366,7 @@ export function LectureWorkspace() {
   );
 
   const slideHeader = (
-    <div className="min-w-0 flex-1">
+    <div className="min-w-[min(100%,14rem)] flex-1">
       <h1 className="truncate text-lg font-bold" title={slide?.title ?? lecture.title}>{slide?.title ?? lecture.title}</h1>
       <p className="truncate text-sm text-muted">{lecture.deck ? <>{lecture.deck.filename} · deck version {lecture.deck.version_id ?? "not yet identified"}{lecture.deck.registration === "unregistered" && " · not registered by the course updater"}
         {lecture.deck_choice.basis === "this_request" && " · shown by your choice on this device"}</> : "No deck is shown"}</p>
@@ -382,9 +382,9 @@ export function LectureWorkspace() {
         </nav>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1" role="group" aria-label="Slide">
-            <IconButton size="sm" label="Previous slide" onClick={() => goTo(page - 1)} disabled={page <= 1}><ChevronLeft aria-hidden className="size-4" /></IconButton>
-            <p className="min-w-[7.5rem] text-center font-medium tabular-nums" aria-live="polite" data-testid="slide-position">{total ? `Slide ${page} of ${total}` : "Slide count unavailable"}</p>
-            <IconButton size="sm" label="Next slide" onClick={() => goTo(page + 1)} disabled={!total || page >= total}><ChevronRight aria-hidden className="size-4" /></IconButton>
+            <IconButton label="Previous slide" onClick={() => goTo(page - 1)} disabled={page <= 1}><ChevronLeft aria-hidden className="size-4" /></IconButton>
+            <p className="whitespace-nowrap text-center font-medium tabular-nums wide:min-w-[7.5rem]" aria-live="polite" data-testid="slide-position">{total ? `Slide ${page} of ${total}` : "Slide count unavailable"}</p>
+            <IconButton label="Next slide" onClick={() => goTo(page + 1)} disabled={!total || page >= total}><ChevronRight aria-hidden className="size-4" /></IconButton>
           </div>
           <Button size="sm" onClick={() => setNoteOpen(true)} disabled={!slideRef}><NotebookPen aria-hidden className="size-4" /> Save note</Button>
           <Button size="sm" onClick={finishSession}>Finish session</Button>
@@ -451,8 +451,8 @@ export function LectureWorkspace() {
           <ClipPlayer ref={playerRef} recordings={lecture.recordings} occurrences={occurrences} page={page} onTime={(ms, playing) => setPosition({ ms, playing })} onEditMatch={setEditing} onAddMatch={canAddMatch ? startAddMatch : undefined} announce={app.announce} />
 
           <div className="ll-stage-extras flex flex-col gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              {pdfUrl && <Button size="sm" variant="quiet" aria-expanded={readable} onClick={() => setReadable((r) => !r)}>{readable ? "Hide" : "Show"} readable text</Button>}
+            <div className="ll-chip-row">
+              {pdfUrl && <Button size="sm" variant="quiet" aria-expanded={readable} onClick={() => setReadable((r) => !r)} className="shrink-0">{readable ? "Hide" : "Show"} readable text</Button>}
               {alignment && <StatusChip tone={dispositionLabel(alignment.status === "suggested" ? "links_pending_review" : "").tone}>{alignment.status === "suggested" ? "Some links on this lecture are suggestions" : `Alignment: ${alignment.status.replace(/_/g, " ")}`}</StatusChip>}
               {slide && (slide.questions.length > 0 || slide.concepts.length > 0 || slide.related.length > 0) ? (
                 <button type="button" className="ll-chip hover:underline" onClick={() => update({ panel: "sources" }, true)} data-testid="slide-links-chip">

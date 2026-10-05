@@ -1,44 +1,848 @@
 {
   "purpose": "Which real local checks stand behind each task's LOCAL_TESTED receipt (python tools/ci.py --task LLxxx). Each entry is [stage, extra arguments]. A passing check is evidence for the local facet only; it never clears a live gate.",
-  "flow_projects": ["--project=flows-desktop-light", "--project=flows-phone-dark", "--no-deps"],
+  "flow_projects": [
+    "--project=flows-desktop-light",
+    "--project=flows-phone-dark",
+    "--no-deps"
+  ],
   "tasks": {
-    "LL001": [["kit", []]],
-    "LL002": [["brain", ["brain/tests/test_dependency_locks.py"]], ["tools", []]],
-    "LL003": [["brain", ["brain/tests/test_ownerio.py"]]],
-    "LL004": [["brain", ["brain/tests/test_contracts.py"]], ["web-types", []], ["web-unit", ["tests/contracts"]]],
-    "LL005": [["web-types", []], ["e2e", ["stories", "flows/06-global", "--project=stories-light", "--project=stories-dark", "@flows"]]],
-    "LL006": [["brain", ["brain/tests/test_capture.py"]], ["web-unit", ["tests/lib/lib.test.ts"]]],
-    "LL007": [["brain", ["brain/tests/test_journal.py"]]],
-    "LL008": [["brain", ["brain/tests/test_writer.py"]]],
-    "LL009": [["brain", ["brain/tests/test_ownerio.py", "brain/tests/test_projections.py", "brain/tests/test_boundaries.py"]]],
-    "LL010": [["e2e", ["flows/01-access", "@flows"]]],
-    "LL011": [["e2e", ["flows/02-lecture", "-g", "UI06|UI09", "@flows"]]],
-    "LL012": [["e2e", ["flows/02-lecture", "-g", "UI07|UI08", "@flows"]]],
-    "LL013": [["brain", ["brain/tests/test_annotations.py"]], ["e2e", ["flows/02-lecture", "-g", "UI10|UI18", "@flows"]]],
-    "LL014": [["brain", ["brain/tests/test_preparation.py", "brain/tests/test_api.py"]]],
-    "LL015": [["brain", ["brain/tests/test_preparation.py"]]],
-    "LL016": [["brain", ["brain/tests/test_projections.py"]], ["e2e", ["flows/04-progress-review", "-g", "UI19", "@flows"]]],
-    "LL017": [["brain", ["brain/tests/test_transport.py"]], ["web-unit", ["tests/lib/lib.test.ts"]]],
-    "LL018": [["brain", ["brain/tests/test_native.py", "brain/tests/test_boundaries.py", "brain/tests/test_pilot.py"]]],
-    "LL019": [["brain", ["brain/tests/test_native.py"]]],
-    "LL020": [["brain", ["brain/tests/test_transport.py"]], ["web-unit", ["tests/lib/drive.test.ts"]]],
-    "LL021": [["brain", ["brain/tests/test_coordinator.py", "brain/tests/test_api.py", "brain/tests/test_pilot.py"]]],
-    "LL022": [["e2e", ["flows/03-tutoring", "-g", "UI11|UI12", "@flows"]]],
-    "LL023": [["e2e", ["flows/03-tutoring", "-g", "UI13|UI15", "@flows"]]],
-    "LL024": [["e2e", ["flows/03-tutoring", "-g", "UI14", "@flows"]]],
-    "LL025": [["brain", ["brain/tests/test_ops.py"]]],
-    "LL026": [["e2e", ["flows/03-tutoring", "-g", "UI16", "@flows"]]],
-    "LL027": [["brain", ["brain/tests/test_coordinator.py", "-k", "dispute or capture_correction"]], ["e2e", ["flows/03-tutoring", "-g", "UI17", "@flows"]]],
-    "LL028": [["e2e", ["flows/04-progress-review", "-g", "UI22|UI23", "@flows"]]],
-    "LL029": [["brain", ["brain/tests/test_review_resume.py"]], ["e2e", ["flows/04-progress-review", "-g", "UI24", "@flows"]]],
-    "LL030": [["brain", ["brain/tests/test_projections.py"]], ["e2e", ["flows/03-tutoring", "flows/04-progress-review", "-g", "UI13|UI17|UI20|UI21", "@flows"]]],
-    "LL031": [["brain", ["brain/tests/test_review_resume.py"]], ["e2e", ["flows/04-progress-review", "flows/05-operations", "-g", "UI26|UI31", "@flows"]]],
-    "LL032": [["brain", ["brain/tests/test_ops.py"]], ["e2e", ["flows/05-operations", "-g", "UI30", "@flows"]]],
-    "LL033": [["brain", ["brain/tests/test_ops.py", "brain/tests/test_api.py", "brain/tests/test_boundaries.py"]], ["e2e", ["flows/05-operations", "-g", "UI25|UI27|UI29|UI32", "@flows"]]],
-    "LL034": [["tools", []], ["e2e", []]],
-    "LL035": [["brain", ["brain/tests/test_ops.py", "brain/tests/test_api.py", "brain/tests/test_preparation.py"]]],
-    "LL036": [["brain", ["brain/tests/test_ops.py", "brain/tests/test_journal.py"]]],
-    "LL037": [["kit", []], ["tools", []], ["web-types", []]],
-    "LL038": [["tools", []]]
-  }
+    "LL001": [
+      [
+        "kit",
+        []
+      ]
+    ],
+    "LL002": [
+      [
+        "brain",
+        [
+          "brain/tests/test_dependency_locks.py"
+        ]
+      ],
+      [
+        "tools",
+        []
+      ]
+    ],
+    "LL003": [
+      [
+        "brain",
+        [
+          "brain/tests/test_ownerio.py"
+        ]
+      ]
+    ],
+    "LL004": [
+      [
+        "brain",
+        [
+          "brain/tests/test_contracts.py"
+        ]
+      ],
+      [
+        "web-types",
+        []
+      ],
+      [
+        "web-unit",
+        [
+          "tests/contracts"
+        ]
+      ]
+    ],
+    "LL005": [
+      [
+        "web-types",
+        []
+      ],
+      [
+        "e2e",
+        [
+          "stories",
+          "flows/06-global",
+          "flows/07-remediation",
+          "--project=stories-light",
+          "--project=stories-dark",
+          "@flows"
+        ]
+      ]
+    ],
+    "LL006": [
+      [
+        "brain",
+        [
+          "brain/tests/test_capture.py"
+        ]
+      ],
+      [
+        "web-unit",
+        [
+          "tests/lib/lib.test.ts"
+        ]
+      ]
+    ],
+    "LL007": [
+      [
+        "brain",
+        [
+          "brain/tests/test_journal.py"
+        ]
+      ]
+    ],
+    "LL008": [
+      [
+        "brain",
+        [
+          "brain/tests/test_writer.py"
+        ]
+      ]
+    ],
+    "LL009": [
+      [
+        "brain",
+        [
+          "brain/tests/test_ownerio.py",
+          "brain/tests/test_projections.py",
+          "brain/tests/test_boundaries.py",
+          "brain/tests/test_question_links.py",
+          "brain/tests/test_question_bank.py"
+        ]
+      ]
+    ],
+    "LL010": [
+      [
+        "e2e",
+        [
+          "flows/01-access",
+          "@flows"
+        ]
+      ]
+    ],
+    "LL011": [
+      [
+        "e2e",
+        [
+          "flows/02-lecture",
+          "flows/07-remediation",
+          "-g",
+          "UI06|UI09|R1-U2",
+          "@flows"
+        ]
+      ]
+    ],
+    "LL012": [
+      [
+        "e2e",
+        [
+          "flows/02-lecture",
+          "flows/07-remediation",
+          "-g",
+          "UI07|UI08|R1-U3|R1-U4|R1-U7",
+          "@flows"
+        ]
+      ]
+    ],
+    "LL013": [
+      [
+        "brain",
+        [
+          "brain/tests/test_annotations.py"
+        ]
+      ],
+      [
+        "e2e",
+        [
+          "flows/02-lecture",
+          "-g",
+          "UI10|UI18",
+          "@flows"
+        ]
+      ]
+    ],
+    "LL014": [
+      [
+        "brain",
+        [
+          "brain/tests/test_preparation.py",
+          "brain/tests/test_api.py"
+        ]
+      ]
+    ],
+    "LL015": [
+      [
+        "brain",
+        [
+          "brain/tests/test_preparation.py",
+          "brain/tests/test_derived.py"
+        ]
+      ]
+    ],
+    "LL016": [
+      [
+        "brain",
+        [
+          "brain/tests/test_projections.py",
+          "brain/tests/test_evidence_outline.py"
+        ]
+      ],
+      [
+        "e2e",
+        [
+          "flows/04-progress-review",
+          "flows/07-remediation",
+          "-g",
+          "UI19|R1-G",
+          "@flows"
+        ]
+      ]
+    ],
+    "LL017": [
+      [
+        "brain",
+        [
+          "brain/tests/test_transport.py"
+        ]
+      ],
+      [
+        "web-unit",
+        [
+          "tests/lib/lib.test.ts"
+        ]
+      ]
+    ],
+    "LL018": [
+      [
+        "brain",
+        [
+          "brain/tests/test_native.py",
+          "brain/tests/test_boundaries.py",
+          "brain/tests/test_pilot.py"
+        ]
+      ]
+    ],
+    "LL019": [
+      [
+        "brain",
+        [
+          "brain/tests/test_native.py"
+        ]
+      ]
+    ],
+    "LL020": [
+      [
+        "brain",
+        [
+          "brain/tests/test_transport.py"
+        ]
+      ],
+      [
+        "web-unit",
+        [
+          "tests/lib/drive.test.ts"
+        ]
+      ]
+    ],
+    "LL021": [
+      [
+        "brain",
+        [
+          "brain/tests/test_coordinator.py",
+          "brain/tests/test_api.py",
+          "brain/tests/test_pilot.py"
+        ]
+      ]
+    ],
+    "LL022": [
+      [
+        "e2e",
+        [
+          "flows/03-tutoring",
+          "-g",
+          "UI11|UI12",
+          "@flows"
+        ]
+      ],
+      [
+        "brain",
+        [
+          "brain/tests/test_policy.py"
+        ]
+      ]
+    ],
+    "LL023": [
+      [
+        "e2e",
+        [
+          "flows/03-tutoring",
+          "-g",
+          "UI13|UI15",
+          "@flows"
+        ]
+      ],
+      [
+        "brain",
+        [
+          "brain/tests/test_policy.py",
+          "brain/tests/test_question_links.py",
+          "-k",
+          "segment or guidance or policy"
+        ]
+      ]
+    ],
+    "LL024": [
+      [
+        "e2e",
+        [
+          "flows/03-tutoring",
+          "-g",
+          "UI14",
+          "@flows"
+        ]
+      ]
+    ],
+    "LL025": [
+      [
+        "brain",
+        [
+          "brain/tests/test_ops.py"
+        ]
+      ]
+    ],
+    "LL026": [
+      [
+        "e2e",
+        [
+          "flows/03-tutoring",
+          "-g",
+          "UI16",
+          "@flows"
+        ]
+      ]
+    ],
+    "LL027": [
+      [
+        "brain",
+        [
+          "brain/tests/test_coordinator.py",
+          "-k",
+          "dispute or capture_correction"
+        ]
+      ],
+      [
+        "e2e",
+        [
+          "flows/03-tutoring",
+          "-g",
+          "UI17",
+          "@flows"
+        ]
+      ]
+    ],
+    "LL028": [
+      [
+        "e2e",
+        [
+          "flows/04-progress-review",
+          "flows/07-remediation",
+          "-g",
+          "UI22|UI23|R1-Q",
+          "@flows"
+        ]
+      ]
+    ],
+    "LL029": [
+      [
+        "brain",
+        [
+          "brain/tests/test_review_resume.py"
+        ]
+      ],
+      [
+        "e2e",
+        [
+          "flows/04-progress-review",
+          "-g",
+          "UI24",
+          "@flows"
+        ]
+      ]
+    ],
+    "LL030": [
+      [
+        "brain",
+        [
+          "brain/tests/test_projections.py",
+          "brain/tests/test_evidence_outline.py"
+        ]
+      ],
+      [
+        "e2e",
+        [
+          "flows/03-tutoring",
+          "flows/04-progress-review",
+          "flows/07-remediation",
+          "-g",
+          "UI13|UI17|UI20|UI21|R1-F",
+          "@flows"
+        ]
+      ]
+    ],
+    "LL031": [
+      [
+        "brain",
+        [
+          "brain/tests/test_review_resume.py"
+        ]
+      ],
+      [
+        "e2e",
+        [
+          "flows/04-progress-review",
+          "flows/05-operations",
+          "-g",
+          "UI26|UI31",
+          "@flows"
+        ]
+      ]
+    ],
+    "LL032": [
+      [
+        "brain",
+        [
+          "brain/tests/test_ops.py"
+        ]
+      ],
+      [
+        "e2e",
+        [
+          "flows/05-operations",
+          "-g",
+          "UI30",
+          "@flows"
+        ]
+      ]
+    ],
+    "LL033": [
+      [
+        "brain",
+        [
+          "brain/tests/test_ops.py",
+          "brain/tests/test_api.py",
+          "brain/tests/test_boundaries.py"
+        ]
+      ],
+      [
+        "e2e",
+        [
+          "flows/05-operations",
+          "-g",
+          "UI25|UI27|UI29|UI32",
+          "@flows"
+        ]
+      ]
+    ],
+    "LL034": [
+      [
+        "tools",
+        []
+      ],
+      [
+        "e2e",
+        []
+      ]
+    ],
+    "LL035": [
+      [
+        "brain",
+        [
+          "brain/tests/test_ops.py",
+          "brain/tests/test_api.py",
+          "brain/tests/test_preparation.py"
+        ]
+      ]
+    ],
+    "LL036": [
+      [
+        "brain",
+        [
+          "brain/tests/test_ops.py",
+          "brain/tests/test_journal.py"
+        ]
+      ]
+    ],
+    "LL037": [
+      [
+        "kit",
+        []
+      ],
+      [
+        "tools",
+        []
+      ],
+      [
+        "web-types",
+        []
+      ]
+    ],
+    "LL038": [
+      [
+        "tools",
+        []
+      ]
+    ]
+  },
+  "input_scopes": {
+    "LL003": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py"
+    ],
+    "LL004": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py",
+      "web/*"
+    ],
+    "LL005": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py",
+      "web/*"
+    ],
+    "LL006": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py",
+      "web/*"
+    ],
+    "LL007": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py"
+    ],
+    "LL008": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py"
+    ],
+    "LL009": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py"
+    ],
+    "LL010": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py",
+      "web/*"
+    ],
+    "LL011": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py",
+      "web/*"
+    ],
+    "LL012": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py",
+      "web/*"
+    ],
+    "LL013": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py",
+      "web/*"
+    ],
+    "LL014": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py"
+    ],
+    "LL015": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py"
+    ],
+    "LL016": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py",
+      "web/*"
+    ],
+    "LL017": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py",
+      "web/*"
+    ],
+    "LL018": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py"
+    ],
+    "LL019": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py"
+    ],
+    "LL020": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py",
+      "web/*"
+    ],
+    "LL021": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py"
+    ],
+    "LL022": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py",
+      "web/*"
+    ],
+    "LL023": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py",
+      "web/*"
+    ],
+    "LL024": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py",
+      "web/*"
+    ],
+    "LL025": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py"
+    ],
+    "LL026": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py",
+      "web/*"
+    ],
+    "LL027": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py",
+      "web/*"
+    ],
+    "LL028": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py",
+      "web/*"
+    ],
+    "LL029": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py",
+      "web/*"
+    ],
+    "LL030": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py",
+      "web/*"
+    ],
+    "LL031": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py",
+      "web/*"
+    ],
+    "LL032": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py",
+      "web/*"
+    ],
+    "LL033": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py",
+      "web/*"
+    ],
+    "LL035": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py"
+    ],
+    "LL036": [
+      "brain/*",
+      "contracts/*",
+      "fixtures/*",
+      "config/defaults.json",
+      "config/facet-mapping.json",
+      "config/task-checks.json",
+      "config/workspace.example.json",
+      "tools/ci.py"
+    ]
+  },
+  "input_scopes_note": "D50: a receipt recorded with `build_board.py test <task> --scoped` is bound to these inputs and stays current while they are unchanged. Tasks whose checks include the kit or tools stages have no scope and keep the whole-tree rule."
 }

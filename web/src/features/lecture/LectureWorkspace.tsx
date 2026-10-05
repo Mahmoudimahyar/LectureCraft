@@ -99,14 +99,23 @@ function Outline({ slides, page, pdfUrl, thumbs, onSelect, lectureQuestions, onS
   const activeRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLOListElement>(null);
   useEffect(() => {
-    // Keep the current slide in view by scrolling the outline's own list only — never the page.
+    // Keep the current slide in view by scrolling the outline's own list only — never the page. The list's height
+    // changes as the workspace lays out, so the position is checked again whenever the list is resized.
     const list = listRef.current;
-    const node = activeRef.current;
-    if (!list || !node || thumbs) return;
-    const top = node.offsetTop - list.offsetTop;
-    if (top < list.scrollTop) list.scrollTop = top;
-    else if (top + node.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = top + node.offsetHeight - list.clientHeight;
-  }, [page, thumbs]);
+    if (!list || thumbs) return;
+    const adjust = () => {
+      const node = activeRef.current;
+      if (!node) return;
+      const top = node.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop; // position inside the list's own content
+      const room = 6; // keeps the row's focus ring inside the visible part
+      if (top - room < list.scrollTop) list.scrollTop = Math.max(0, top - room);
+      else if (top + node.offsetHeight + room > list.scrollTop + list.clientHeight) list.scrollTop = top + node.offsetHeight + room - list.clientHeight;
+    };
+    adjust();
+    const observer = new ResizeObserver(adjust);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [page, thumbs, slides.length]);
   return (
     <>
       <ol ref={listRef} className="relative min-h-0 flex-1 overflow-y-auto pr-1" aria-label="Slides">
@@ -456,14 +465,14 @@ export function LectureWorkspace() {
               {alignment && <StatusChip tone={dispositionLabel(alignment.status === "suggested" ? "links_pending_review" : "").tone}>{alignment.status === "suggested" ? "Some links on this lecture are suggestions" : `Alignment: ${alignment.status.replace(/_/g, " ")}`}</StatusChip>}
               {slide && (slide.questions.length > 0 || slide.concepts.length > 0 || slide.related.length > 0) ? (
                 <button type="button" className="ll-chip hover:underline" onClick={() => update({ panel: "sources" }, true)} data-testid="slide-links-chip">
-                  On this slide: {[slide.questions.length ? `${slide.questions.length} question${slide.questions.length === 1 ? "" : "s"}` : "", slide.concepts.length ? `${slide.concepts.length} concept${slide.concepts.length === 1 ? "" : "s"}` : "",
-                    slide.related.length ? `${slide.related.length} linked source${slide.related.length === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ")}
+                  <span>On this slide: {[slide.questions.length ? `${slide.questions.length} question${slide.questions.length === 1 ? "" : "s"}` : "", slide.concepts.length ? `${slide.concepts.length} concept${slide.concepts.length === 1 ? "" : "s"}` : "",
+                    slide.related.length ? `${slide.related.length} linked source${slide.related.length === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ")}</span>
                 </button>
               ) : lectureQuestionCount > 0 ? (
-                <button type="button" className="ll-chip hover:underline" onClick={() => update({ panel: "questions" }, true)} data-testid="slide-links-chip">No question names this slide · {lectureQuestionCount} lecture question{lectureQuestionCount === 1 ? "" : "s"}</button>
+                <button type="button" className="ll-chip hover:underline" onClick={() => update({ panel: "questions" }, true)} data-testid="slide-links-chip"><span>No question names this slide · {lectureQuestionCount} lecture question{lectureQuestionCount === 1 ? "" : "s"}</span></button>
               ) : null}
               {lecture.other_materials.length > 0 && (
-                <button type="button" className="ll-chip hover:underline" onClick={() => update({ panel: "sources" }, true)}>{lecture.other_materials.length} other file{lecture.other_materials.length === 1 ? "" : "s"} in this lecture unit</button>
+                <button type="button" className="ll-chip hover:underline" onClick={() => update({ panel: "sources" }, true)}><span>{lecture.other_materials.length} other file{lecture.other_materials.length === 1 ? "" : "s"} in this lecture unit</span></button>
               )}
               {lecture.deck_choice.basis === "this_request" && <Link className="ll-chip hover:underline" to={`/courses/${courseId}/lectures/${lectureId}`} onClick={() => store(`ll.deck.${courseId}.${lectureId}`, "")}>Choose another file</Link>}
             </div>

@@ -283,6 +283,27 @@ test.describe("R1 remediation checks", () => {
     await expect(ori).toContainText("prior exposure: seen exact");
   });
 
+  test("R1-U2 the lecture outline keeps the current slide in view inside its own list", async ({ page }) => {
+    await page.setViewportSize({ width: 1700, height: 430 }); // a short window: the outline's list must scroll, the page must not
+    await page.goto(`${L1}?page=4`);
+    await rendered(page, 4);
+    const outline = page.getByTestId("lecture-outline");
+    const current = outline.getByRole("button", { name: /^Slide 4:/ });
+    await expect(current).toHaveAttribute("aria-current", "true");
+    const inside = () => current.evaluate((node) => {
+      const list = node.closest("ol")!.getBoundingClientRect();
+      const row = node.getBoundingClientRect();
+      return row.top >= list.top - 1 && row.bottom <= list.bottom + 1;
+    });
+    await expect.poll(inside, { message: "the current slide's row is inside the visible part of the outline" }).toBe(true);
+    await page.getByRole("button", { name: "Previous slide" }).click();
+    await page.getByRole("button", { name: "Previous slide" }).click();
+    await page.getByRole("button", { name: "Previous slide" }).click();
+    await expect(outline.getByRole("button", { name: /^Slide 1:/ })).toHaveAttribute("aria-current", "true");
+    await expect.poll(() => outline.getByRole("button", { name: /^Slide 1:/ }).evaluate((node) => node.getBoundingClientRect().top >= node.closest("ol")!.getBoundingClientRect().top - 1)).toBe(true);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  });
+
   test("R1-U7 a draft, the media position and the slide's colours survive theme, outline and panel changes", async ({ page }) => {
     await page.setViewportSize({ width: 1680, height: 1000 });
     await page.goto(`${L1}?page=2`);

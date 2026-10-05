@@ -414,8 +414,14 @@ body {
     overflow: hidden;
   }
   html:not([data-text-scale="large"]) .ll-chip-row > .ll-chip {
-    display: inline-block;
     flex: 0 1 auto;
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+  html:not([data-text-scale="large"]) .ll-chip-row > .ll-chip > svg {
+    flex-shrink: 0;
+  }
+  html:not([data-text-scale="large"]) .ll-chip-row > .ll-chip > span {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

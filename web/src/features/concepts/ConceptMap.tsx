@@ -10,11 +10,11 @@ import { LocateFixed, Minus, Plus } from "lucide-react";
 import { ErrorGlyph, KindGlyph } from "@/components/glyphs";
 import { StateLabel } from "@/components/labels";
 import { Button, IconButton, Skeleton, cn } from "@/components/ui";
-import { EDGE_LEGEND, GRAPH_NODE_KIND_LABEL, countLabel, type EdgeLegendKind } from "@/lib/labels";
+import { EDGE_LEGEND, GRAPH_NODE_KIND_LABEL, TIE_KIND, countLabel, unlistedLabel, type EdgeLegendKind } from "@/lib/labels";
 import { useConceptGraph } from "@/lib/queries";
 import { conceptGraphErrorCode } from "@/lib/r2";
 import type { ConceptGraphScopeParam, ConceptGraphView, GraphEdgeFamily, GraphNodeKind, GraphScopeKind } from "@/lib/types";
-import { wherePhrase, type TreePlace } from "./ConceptTree";
+import { SuggestedOnly, wherePhrase, type TreePlace } from "./ConceptTree";
 import {
   MAP_ZOOM, ONE_COLUMN_BELOW, RANK_LABEL, buildMapModel, centreOn, clampViewport, columnGroups, isInView, layoutMap, mapNodeWidth, moreSides, topicNodeWidth, zoomAbout,
   type MapEdgeModel, type MapLayout, type MapModel, type MapNodeModel, type MapPane,
@@ -129,6 +129,7 @@ function Card({ node }: { node: MapNodeModel }) {
         <span className={cn("break-words", node.selected && "font-semibold text-accent-text", outside && "text-muted")}><span className="sr-only">{GRAPH_NODE_KIND_LABEL[kind] ?? kind}:</span>{" "}{node.label}</span>
         {node.second && <span className={cn("col-start-2", node.selected ? "text-ink" : "text-muted")}>{node.second}</span>}
         {where && <span className={cn("col-start-2", node.selected ? "text-ink" : "text-muted")}>{where}</span>}
+        {node.tie === "agent_inferred" && <SuggestedOnly className={cn("col-start-2 flex", node.selected ? "text-ink" : "text-muted")} />}
         {node.evidence && <StateLabel evidence={node.evidence} quiet={!node.selected} className="col-start-2 flex" />}
       </button>
       {node.action?.kind === "criteria" && (
@@ -174,7 +175,11 @@ function Lines({ model, layout, hot }: { model: MapModel; layout: MapLayout; hot
     </>
   );
 }
-const edgeTitle = (edge: MapEdgeModel): string => `${EDGE_LEGEND[edge.legend].label}${edge.label ? `: ${edge.label}` : ""}. From ${edge.provenance}.`;
+/** A line's tooltip: what kind of line it is, the owner's relation or the tie it stands for, and where it comes from (9.9). */
+export const edgeTitle = (edge: Pick<MapEdgeModel, "legend" | "label" | "tie" | "provenance">): string => {
+  const said = edge.label ?? (edge.tie ? TIE_KIND[edge.tie]?.label ?? unlistedLabel(edge.tie) : null);
+  return `${EDGE_LEGEND[edge.legend].label}${said ? `: ${said}` : ""}. From ${edge.provenance}.`;
+};
 
 interface FlowHandle {
   zoom: number;

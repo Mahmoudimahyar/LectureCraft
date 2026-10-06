@@ -13,12 +13,12 @@ import { Link } from "react-router";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { KindGlyph } from "@/components/glyphs";
-import { StateLabel } from "@/components/labels";
+import { BasisLabel, StateLabel } from "@/components/labels";
 import { cn, Skeleton } from "@/components/ui";
 import { apiGet } from "@/lib/api";
-import { GRAPH_NODE_KIND_LABEL, countLabel, nodeCountsLabel, whereLabel } from "@/lib/labels";
+import { GRAPH_NODE_KIND_LABEL, TIE_KIND, countLabel, nodeCountsLabel, whereLabel } from "@/lib/labels";
 import { whereLine } from "@/lib/r2";
-import type { GraphScopeKind, OutlineRow, OutlineView, SlidePosition, TieWhere } from "@/lib/types";
+import type { AnchorTieKind, GraphScopeKind, OutlineRow, OutlineView, SlidePosition, TieWhere } from "@/lib/types";
 import { NO_QUESTION, UNFILED_ID, UNFILED_LABEL } from "./map-model";
 
 /** One level of the scoped outline. The same cache entries serve the explorer and the Concepts tab. */
@@ -47,27 +47,49 @@ export function wherePhrase(entry: { where?: TieWhere | null; support_pages?: re
   return inGroup ?? whereLabel(entry.where, null);
 }
 
+/**
+ * The basis label of an entry that only a suggested link ties to the slide: the dashed square with "Suggested link",
+ * so a suggestion is never listed as the course's own anchor. A course anchor (exact or stated) adds no label here
+ * (the detail's Sources tab words every tie), and a tie that is not known claims nothing.
+ */
+export function SuggestedOnly({ className }: { className?: string }) {
+  return <BasisLabel basis="suggested" className={className}>{TIE_KIND.agent_inferred.label}</BasisLabel>;
+}
+
 export interface RowLines {
   /** Counts of a topic or a concept ("2 concepts, 4 skills, 6 questions"). */
   counts: string | null;
   /** Slide scope: where the row's support is. */
   where: string | null;
+  /** Slide scope: a suggested link is all that ties the row to the slide. */
+  suggested: boolean;
   /** A plain statement about the row: no question, already on this branch, which skill a criterion assesses. */
   note: string | null;
 }
+export interface RowContext {
+  scopeKind: GraphScopeKind;
+  place?: TreePlace | null;
+  conceptCounts?: ReadonlyMap<string, number> | null;
+  /** Slide scope: the strongest tie of each node the slide supports (from the scope's graph). */
+  ties?: ReadonlyMap<string, AnchorTieKind> | null;
+  /** Slide scope: the questions tied to the slide by a suggested link only (from the scoped outline). */
+  suggestedQuestions?: ReadonlySet<string> | null;
+}
 /** The second line of a row, in words. Evidence is drawn apart (a glyph with words). Nothing here is derived from a name or an id. */
-export function rowLines(row: OutlineRow, context: { scopeKind: GraphScopeKind; place?: TreePlace | null; conceptCounts?: ReadonlyMap<string, number> | null }): RowLines {
+export function rowLines(row: OutlineRow, context: RowContext): RowLines {
   const grouping = row.kind === "topic" || row.kind === "concept";
   const held = row.kind === "topic" ? context.conceptCounts?.get(row.node_id) : undefined;
   const counts = grouping
     ? [held !== undefined ? countLabel(held, "concept") : null, nodeCountsLabel({ skills: row.skills ?? null, questions: row.questions ?? null }) || null].filter((part): part is string => part !== null).join(", ") || null
     : null;
-  const where = context.scopeKind === "slide" ? wherePhrase(row, context.place) : null;
+  const slide = context.scopeKind === "slide";
+  const tie = context.ties?.get(row.node_id) ?? (row.kind === "question" && context.suggestedQuestions?.has(row.node_id) ? "agent_inferred" : null);
+  const where = slide ? wherePhrase(row, context.place) : null;
   const note = row.repeated_on_path ? "Already on this branch"
     : row.kind === "skill" && !row.has_children ? NO_QUESTION[context.scopeKind]
     : row.kind === "criterion" && row.on_parent_skill === false ? "Assesses another skill of this question"
     : null;
-  return { counts, where, note };
+  return { counts, where, suggested: slide && tie === "agent_inferred", note };
 }
 
 /** The next row, after `from`, whose name starts with what was typed; wraps round; -1 when none does. */
@@ -97,6 +119,8 @@ export interface ConceptTreeProps {
   linkState?: unknown;
   place?: TreePlace | null;
   conceptCounts?: ReadonlyMap<string, number> | null;
+  /** Slide scope: the strongest tie of each node the slide supports, so a row can say that a suggested link is all there is. */
+  ties?: ReadonlyMap<string, AnchorTieKind> | null;
   /** The deepest kind listed. The Concepts tab stops at skills. */
   deepest?: "skill" | "criterion";
   /** Kinds whose rows start open. */
@@ -116,6 +140,8 @@ interface TreeContext extends Required<Pick<ConceptTreeProps, "courseId" | "scop
   linkState?: unknown;
   place: TreePlace | null;
   conceptCounts: ReadonlyMap<string, number> | null;
+  ties: ReadonlyMap<string, AnchorTieKind> | null;
+  suggestedQuestions: ReadonlySet<string> | null;
   maxDepth: number;
   isOpen: (id: string, kind: OutlineRow["kind"] | "group") => boolean;
   toggle: (id: string, open: boolean) => void;
@@ -177,6 +203,7 @@ function Row({ row, tree, level, position, setSize }: { row: OutlineRow; tree: T
       </span>
       <span id={metaId} className={cn("block text-ui", selected ? "text-ink" : "text-muted")}>
         {second && <span className="block">{second}</span>}
+        {lines.suggested && <SuggestedOnly className="flex" />}
         {lines.note && <span className="block">{lines.note}</span>}
         {showEvidence && <StateLabel evidence={row.evidence} quiet={!selected} className="flex" />}
       </span>
@@ -224,8 +251,10 @@ function Unfiled({ rows, tree, position, setSize }: { rows: OutlineRow[]; tree: 
   );
 }
 
-export function ConceptTree({ courseId, scope, scopeKind, selected = null, onSelect, hrefFor, linkState, place = null, conceptCounts = null, deepest = "criterion", openKinds, reveal, label, empty, testId }: ConceptTreeProps) {
+export function ConceptTree({ courseId, scope, scopeKind, selected = null, onSelect, hrefFor, linkState, place = null, conceptCounts = null, ties = null, deepest = "criterion", openKinds, reveal, label, empty, testId }: ConceptTreeProps) {
   const roots = useOutlineRows(courseId, scope, null);
+  const suggested = roots.data?.scope.suggested_questions;
+  const suggestedQuestions = useMemo(() => (suggested?.length ? new Set(suggested) : null), [suggested]);
   const root = useRef<HTMLUListElement>(null);
   // Open and closed rows the learner (or a reveal) set; everything else follows `openKinds`.
   const [override, setOverride] = useState<ReadonlyMap<string, boolean>>(() => new Map());
@@ -255,7 +284,8 @@ export function ConceptTree({ courseId, scope, scopeKind, selected = null, onSel
     if (!reveal || reveal.length === 0) return;
     setOverride((current) => {
       const next = new Map(current);
-      for (let depth = 1; depth < reveal.length; depth += 1) next.set(reveal.slice(0, depth).join(">"), true);
+      // Every branch on the way, and the selected row itself: what it holds is listed under it, as the map draws what surrounds it.
+      for (let depth = 1; depth <= reveal.length; depth += 1) next.set(reveal.slice(0, depth).join(">"), true);
       if (revealUnfiled) next.set(UNFILED_ID, true);
       return next;
     });
@@ -263,7 +293,7 @@ export function ConceptTree({ courseId, scope, scopeKind, selected = null, onSel
   }, [revealKey, revealUnfiled]);
 
   const fallback = topics[0]?.instance_id ?? (unfiled.length ? UNFILED_ID : null);
-  const tree: TreeContext = { courseId, scope, scopeKind, selected, onSelect, hrefFor, linkState, place, conceptCounts, maxDepth, isOpen, toggle, tabStop: tabStop ?? fallback, setTabStop: setTabStopState, revealed: revealKey };
+  const tree: TreeContext = { courseId, scope, scopeKind, selected, onSelect, hrefFor, linkState, place, conceptCounts, ties, suggestedQuestions, maxDepth, isOpen, toggle, tabStop: tabStop ?? fallback, setTabStop: setTabStopState, revealed: revealKey };
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLUListElement>) => {
     if (event.altKey || event.ctrlKey || event.metaKey) return;

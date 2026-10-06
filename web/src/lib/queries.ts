@@ -75,7 +75,9 @@ export interface ConceptGraphOptions extends ConceptGraphQuery {
 export const useConceptGraph = (courseId?: string, options: ConceptGraphOptions = {}) =>
   view<ConceptGraphView>(queryKeys.conceptGraph(courseId, options), r2Paths.conceptGraph(courseId ?? "", options), { enabled: !!courseId && (options.enabled ?? true) });
 /** Per lecture and recording: stage, coverage, queue; the allowance of local transcription and the one resumable command. */
-export const useCourseTiming = (courseId?: string) => view<CourseTimingView>(queryKeys.courseTiming(courseId), r2Paths.courseTiming(courseId ?? ""), { enabled: !!courseId });
+/** Stages, coverage and ranges per lecture. Pass `{ queue: false }` where no transcription queue is shown (Study, Library): that answer is much cheaper. */
+export const useCourseTiming = (courseId?: string, options: { queue?: boolean } = {}) =>
+  view<CourseTimingView>([...queryKeys.courseTiming(courseId), options.queue === false ? "lean" : "full"], r2Paths.courseTiming(courseId ?? "", options), { enabled: !!courseId });
 /** Readback of the suggested question links of a course: counts and ids only. */
 export const useInferredAnchors = (courseId?: string) => view<InferredAnchorsReadback>(queryKeys.inferredAnchors(courseId), r2Paths.inferredAnchors(courseId ?? ""), { enabled: !!courseId });
 /** The source map of the lecture's displayed deck (or of `deck`): the lecture view's `source_map` object, every page's identity and role, the history of corrections and the full stored map. */

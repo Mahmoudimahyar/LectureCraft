@@ -15,7 +15,8 @@
 // what the parts share (selected range, the one player, fit). Changing page pauses playback and never autoplays;
 // changing tab, pane, outline state, panel width, fit or theme never reloads the slide or the media and never clears a
 // draft. The parts live in their own files (see ./contracts); this file keeps the flows that span them: notes, finishing
-// a session, choosing among decks, correcting a link, a role or a grouping, the resume position.
+// a session, choosing among decks, correcting a link, a role or a grouping (after which the recording is matched to the
+// pages again, because the Brain serves no range matched under an earlier map), the resume position.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -28,8 +29,8 @@ import { apiGet, contentUrl, r2Paths } from "@/lib/api";
 import { isoNow, newId } from "@/lib/bundle";
 import type { SourceRef } from "@/lib/db";
 import { getOrCreateDevice, nextSequence } from "@/lib/device";
-import { groupRowLabel, groupingLabel, pagesRef } from "@/lib/labels";
-import { queryKeys, useLecture, useNotes, useResume, useSourceMapOverride } from "@/lib/queries";
+import { NBSP, groupRowLabel, groupingLabel, pagesRef } from "@/lib/labels";
+import { queryKeys, useLecture, useNotes, useResume, useSourceMapOverride, useTimingBuild } from "@/lib/queries";
 import { identityOf, isStructuralPage, nextContentPage, questionsForPage } from "@/lib/r2";
 import { draftAttachment, reviseAnnotation, sessionId, TERM, newOccurrenceAnnotation } from "@/lib/requests";
 import { usePageBox } from "@/lib/thumbs";
@@ -65,6 +66,9 @@ function store(key: string, value: string): void {
     /* per-device convenience only */
   }
 }
+
+/** A file's size in words: megabytes with one decimal from 1 MB, whole kilobytes below it (a small file is never "0.0 MB"). */
+export const fileSize = (bytes: number): string => (bytes >= 1_048_576 ? `${(bytes / 1_048_576).toFixed(1)}${NBSP}MB` : `${Math.max(1, Math.round(bytes / 1024))}${NBSP}KB`);
 
 /** The resume record names four panels; the newer tabs and the outline pane are kept as the nearest of them. */
 const resumePanel = (panel: string | null): "slide" | "tutor" | "transcript" | "sources" => (panel === "tutor" || panel === "transcript" ? panel : panel === null || panel === "slide" ? "slide" : "sources");
@@ -194,6 +198,16 @@ export function takeBackChoice(record: SourceMapOverrideRecord): GroupingChoice 
     detail: `Earlier ${what}. Taking it back restores what held before it; it stays in the history.` };
 }
 
+/**
+ * True when the recording's ranges were matched to this deck's pages at some time (the match is current, or already
+ * stale). The Brain serves no range matched under another revision of the map, so a correction of a role or a grouping
+ * would leave every page of the lecture at "Not matched yet"; the composition therefore has the matching run again
+ * right after such a correction. False when nothing was ever matched, without a recording and for a view without timing.
+ */
+export function rangesFollowTheMap(lecture: LectureView): boolean {
+  return (lecture.timing?.recordings ?? []).some((recording) => !!recording.association && recording.association.state !== "not_run");
+}
+
 /** What the learner is told once, over the top of the stage. */
 interface StageNotice {
   text: string;
@@ -263,6 +277,7 @@ function LectureComposition({ update, deckChoice, focus, focusLine, panelParam, 
   const actions = useSubmitActions();
   const localRequests = useLocalRequests(courseId);
   const sourceMapOverride = useSourceMapOverride(courseId, lectureId, deckChoice);
+  const timingBuild = useTimingBuild(courseId, lectureId);
   const [pinned, setPinned] = useState<PinnedSource[]>([]);
   const [editing, setEditing] = useState<Occurrence | null>(null);
   const [adding, setAdding] = useState<NewMatchDraft | null>(null);
@@ -314,7 +329,9 @@ function LectureComposition({ update, deckChoice, focus, focusLine, panelParam, 
   const corrections = (localRequests.data ?? []).filter((r) => r.action === "correct_source" && r.context.lectureId === lectureId).slice(0, 3);
   const slideNotes = (notes.data?.notes ?? []).filter((n) => n.sources.some((s) => s.source_id === lecture.deck?.source_id && s.locator.page === page));
   const pdfUrl = lecture.display.content ? contentUrl(lecture.display.content) : null;
-  const here = `/courses/${courseId}/lectures/${lectureId}?page=${page}`;
+  /** A page of the file is on screen: a note is linked to the page it is written beside, so none is offered without one. */
+  const pageShown = !!pdfUrl && (lecture.display.kind === "original_pdf" || lecture.display.kind === "rendition_pdf");
+  const here =`/courses/${courseId}/lectures/${lectureId}?page=${page}`;
   const structural = isStructuralPage(lecture, page);
   const nextContent = nextContentPage(lecture, page);
   const pageQuestions = useMemo(() => questionsForPage(lecture, page), [lecture, page]);
@@ -404,16 +421,36 @@ function LectureComposition({ update, deckChoice, focus, focusLine, panelParam, 
     store(`ll.deck.${courseId}.${lectureId}`, "");
     update({ deck: null, page: "1" });
   };
+  // A correction changes the map the recording's ranges were matched under, and the Brain stops serving ranges matched
+  // under another map. So the matching runs again at once (derived data in the app's own area; the learner's own links
+  // and reviewed links are never touched), and the learner is told what became of it. `matched` is read from the view
+  // as it was before the correction.
+  const rematch = async (done: string, matched: boolean): Promise<void> => {
+    if (!matched) {
+      tell(done);
+      return;
+    }
+    tell(`${done} Matching the recording to the pages again…`);
+    try {
+      await timingBuild.mutateAsync();
+      tell(`${done} The recording was matched to the pages again with your correction.`);
+    } catch (error) {
+      tell(`${done} The recording could not be matched to the pages again (${(error as Error).message}), so no range is shown for now.`, { label: "Try again", run: () => void rematch(done, true) });
+    }
+  };
   const setRole = async (role: SlideRoleValue) => {
+    const matched = rangesFollowTheMap(lecture);
     try {
       await sourceMapOverride.mutateAsync({ op: "role", pages: [page], value: role, reason: DEFAULT_REASON });
-      tell("The role of this page was recorded as your correction.");
     } catch (error) {
       tell(`The role could not be recorded: ${(error as Error).message}`);
+      return;
     }
+    void rematch("The role of this page was recorded as your correction.", matched); // the role is recorded; the band is not held for the matching
   };
   // The learner's own correction of this page's role is undone by a further revision; the history is read when asked for.
   const takeBackRole = async () => {
+    const matched = rangesFollowTheMap(lecture);
     try {
       const history = await queryClient.fetchQuery({ queryKey: queryKeys.sourceMap(courseId, lectureId, deckChoice), staleTime: 0,
         queryFn: ({ signal }) => apiGet<SourceMapDocument>(r2Paths.sourceMap(courseId, lectureId, deckChoice), signal) });
@@ -423,10 +460,11 @@ function LectureComposition({ update, deckChoice, focus, focusLine, panelParam, 
         return;
       }
       await sourceMapOverride.mutateAsync({ op: "revert", value: [mine.revision], reason: TAKE_BACK_REASON });
-      tell("Your correction was taken back. The role is again what held before it.");
     } catch (error) {
       tell(`The correction could not be taken back: ${(error as Error).message}`);
+      return;
     }
+    void rematch("Your correction was taken back. The role is again what held before it.", matched);
   };
   const pin = (source: SourceRef, label: string) => {
     setPinned((current) => [...current, { source, label }]);
@@ -510,7 +548,7 @@ function LectureComposition({ update, deckChoice, focus, focusLine, panelParam, 
   const stage = (
     <StageZone focus={focus} hideSlide={hideSlide} pdfUrl={pdfUrl} notice={notice} onDismissNotice={() => setNotice(null)} onPageCount={onPageCount} chooseDeck={chooseDeck} onShowFiles={showSources}
       pager={(
-        <Pager lecture={lecture} page={page} total={total} onGoTo={goTo} onNote={slideRef ? () => setNoteOpen(true) : undefined} fit={state.fit} onFit={state.setFit} focus={focus}
+        <Pager lecture={lecture} page={page} total={total} onGoTo={goTo} onNote={slideRef && pageShown ? () => setNoteOpen(true) : undefined} fit={state.fit} onFit={state.setFit} focus={focus}
           onFocus={(on) => update({ focus: on ? "1" : null }, true)} onFinishSession={() => void finishSession()} readable={readable} onReadable={pdfUrl ? showReadable : undefined}
           onChooseAnotherFile={lecture.deck_choice.basis === "this_request" ? chooseAnotherFile : undefined} onCorrectPage={lecture.source_map?.state === "ready" ? state.correctGrouping : undefined}
           onSetRole={lecture.source_map?.state === "ready" ? setRole : undefined} onTakeBackRole={lecture.source_map?.state === "ready" ? takeBackRole : undefined} />
@@ -539,8 +577,10 @@ function LectureComposition({ update, deckChoice, focus, focusLine, panelParam, 
         onPreview={(startMs) => player.current?.seekTo(startMs)} onSubmit={submitMatch} />
       <GroupingDialog open={state.groupingOpen} onClose={state.closeGrouping} lecture={lecture} page={page} deck={deckChoice}
         onSubmit={async (request) => {
+          const matched = rangesFollowTheMap(lecture);
           await sourceMapOverride.mutateAsync(request);
-          tell(request.op === "revert" ? "Your correction was taken back. The grouping is again what held before it." : "The grouping was recorded as your correction. The file itself is unchanged.");
+          // The dialog closes on the recorded correction; the matching that follows is reported over the stage.
+          void rematch(request.op === "revert" ? "Your correction was taken back. The grouping is again what held before it." : "The grouping was recorded as your correction. The file itself is unchanged.", matched);
         }} />
 
       <Dialog open={noteOpen} onOpenChange={setNoteOpen} title="Save a note on this page" description="A note is your own work linked to this exact page of this deck version. It is not sent to the tutor and it is not learning evidence."
@@ -769,7 +809,7 @@ function StageZone({ focus, hideSlide, pdfUrl, notice, onDismissNotice, onPageCo
                   {lecture.deck_choice.candidates.map((c) => (
                     <li key={c.source_id} className="flex flex-wrap items-center justify-between gap-2 rounded-control bg-surface p-3">
                       <span className="min-w-0"><span className="block break-words font-semibold">{c.filename}</span>
-                        <span className="text-ui text-muted">{c.bytes ? `${(c.bytes / 1_048_576).toFixed(1)} MB` : "size unknown"}{c.registration === "unregistered" ? " · not registered by the course updater" : ""}{c.rendition !== "native_pdf" ? " · needs a PDF rendition" : ""}</span></span>
+                        <span className="text-ui text-muted">{c.bytes ? fileSize(c.bytes) : "size unknown"}{c.registration === "unregistered" ? " · not registered by the course updater" : ""}{c.rendition !== "native_pdf" ? " · needs a PDF rendition" : ""}</span></span>
                       <Button size="sm" onClick={() => chooseDeck(c.source_id)}>Show this file</Button>
                     </li>
                   ))}

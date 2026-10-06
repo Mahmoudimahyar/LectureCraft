@@ -11,10 +11,10 @@ import { Button, EmptyState, ErrorState, formatMs, formatWhen, LoadingState, Pag
 import { apiGet, apiPost } from "@/lib/api";
 import { listOutbox, type OutboxItem } from "@/lib/db";
 import { JOB_STATE, timeSpanLabel, unlistedLabel } from "@/lib/labels";
-import { useActivity, useLecture, useResume } from "@/lib/queries";
+import { useActivity, useCourse, useLecture, useResume } from "@/lib/queries";
 import { flushOutbox, reviseAnnotation } from "@/lib/requests";
 import type { ActivityJob, AnnotationRecord } from "@/lib/types";
-import { Callout, Fact, Facts, Lead } from "@/features/search/SearchOverlay";
+import { Callout, Disclosure, Fact, Facts, Lead, lectureNameOf } from "@/features/search/SearchOverlay";
 import { useLocalRequests, useSubmitActions } from "@/features/tutor/actions";
 import { RequestCard } from "@/features/tutor/RequestCard";
 
@@ -100,7 +100,7 @@ export function ActivityPage() {
               return (
                 <li key={job.job_id} className={ROW} data-testid="activity-job" data-state={job.state}>
                   <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1">
-                    <span className="font-semibold">{(job.action ?? "request").replace(/_/g, " ")}</span>
+                    <span className="font-semibold first-letter:uppercase">{(job.action ?? "request").replace(/_/g, " ")}</span>
                     <StatusChip tone={label.tone}>{label.label}</StatusChip>
                     <span className="ll-num text-ui text-muted">{job.course_id.toUpperCase()} · {formatWhen(job.created_at)}{job.cancel_requested && job.state !== "CANCELLED" ? " · cancellation requested (not final)" : ""}</span>
                   </div>
@@ -139,10 +139,9 @@ export function ActivityPage() {
         </section>
       )}
       {internal.length > 0 && (
-        <details className="text-ui">
-          <summary className="cursor-pointer font-semibold">Background preparation <span className="ll-sec-n">({internal.length})</span></summary>
-          <ul className={`mt-3 ${ROWS}`}>{internal.map((j) => <li key={j.job_id} className={ROW}>{j.course_id.toUpperCase()} · {(j.action ?? j.workflow).replace(/[-_]/g, " ")} · {JOB_STATE[j.state]?.label ?? j.state}{j.reason ? ` — ${j.reason}` : ""}</li>)}</ul>
-        </details>
+        <Disclosure title="Background preparation" count={internal.length} className="text-ui" bodyClassName="mt-1">
+          <ul className={ROWS}>{internal.map((j) => <li key={j.job_id} className={ROW}>{j.course_id.toUpperCase()} · {(j.action ?? j.workflow).replace(/[-_]/g, " ")} · {JOB_STATE[j.state]?.label ?? j.state}{j.reason ? ` — ${j.reason}` : ""}</li>)}</ul>
+        </Disclosure>
       )}
     </div>
   );
@@ -195,6 +194,7 @@ export function ConflictResolution() {
 
 function ResumeConflict({ courseId }: { courseId: string }) {
   const resume = useResume(courseId);
+  const course = useCourse(courseId); // only for the lectures' titles; a position is still stated when it has not loaded
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -227,7 +227,7 @@ function ResumeConflict({ courseId }: { courseId: string }) {
           return (
             <li key={head.checkpoint_id} className="ll-region flex flex-col gap-3 p-4 min-[900px]:p-5" data-testid="resume-head">
               <h2 className="break-words text-head font-semibold">From device {head.device_id}</h2>
-              <p className="text-ui text-muted">{head.cursor.lecture_id}, PDF page {page} · source version {head.cursor.source.version_id} · {head.cursor.position_ms !== null ? `recording at ${formatMs(head.cursor.position_ms)} (paused)` : "no playback position"} · received with time {formatWhen(head.updated_at)} (device clocks are not used to pick a winner)</p>
+              <p className="text-ui text-muted"><span className="text-ink">{lectureNameOf(course.data, head.cursor.lecture_id)}</span>, PDF page {page} · source version {head.cursor.source.version_id} · {head.cursor.position_ms !== null ? `recording at ${formatMs(head.cursor.position_ms)} (paused)` : "no playback position"} · received with time {formatWhen(head.updated_at)} (device clocks are not used to pick a winner)</p>
               {head.cursor.draft ? <div><p className="text-ui font-semibold text-muted">Draft on that device</p><p className="mt-1 whitespace-pre-wrap rounded-control bg-pad p-3">{drafts[head.cursor.draft.sha256] ?? "Loading…"}</p></div> : <p className="text-ui text-muted">No draft.</p>}
               <div className="mt-auto flex flex-wrap gap-2">
                 <Button busy={busy} onClick={async () => {

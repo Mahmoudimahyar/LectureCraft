@@ -16,7 +16,7 @@ import type { ConceptsTabProps } from "@/features/lecture/contracts";
 import type { OutlineRow } from "@/lib/types";
 import { useScopeGraph } from "./ConceptMap";
 import { ConceptTree, type TreePlace } from "./ConceptTree";
-import { conceptMapHref as mapHref, topicConceptCounts } from "./map-model";
+import { conceptMapHref as mapHref, sourceTies, topicConceptCounts } from "./map-model";
 
 /** The address of the concept map of a scope (`course`, `lecture:<id>`, `slide:<lecture>:<page>`). */
 export const conceptMapHref = (courseId: string, scope: string): string => mapHref(courseId, scope);
@@ -35,6 +35,8 @@ export function ConceptsTab({ courseId, lecture, page, slide, onGoToPage, nextCo
   const back = useMemo(() => ({ returnTo, returnLabel: `Back to page ${page}` }), [returnTo, page]);
   const graph = useScopeGraph(courseId, slideScope, !structural);
   const whole = useScopeGraph(courseId, lectureScope, !structural);
+  // How each entry is tied to the slide: a row whose only tie is a suggested link says so.
+  const ties = useMemo(() => sourceTies(graph.data), [graph.data]);
   const refresh = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["concept-graph", courseId] });
     void queryClient.invalidateQueries({ queryKey: ["outline", courseId] });
@@ -96,7 +98,7 @@ export function ConceptsTab({ courseId, lecture, page, slide, onGoToPage, nextCo
       )}
       {holds && (
         <ConceptTree courseId={courseId} scope={slideScope} scopeKind="slide" hrefFor={(row) => mapHref(courseId, slideScope, row.node_id)} linkState={back} place={place} conceptCounts={topicConceptCounts(graph.data)}
-          deepest="skill" openKinds={OPEN_TO_SKILL} label="Concepts of this slide" testId="concepts-tree" />
+          ties={ties} deepest="skill" openKinds={OPEN_TO_SKILL} label="Concepts of this slide" testId="concepts-tree" />
       )}
       <Sections defaultValue={graph.data && !holds ? ["lecture"] : []} className="border-t border-hairline">
         <Section value="lecture" title={(

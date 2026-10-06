@@ -7,10 +7,10 @@ import { useApp, courseName } from "@/app/state";
 import { Button, formatMs, formatWhen, LoadingState, PageHeader } from "@/components/ui";
 import { listDrafts, listOutbox, type LocalRequest } from "@/lib/db";
 import { JOB_STATE } from "@/lib/labels";
-import { useActivity, useResume, useReview } from "@/lib/queries";
+import { useActivity, useCourse, useResume, useReview } from "@/lib/queries";
 import { reviewItemPayload } from "@/lib/requests";
 import type { ActivityJob, QuestionRecord } from "@/lib/types";
-import { Callout, Lead, StateWords } from "@/features/search/SearchOverlay";
+import { Callout, Lead, StateWords, lectureNameOf } from "@/features/search/SearchOverlay";
 import { useLocalRequests, useSubmitActions } from "@/features/tutor/actions";
 
 const ANSWERS = new Set(["explain", "practice", "review_answer", "diagnose"]);
@@ -39,6 +39,7 @@ export function SessionWrapUp() {
   const activity = useActivity(true);
   const resume = useResume(courseId);
   const review = useReview(courseId);
+  const course = useCourse(courseId ?? undefined); // only for the lecture's title; the position is stated without it
   const actions = useSubmitActions();
   const [device, setDevice] = useState<{ drafts: number; outbox: number } | null>(null);
   const [chosen, setChosen] = useState<Set<string>>(new Set());
@@ -117,9 +118,9 @@ export function SessionWrapUp() {
       <section className={SECTION} aria-labelledby="where-h">
         <h2 id="where-h" className={SECTION_HEAD}>Where you stopped</h2>
         {here ? (
-          <p className="ll-measure mt-1">{here.cursor.lecture_id}, PDF page {String((here.cursor.source.locator as { page?: number }).page ?? "?")}{here.cursor.position_ms != null ? ` · recording at ${formatMs(here.cursor.position_ms)}` : ""} · synchronised {formatWhen(here.updated_at)}.{here.cursor.draft ? " Your unsent draft text was saved with it." : ""}</p>
+          <p className="ll-measure mt-1">{lectureNameOf(course.data, here.cursor.lecture_id)}, PDF page {String((here.cursor.source.locator as { page?: number }).page ?? "?")}{here.cursor.position_ms != null ? ` · recording at ${formatMs(here.cursor.position_ms)}` : ""} · synchronised {formatWhen(here.updated_at)}.{here.cursor.draft ? " Your unsent draft text was saved with it." : ""}</p>
         ) : lectureId ? (
-          <p className="ll-measure mt-1">{lectureId}, PDF page {page ?? "?"}. Position not confirmed by the Brain yet. <span className="text-muted">{head ? `The last synchronised position is from ${formatWhen(head.updated_at)}.` : "It is remembered on this device only."}</span></p>
+          <p className="ll-measure mt-1">{lectureNameOf(course.data, lectureId)}, PDF page {page ?? "?"}. Position not confirmed by the Brain yet. <span className="text-muted">{head ? `The last synchronised position is from ${formatWhen(head.updated_at)}.` : "It is remembered on this device only."}</span></p>
         ) : <p className="mt-1 text-muted">No lecture position was recorded in this session.</p>}
         {resume.data?.conflict && <Callout tone="caution" className="mt-3" title="Two devices stopped in different places" actions={<Link className="ll-btn ll-btn-sm" to={`/activity/conflicts/resume-${courseId}`}>Choose which to keep</Link>}>{resume.data.conflict.note}</Callout>}
         {lectureId && <Link className="ll-btn mt-3" to={`/courses/${courseId}/lectures/${lectureId}${page ? `?page=${page}` : ""}`}>Continue this lecture</Link>}

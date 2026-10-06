@@ -8,7 +8,7 @@
 //                (Topic, Concept, Skill), assessment runs up into it (Criterion, Question), and a last rank holds
 //                questions tied to a drawn question by a relation of the owner's catalog.
 import dagre from "@dagrejs/dagre";
-import { TIE_KIND, countLabel, edgeLegendKind, edgeLegendKinds, edgeRelationLabel, nodeCountsLabel, type EdgeLegendKind } from "@/lib/labels";
+import { countLabel, edgeLegendKind, edgeLegendKinds, edgeRelationLabel, nodeCountsLabel, type EdgeLegendKind } from "@/lib/labels";
 import { graphLayoutInput, type LayoutEdge, type LayoutNode } from "@/lib/r2";
 import type { AnchorTieKind, ConceptGraphNode, ConceptGraphScopeParam, ConceptGraphView, EvidenceObject, GraphEdgeFamily, GraphNodeKind, GraphScopeKind, TieWhere } from "@/lib/types";
 
@@ -84,6 +84,8 @@ export interface MapNodeModel {
   supportPages: number[];
   /** Skill, question, criterion: the evidence as the Brain sent it. null for a topic or a concept. */
   evidence: EvidenceObject | null;
+  /** Slide scope: the strongest tie of the slide's support of this node, when a source line reaches it. The node says "suggested link" when that is all there is. */
+  tie: AnchorTieKind | null;
   inScope: boolean;
   selected: boolean;
   /** `criteria`: draws the criteria of this question. `open`: selects the node (a topic card draws its concepts). `unfiled`: draws what has no topic. */
@@ -101,11 +103,13 @@ export interface MapEdgeModel {
   /** The line of the key this edge belongs to; containment and the owner's relations are two different lines. */
   legend: EdgeLegendKind;
   relation: string;
-  /** Words on the line: the owner's relation, or "Suggested link" for a source line that is one. null for containment, assessment and a course anchor. */
+  /** Words on the line: the owner's relation between two questions or concepts. null for containment, assessment and a source line (the supported node says what its tie is). */
   label: string | null;
   /** Where the arrowhead sits. Containment never has one. */
   arrow: "target" | null;
+  /** Where the line comes from; a source line that stands for several ties names each once. */
   provenance: string;
+  /** A source line: the strongest of the ties it stands for. */
   tie: AnchorTieKind | null;
 }
 export interface MapModel {
@@ -137,6 +141,24 @@ const foldId = (rank: MapRank): string => `ll:fold:${rank}`;
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 const HIERARCHY = new Set(["topic_includes_concept", "topic_includes_skill", "concept_assessed_as_skill"]);
 
+/** A reviewed anchor says more than a stated one, and a stated one more than a suggestion. A tie this build does not know is the weakest. */
+const TIE_STRENGTH: Record<string, number> = { exact: 3, stated: 2, agent_inferred: 1 };
+const stronger = (a: AnchorTieKind | null, b: AnchorTieKind | null): AnchorTieKind | null => ((TIE_STRENGTH[b ?? ""] ?? 0) > (TIE_STRENGTH[a ?? ""] ?? 0) ? b : a);
+/**
+ * Slide scope: the strongest tie by which the slide supports each node, read from the graph's source lines
+ * (`edges[].tie`). A node no source line reaches is absent: nothing is said of it. The tree and the map say "suggested
+ * link" of a node whose only tie is a suggestion, so a suggestion is never listed as the course's own anchor.
+ */
+export function sourceTies(graph: Pick<ConceptGraphView, "edges"> | null | undefined): Map<string, AnchorTieKind> {
+  const ties = new Map<string, AnchorTieKind>();
+  for (const edge of graph?.edges ?? []) {
+    if (edge.family !== "source" || !edge.tie) continue;
+    const best = stronger(ties.get(edge.to) ?? null, edge.tie);
+    if (best) ties.set(edge.to, best);
+  }
+  return ties;
+}
+
 /** How many concepts each topic holds, read from the outline's own lines; null when the graph was cut by its limit (nothing is then claimed). */
 export function topicConceptCounts(graph: ConceptGraphView | null | undefined): Map<string, number> | null {
   if (!graph || graph.truncated || graph.dropped > 0) return null;
@@ -153,7 +175,7 @@ function plainNode(node: LayoutNode, rank: MapRank, scopeKind: GraphScopeKind, f
   return {
     id: node.id, type: "node", rank, kind: data.kind, label: node.label,
     second: !node.inScope ? OUTSIDE_SCOPE[scopeKind] : counts || gap,
-    where: data.where ?? null, supportPages: [...(data.support_pages ?? [])], evidence: grouping ? null : data.evidence ?? null, inScope: node.inScope, selected: node.id === focus, data,
+    where: data.where ?? null, supportPages: [...(data.support_pages ?? [])], evidence: grouping ? null : data.evidence ?? null, tie: null, inScope: node.inScope, selected: node.id === focus, data,
   };
 }
 
@@ -165,7 +187,7 @@ function topicLevel(graph: ConceptGraphView, nodes: LayoutNode[], edges: LayoutE
     return {
       id: node.id, type: "topic-card", rank: "topic", kind: "topic", label: node.label,
       second: [held !== undefined ? countLabel(held, "concept") : concepts ? countLabel(0, "concept") : null, counts].filter((part): part is string => !!part).join(", ") || null,
-      where: null, supportPages: [], evidence: null, inScope: node.inScope, selected: false,
+      where: null, supportPages: [], evidence: null, tie: null, inScope: node.inScope, selected: false,
       action: { kind: "open", label: concepts ? `Show ${countLabel(held ?? 0, "concept")}` : "Show its concepts" }, data: node.data,
     };
   });
@@ -178,7 +200,7 @@ function topicLevel(graph: ConceptGraphView, nodes: LayoutNode[], edges: LayoutE
     cards.push({
       id: UNFILED_ID, type: "unfiled", rank: "topic", kind: "topic", label: UNFILED_LABEL,
       second: [looseConcepts ? countLabel(looseConcepts, "concept") : null, looseSkills ? countLabel(looseSkills, "skill") : null].filter((part): part is string => part !== null).join(", "),
-      where: null, supportPages: [], evidence: null, inScope: true, selected: false, action: { kind: "unfiled", label: options.showUnfiled ? "Hide them" : "Show them" }, data: null,
+      where: null, supportPages: [], evidence: null, tie: null, inScope: true, selected: false, action: { kind: "unfiled", label: options.showUnfiled ? "Hide them" : "Show them" }, data: null,
     });
     if (options.showUnfiled) for (const node of loose) cards.push(plainNode(node, "topic", graph.scope.kind, null));
   }
@@ -280,7 +302,7 @@ export function buildMapModel(graph: ConceptGraphView, options: MapOptions = {})
     const row: MapNodeModel[] = [];
     if (rank === "concept" && marker) {
       row.push({ id: marker.id, type: "marker", rank, kind: "source_page", label: SLIDE_MARKER_LABEL, second: marker.label, where: null, supportPages: [...(input.sourcePage?.pages ?? [])], evidence: null,
-        inScope: true, selected: false, data: null });
+        tie: null, inScope: true, selected: false, data: null });
       placed.set(marker.id, marker.id);
     }
     const fold = list.length > RANK_FOLD && !options.opened?.has(foldId(rank));
@@ -295,7 +317,7 @@ export function buildMapModel(graph: ConceptGraphView, options: MapOptions = {})
     if (fold) {
       const rest = list.slice(RANK_FOLD - 1);
       row.push({ id: foldId(rank), type: "fold", rank, kind: null, label: `${countLabel(rest.length, "more", "more")} ${RANK_PLURAL[rank][rest.length === 1 ? 0 : 1]}`, second: null, where: null, supportPages: [],
-        evidence: null, inScope: true, selected: false, folded: { rank, count: rest.length }, data: null });
+        evidence: null, tie: null, inScope: true, selected: false, folded: { rank, count: rest.length }, data: null });
       for (const node of rest) placed.set(node.id, foldId(rank));
     }
     nodes.push(...row);
@@ -306,13 +328,20 @@ export function buildMapModel(graph: ConceptGraphView, options: MapOptions = {})
   const add = (edge: LayoutEdge, source: string | undefined, target: string | undefined): void => {
     if (!source || !target || source === target) return;
     const legend = edgeLegendKind(edge);
-    const folded = source !== edge.source || target !== edge.target;
-    const key = folded ? `${legend}|${source}|${target}` : edge.id;
-    if (edges.has(key)) return;
+    // One line between the slide and a node it supports, however many ties say so (a course anchor and a suggested link are two edges of the graph).
+    const joined = edge.family === "source" || source !== edge.source || target !== edge.target;
+    const key = joined ? `${legend}|${source}|${target}` : edge.id;
+    const known = edges.get(key);
+    if (known) {
+      if (edge.family !== "source") return;
+      known.tie = stronger(known.tie, edge.tie);
+      if (edge.data.provenance && !known.provenance.split("; ").includes(edge.data.provenance)) known.provenance = [...known.provenance.split("; ").filter(Boolean), edge.data.provenance].sort(byText).join("; ");
+      return;
+    }
     const relation = legend === "prerequisite_or_overlap";
     edges.set(key, {
-      id: folded ? `ll:${key}` : edge.id, source, target, family: edge.family, legend, relation: edge.relation,
-      label: relation ? edgeRelationLabel(edge.relation) : edge.family === "source" && edge.tie === "agent_inferred" ? TIE_KIND.agent_inferred.label : null,
+      id: joined ? `ll:${key}` : edge.id, source, target, family: edge.family, legend, relation: edge.relation,
+      label: relation ? edgeRelationLabel(edge.relation) : null,
       arrow: edge.family === "assessment" || edge.family === "source" || (relation && /prerequisite/.test(edge.relation)) ? "target" : null,
       provenance: edge.data.provenance, tie: edge.tie,
     });
@@ -335,6 +364,9 @@ export function buildMapModel(graph: ConceptGraphView, options: MapOptions = {})
   }
 
   const drawn = [...edges.values()];
+  // What the slide's line to a node stands for is said on the node (a fold stands for several nodes and says nothing).
+  const tieOf = new Map(drawn.filter((edge) => edge.family === "source").map((edge) => [edge.target, edge.tie]));
+  for (const node of nodes) if (node.type === "node") node.tie = tieOf.get(node.id) ?? null;
   const ranks = MAP_RANKS.filter((rank) => nodes.some((node) => node.rank === rank));
   return { ...base, view: focus ? "focus" : "overview", nodes, edges: drawn, ranks, legend: edgeLegendKinds(drawn), outOfScope: nodes.some((node) => !node.inScope) };
 }
@@ -430,7 +462,7 @@ export function layoutMap(model: MapModel, heightOf: (id: string) => number, opt
   g.setGraph({ rankdir: "TB", nodesep: nodeSep, ranksep: rankSep, edgesep: 8, marginx: 0, marginy: 0, rankalign: "top" });
   g.setDefaultEdgeLabel(() => ({}));
   const hasParent = new Set<string>();
-  const between: Array<{ edge: MapEdgeModel; upper: string; lower: string }> = [];
+  const between: Array<{ edge: MapEdgeModel; upper: string; lower: string; laidOut: boolean }> = [];
   const inside: MapEdgeModel[] = [];
   // A link inside one line that carries words dips under the nodes: that line is given room below it.
   const dips = new Set<number>();
@@ -442,7 +474,12 @@ export function layoutMap(model: MapModel, heightOf: (id: string) => number, opt
   const heights = new Map(model.nodes.map((node) => [node.id, Math.max(1, Math.ceil(heightOf(node.id)))]));
   g.setNode(ROOT, { width: 0, height: 0 });
   for (const node of model.nodes) g.setNode(node.id, { width: options.nodeWidth, height: heights.get(node.id)! + (dips.has(line.get(node.id)!) ? DIP_ROOM : 0) });
-  for (const edge of model.edges) {
+  // Lines are given to the layout in the order of the model's nodes (the outline's order), so where no crossing decides,
+  // a line of nodes reads in the order the outline lists them.
+  const place = new Map(model.nodes.map((node, index) => [node.id, index]));
+  const first = (edge: MapEdgeModel): number => Math.min(place.get(edge.source) ?? 0, place.get(edge.target) ?? 0);
+  const second = (edge: MapEdgeModel): number => Math.max(place.get(edge.source) ?? 0, place.get(edge.target) ?? 0);
+  for (const edge of [...model.edges].sort((p, q) => first(p) - first(q) || second(p) - second(q) || byText(p.id, q.id))) {
     const a = line.get(edge.source);
     const b = line.get(edge.target);
     if (a === undefined || b === undefined) continue;
@@ -451,9 +488,14 @@ export function layoutMap(model: MapModel, heightOf: (id: string) => number, opt
       continue;
     }
     const [upper, lower] = a < b ? [edge.source, edge.target] : [edge.target, edge.source];
-    g.setEdge(upper, lower, { minlen: Math.abs(a - b), weight: 1 }, edge.id);
-    hasParent.add(lower);
-    between.push({ edge, upper, lower });
+    // The slide's line to a node on the next line is drawn after the layout, like a link inside one line: given to the
+    // layout it would pull a skill out from under its concept. A longer one is laid out, so it is led round the nodes between.
+    const drawnAfter = edge.family === "source" && Math.abs(a - b) === 1;
+    if (!drawnAfter) {
+      g.setEdge(upper, lower, { minlen: Math.abs(a - b), weight: 1 }, edge.id);
+      hasParent.add(lower);
+    }
+    between.push({ edge, upper, lower, laidOut: !drawnAfter });
   }
   // Layout-only links, never drawn: every node hangs from the line above it, so its line is exactly the line of its kind.
   if (grid) lines.forEach((ids, index) => ids.forEach((id, column) => {
@@ -463,19 +505,34 @@ export function layoutMap(model: MapModel, heightOf: (id: string) => number, opt
       hasParent.add(id);
     }
   }));
+  // A node nothing above it leads to (the slide, a question no drawn skill is assessed by) hangs from the root by a link
+  // as long as its line is deep, so it never pulls a real node aside: a topic stays straight above its one concept.
   for (const node of model.nodes) {
     if (hasParent.has(node.id)) continue;
-    const at = line.get(node.id)!;
-    if (at === 0) g.setEdge(ROOT, node.id, { minlen: 1, weight: 1 }, `ll:root:${node.id}`);
-    else g.setEdge(lines[at - 1]![0]!, node.id, { minlen: 1, weight: 1 }, `ll:hang:${node.id}`);
+    g.setEdge(ROOT, node.id, { minlen: line.get(node.id)! + 1, weight: 1 }, `ll:root:${node.id}`);
   }
   // Order inside a line: reading order at topic level; elsewhere dagre orders to cross as few lines as it can, with the slide at the left of its line.
+  // The slide stands at the left of its line and the folded rest of a line at its end. The first line that holds more
+  // than one node reads in the outline's order (the model's); dagre orders the lines below it to cross as few lines as
+  // it can, so a concept's skills still stand under it.
+  const typeOf = new Map(model.nodes.map((node) => [node.id, node.type]));
   const constraints: Array<{ left: string; right: string }> = [];
+  let ordered = false;
   for (const ids of lines) {
-    if (grid) ids.slice(1).forEach((id, index) => constraints.push({ left: ids[index]!, right: id }));
-    else {
-      const marker = ids.find((id) => model.nodes.find((node) => node.id === id)?.type === "marker");
+    if (grid) {
+      ids.slice(1).forEach((id, index) => constraints.push({ left: ids[index]!, right: id }));
+      continue;
+    }
+    const marker = ids.find((id) => typeOf.get(id) === "marker");
+    const fold = ids.find((id) => typeOf.get(id) === "fold");
+    const rest = ids.filter((id) => id !== marker && id !== fold);
+    if (!ordered && rest.length > 1) {
+      ordered = true;
+      const row = [...(marker ? [marker] : []), ...rest, ...(fold ? [fold] : [])];
+      row.slice(1).forEach((id, index) => constraints.push({ left: row[index]!, right: id }));
+    } else {
       if (marker) for (const id of ids) if (id !== marker) constraints.push({ left: marker, right: id });
+      if (fold) for (const id of rest) constraints.push({ left: id, right: fold });
     }
   }
   dagre.layout(g, { constraints });
@@ -493,17 +550,21 @@ export function layoutMap(model: MapModel, heightOf: (id: string) => number, opt
   const height = Math.max(...model.nodes.map((node) => boxes.get(node.id)!.y + boxes.get(node.id)!.height + (dips.has(line.get(node.id)!) ? DIP_ROOM : 0)));
   const rankLabels = grid ? [] : model.ranks.map((rank) => ({ rank, x: 0, y: boxes.get(lines[firstLineOf.get(rank)!]![0]!)!.y - MAP_GAPS.rankLabel }));
 
+  // The foot of each line of nodes: just under its tallest node. A line that leaves a shorter node runs straight down to
+  // the foot before it turns, so it never crosses a taller neighbour.
+  const footOf = lines.map((ids) => Math.max(...ids.map((id) => boxes.get(id)!.y + boxes.get(id)!.height)) + 2);
+
   // Each line has its own point on both nodes, spread along the edge, so no two share a trunk.
   type End = { id: string; side: "top" | "bottom"; toward: number; edge: string };
   const ends: End[] = [];
   const routes = new Map<string, Array<{ x: number; y: number }>>();
-  for (const { edge, upper, lower } of between) {
-    const inner = ((g.edge({ v: upper, w: lower, name: edge.id }) as { points?: Array<{ x: number; y: number }> }).points ?? []).slice(1, -1)
+  for (const { edge, upper, lower, laidOut } of between) {
+    const inner = (laidOut ? (g.edge({ v: upper, w: lower, name: edge.id }) as { points?: Array<{ x: number; y: number }> }).points ?? [] : []).slice(1, -1)
       .map((point) => ({ x: round(point.x - left), y: round(point.y + dy) }));
     const a = boxes.get(upper)!;
     const b = boxes.get(lower)!;
     // Only the points that carry the line past the lines in between: an edge between neighbouring lines is one curve.
-    const via = Math.abs(line.get(upper)! - line.get(lower)!) > 1 ? inner.filter((point) => point.y > a.y + a.height + 4 && point.y < b.y - 4) : [];
+    const via = Math.abs(line.get(upper)! - line.get(lower)!) > 1 ? inner.filter((point) => point.y > footOf[line.get(upper)!]! + 4 && point.y < b.y - 4) : [];
     routes.set(edge.id, via);
     ends.push({ id: upper, side: "bottom", toward: via[0]?.x ?? b.x + b.width / 2, edge: edge.id }, { id: lower, side: "top", toward: via[via.length - 1]?.x ?? a.x + a.width / 2, edge: edge.id });
   }
@@ -533,15 +594,18 @@ export function layoutMap(model: MapModel, heightOf: (id: string) => number, opt
         start.y += ARROW;
       }
     }
-    const points = [start, ...(routes.get(edge.id) ?? []), end];
     let path = `M${start.x} ${start.y}`;
+    const foot = footOf[line.get(upper)!]!;
+    const turn = foot > start.y + 1 ? { x: start.x, y: foot } : start;
+    if (turn !== start) path += `V${foot}`;
+    const points = [turn, ...(routes.get(edge.id) ?? []), end];
     for (let index = 1; index < points.length; index += 1) {
       const p = points[index - 1]!;
       const q = points[index]!;
       const bend = round((q.y - p.y) * 0.5);
       path += `C${p.x} ${round(p.y + bend)} ${q.x} ${round(q.y - bend)} ${q.x} ${q.y}`;
     }
-    const middle = points.length > 2 ? points[Math.floor(points.length / 2)]! : { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+    const middle = points.length > 2 ? points[Math.floor(points.length / 2)]! : { x: (turn.x + end.x) / 2, y: (turn.y + end.y) / 2 };
     edges.set(edge.id, { path, arrow, label: edge.label ? { x: round(middle.x), y: round(middle.y) } : null });
   }
   for (const edge of inside) {
@@ -549,11 +613,25 @@ export function layoutMap(model: MapModel, heightOf: (id: string) => number, opt
     const t = boxes.get(edge.target)!;
     const [l, r] = s.x <= t.x ? [s, t] : [t, s];
     const targetIsRight = t === r;
-    const blocked = lines[line.get(edge.source)!]!.some((id) => {
-      const box = boxes.get(id)!;
-      return box !== l && box !== r && box.x > l.x && box.x < r.x;
-    });
-    if (!blocked && !edge.label) {
+    // The two nodes and what lies between them on their line.
+    const span = lines[line.get(edge.source)!]!.map((id) => boxes.get(id)!).filter((box) => box.x >= l.x && box.x <= r.x);
+    const blocked = span.length > 2;
+    if (blocked && !edge.label) {
+      // Not neighbours, and no words to carry (the slide and a concept it supports further along the line): the line
+      // arcs over the tops of the nodes, which are level, and arrives off the middle of the node, where the line from
+      // the rank above comes in.
+      const inset = Math.min(28, l.width / 4);
+      const from = { x: round(l.x + l.width - inset), y: l.y - 2 };
+      const to = { x: round(r.x + inset), y: r.y - 2 };
+      let arrow: EdgeGeometry["arrow"] = null;
+      if (edge.arrow === "target") {
+        const tip = targetIsRight ? to : from;
+        arrow = { x: tip.x, y: tip.y, angle: 90 };
+        tip.y -= ARROW;
+      }
+      const rise = Math.max(0, Math.min(from.y, to.y) - 28);
+      edges.set(edge.id, { path: `M${from.x} ${from.y}C${from.x} ${rise} ${to.x} ${rise} ${to.x} ${to.y}`, arrow, label: null });
+    } else if (!edge.label) {
       const y = round(l.y + Math.min(l.height, r.height) / 2);
       let x1 = l.x + l.width + 3;
       let x2 = r.x - 3;
@@ -569,8 +647,9 @@ export function layoutMap(model: MapModel, heightOf: (id: string) => number, opt
       }
       edges.set(edge.id, { path: `M${x1} ${y}H${x2}`, arrow, label: edge.label ? { x: round((x1 + x2) / 2), y } : null });
     } else {
-      // It carries words, or the two are not neighbours: the line dips under the nodes, and its words sit under its lowest point.
-      const bottom = Math.max(l.y + l.height, r.y + r.height);
+      // It carries words: the line dips under the nodes (under the tallest of the two and of what lies between them),
+      // and its words sit under its lowest point.
+      const foot = Math.max(...span.map((box) => box.y + box.height)) + 2;
       const from = { x: round(l.x + l.width / 2), y: l.y + l.height + 2 };
       const to = { x: round(r.x + r.width / 2), y: r.y + r.height + 2 };
       let arrow: EdgeGeometry["arrow"] = null;
@@ -579,8 +658,11 @@ export function layoutMap(model: MapModel, heightOf: (id: string) => number, opt
         arrow = { x: tip.x, y: tip.y, angle: -90 };
         tip.y += ARROW;
       }
-      const dip = bottom + 28;
-      edges.set(edge.id, { path: `M${from.x} ${from.y}C${from.x} ${dip} ${to.x} ${dip} ${to.x} ${to.y}`, arrow, label: edge.label ? { x: round((from.x + to.x) / 2), y: round(bottom + 36) } : null });
+      const dip = foot + 26;
+      const down = from.y < foot - 1 ? `V${foot}` : "";
+      const up = to.y < foot - 1 ? `V${to.y}` : "";
+      const path = `M${from.x} ${from.y}${down}C${from.x} ${dip} ${to.x} ${dip} ${to.x} ${up ? foot : to.y}${up}`;
+      edges.set(edge.id, { path, arrow, label: { x: round((from.x + to.x) / 2), y: round(foot + 34) } });
     }
   }
   return { boxes, rankLabels, edges, width: round(width), height: round(height) };
@@ -602,13 +684,14 @@ const PANE_PAD = 8;
 /**
  * The nearest allowed place of a drawing in its pane. A drawing that fits is centred sideways and sits at the top;
  * one that does not can be moved until its edge is 8 px inside the pane, and no further. Whole pixels, so text stays sharp.
+ * "Fits" is the pane's own width: three columns are sized to fill the pane less 4 px, and such a drawing must stay still.
  */
 export function clampViewport(view: MapViewport, drawing: { width: number; height: number }, pane: MapPane): MapViewport {
   const zoom = clamp(MAP_ZOOM.min, Number.isFinite(view.zoom) ? view.zoom : 1, MAP_ZOOM.max);
   const width = drawing.width * zoom;
   const height = drawing.height * zoom;
-  const x = width <= pane.width - 2 * PANE_PAD ? (pane.width - width) / 2 : clamp(pane.width - width - PANE_PAD, view.x, PANE_PAD);
-  const y = height <= pane.height - 2 * PANE_PAD ? PANE_PAD : clamp(pane.height - height - PANE_PAD, view.y, PANE_PAD);
+  const x = width <= pane.width ? (pane.width - width) / 2 : clamp(pane.width - width - PANE_PAD, view.x, PANE_PAD);
+  const y = height <= pane.height - PANE_PAD ? PANE_PAD : clamp(pane.height - height - PANE_PAD, view.y, PANE_PAD);
   return { x: Math.round(x), y: Math.round(y), zoom };
 }
 /** The pane centred on a node, as far as the drawing's edges allow. Nothing is ever fitted by shrinking. */

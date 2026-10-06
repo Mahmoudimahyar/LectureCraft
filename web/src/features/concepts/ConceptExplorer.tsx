@@ -11,14 +11,14 @@ import { DropdownMenu } from "radix-ui";
 import { ArrowLeft, ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { BAND_CLASS, TextTabs, WorkspaceFrame, useWorkspaceFrame, type FramePane } from "@/app/WorkspaceFrame";
 import { Button, IconButton, Segmented, StaleNotice, cn } from "@/components/ui";
-import { CONCEPT_SCOPE_LABEL, R2_ACTION, conceptScopeHeading, countLabel, staleViewLine } from "@/lib/labels";
+import { CONCEPT_SCOPE_LABEL, R2_ACTION, conceptScopeHeading, countLabel, nb, staleViewLine } from "@/lib/labels";
 import { useCourse, useLecture } from "@/lib/queries";
 import { conceptGraphErrorCode, identityOf, isStale, isStructuralPage, nextContentPage } from "@/lib/r2";
-import type { GraphScopeKind, LectureView, OutlineRow } from "@/lib/types";
+import type { AnchorTieKind, GraphScopeKind, LectureView, OutlineRow } from "@/lib/types";
 import { ConceptDetail, DETAIL_TABS, detailCounts, isDetailTab, useNodeDetail, type DetailTabId } from "./ConceptDetail";
 import { ConceptMap, useFocusGraph, useScopeGraph } from "./ConceptMap";
 import { ConceptTree, type TreePlace } from "./ConceptTree";
-import { conceptMapHref, parseScope, revealPath, scopeParam, topicConceptCounts, type ParsedScope } from "./map-model";
+import { conceptMapHref, parseScope, revealPath, scopeParam, sourceTies, topicConceptCounts, type ParsedScope } from "./map-model";
 
 export { parseScope } from "./map-model";
 
@@ -43,6 +43,12 @@ function lastLecture(courseId: string): string | null {
   }
 }
 
+/**
+ * How far the outline starts open. A slide holds a handful of entries, so its concepts and skills are listed at once; a
+ * lecture lists its concepts; a course starts at its topics (a course of several hundred concepts is never listed at once).
+ */
+const OPEN_BY_SCOPE: Record<GraphScopeKind, ReadonlyArray<OutlineRow["kind"]>> = { course: [], lecture: ["topic"], slide: ["topic", "concept"] };
+
 /** What a structural page is called in the sentence of 7.5. A role without words here is not worded as structural. */
 const STRUCTURAL_PAGE: Record<string, string> = { structural_title_or_section: "a structural page (title or section)", administrative: "an administrative page", blank: "a blank page" };
 
@@ -60,7 +66,8 @@ interface ExplorerState {
   setScope: (kind: GraphScopeKind, lectureId?: string | null, page?: number | null) => void;
   select: (nodeId: string | null) => void;
   selectOutside: (nodeId: string) => void;
-  back: { to: string; label: string } | null;
+  /** The way back to the lecture: its full name ("Back to page 5") and its short form beside an arrow ("Page 5"). */
+  back: { to: string; label: string; short: string } | null;
   /** The address of the explorer as it is now, for links that leave it. */
   here: string;
 }
@@ -77,8 +84,9 @@ function ScopeSwitch({ state, className }: { state: ExplorerState; className?: s
 
 function BackLink({ state, compact = false }: { state: ExplorerState; compact?: boolean }) {
   if (!state.back) return null;
+  // One focused pane: the header already has an arrow back to the course, so this one says where it goes ("Page 5").
   return compact
-    ? <Link to={state.back.to} aria-label={state.back.label} title={state.back.label} className="ll-ib flex-none"><ArrowLeft aria-hidden /></Link>
+    ? <Link to={state.back.to} aria-label={state.back.label} title={state.back.label} className="ll-tbtn flex-none whitespace-nowrap px-2"><ArrowLeft aria-hidden /><span>{state.back.short}</span></Link>
     : <Link to={state.back.to} className="ll-tbtn flex-none whitespace-nowrap"><ArrowLeft aria-hidden /><span>{state.back.label}</span></Link>;
 }
 
@@ -95,7 +103,7 @@ function ScopeSubject({ state }: { state: ExplorerState }) {
   if (lectures.length < 2) return <p className="line-clamp-2 min-w-0 text-ui leading-5">{title}</p>;
   return (
     <DropdownMenu.Root>
-      <DropdownMenu.Trigger className="ll-tbtn h-auto min-h-9 min-w-0 py-0 text-left" aria-label={`Lecture: ${title}`}>
+      <DropdownMenu.Trigger className="ll-tbtn h-auto min-h-9 min-w-0 whitespace-normal py-0 text-left" aria-label={`Lecture: ${title}`}>
         <span className="line-clamp-2 min-w-0 leading-5">{title}</span><ChevronDown aria-hidden className="flex-none" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
@@ -130,7 +138,8 @@ function EmptyScope({ state, note }: { state: ExplorerState; note: string | null
 }
 
 // ---- zones -----------------------------------------------------------------------------------------------------------------
-function OutlineZone({ state, heading, note, unknownScope, reveal, conceptCounts }: { state: ExplorerState; heading: string | null; note: string | null; unknownScope: string | null; reveal: string[]; conceptCounts: ReadonlyMap<string, number> | null }) {
+function OutlineZone({ state, heading, note, unknownScope, reveal, conceptCounts, ties }: { state: ExplorerState; heading: string | null; note: string | null; unknownScope: string | null; reveal: string[];
+  conceptCounts: ReadonlyMap<string, number> | null; ties: ReadonlyMap<string, AnchorTieKind> | null }) {
   const frame = useWorkspaceFrame();
   const framed = frame.arrangement === "frame";
   return (
@@ -147,7 +156,7 @@ function OutlineZone({ state, heading, note, unknownScope, reveal, conceptCounts
             <>
               {heading && <p className="ll-num px-2 pb-2 pt-1 text-ui text-muted" data-testid="outline-scope-count">{heading}</p>}
               <ConceptTree courseId={state.courseId} scope={state.scopeText} scopeKind={state.scope.kind} selected={state.selected} onSelect={(row: OutlineRow) => state.select(row.node_id)} place={state.place}
-                conceptCounts={conceptCounts} reveal={reveal} label="Concept outline" testId="outline-tree"
+                conceptCounts={conceptCounts} ties={ties} reveal={reveal} openKinds={OPEN_BY_SCOPE[state.scope.kind]} label="Concept outline" testId="outline-tree"
                 empty={<div className="p-2">{framed ? <p className="text-ui text-muted">Nothing is listed for this page. The map pane says why.</p> : <EmptyScope state={state} note={note} />}</div>} />
             </>
           )}
@@ -204,7 +213,8 @@ function DetailZone({ state, counts, onTab }: { state: ExplorerState; counts: Re
       )}
       <div id="ll-concept-detail" role={framed && state.selected ? "tabpanel" : undefined} aria-labelledby={framed && state.selected ? `ll-concept-tab-${state.tab}` : undefined}
         className={cn("flex min-h-0 flex-1 flex-col", framed && "ll-region my-3 overflow-hidden")}>
-        <ConceptDetail courseId={state.courseId} nodeId={state.selected} tab={state.tab} scope={state.scope} graphNode={graphNode} place={state.place} returnTo={state.here} onClear={() => state.select(null)} framed={framed} />
+        <ConceptDetail courseId={state.courseId} nodeId={state.selected} tab={state.tab} scope={state.scope} graphNode={graphNode} tie={state.scope.kind === "slide" && state.selected ? sourceTies(focus.data).get(state.selected) ?? null : null}
+          place={state.place} returnTo={state.here} onClear={() => state.select(null)} framed={framed} />
       </div>
     </div>
   );
@@ -283,6 +293,8 @@ export function ConceptExplorer() {
   const slideLabel = scope.kind === "slide" && scope.page && lecture ? identityOf(lecture, scope.page).label : null;
   const conceptCounts = useMemo(() => topicConceptCounts(base.data), [base.data]);
   const reveal = useMemo(() => revealPath(focus.data), [focus.data]);
+  // Slide scope: how each entry is tied to the slide, so a row can say that a suggested link is all there is.
+  const ties = useMemo(() => (scope.kind === "slide" ? new Map([...sourceTies(base.data), ...sourceTies(focus.data)]) : null), [scope.kind, base.data, focus.data]);
 
   // The stale notice (9.9): the concept views against the lecture view in hand, and the focused view against the scope's own.
   const staleKeys = useMemo(() => [...new Set([
@@ -303,7 +315,7 @@ export function ConceptExplorer() {
   const backPage = lectureOfAddress(backTo)?.page ?? null;
   const explorer: ExplorerState = {
     courseId, scope, scopeText, selected, tab, lecture, place, lectureId, page, setScope, select, selectOutside,
-    back: backTo ? { to: backTo, label: backPage ? `Back to page ${backPage}` : state?.returnLabel ?? "Back to the lecture" } : null,
+    back: backTo ? { to: backTo, label: backPage ? `Back to page ${backPage}` : state?.returnLabel ?? "Back to the lecture", short: backPage ? nb(`Page ${backPage}`) : "Lecture" } : null,
     here: `${conceptMapHref(courseId, scopeText, selected)}`,
   };
   const note = base.data?.scope.note ?? null;
@@ -323,7 +335,7 @@ export function ConceptExplorer() {
       <div className="min-h-0 flex-1">
         <WorkspaceFrame kind="concepts" testId="concept-frame" pane={pane} onPaneChange={showPane} paneSwitchLabel="Concept map pane"
           labels={{ outline: "Concept outline", stage: "Concept map", context: "Selected item" }} panes={panes}
-          outline={<OutlineZone state={explorer} heading={heading} note={note} unknownScope={unknownScope} reveal={reveal} conceptCounts={conceptCounts} />}
+          outline={<OutlineZone state={explorer} heading={heading} note={note} unknownScope={unknownScope} reveal={reveal} conceptCounts={conceptCounts} ties={ties} />}
           stage={<StageZone state={explorer} scopeName={scopeName} slideLabel={slideLabel} note={note} unknownScope={unknownScope} notice={notice} />}
           context={<DetailZone state={explorer} counts={counts} onTab={showPane} />} />
       </div>

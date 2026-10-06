@@ -2,15 +2,16 @@
 // add for amendment R2. Settings reads back timing and suggested links per course; Progress shows the five evidence
 // states where the Brain sends them. Synthetic samples only (src/lib/fixtures/r2-sample.ts); nothing here is a measurement.
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import {
   sampleConceptGraphCourse, sampleCourseTiming, sampleEvidence, sampleInferredAnchors, sampleInferredAnchorsEarlierCatalog,
 } from "@/lib/fixtures/r2-sample";
 import { NBSP } from "@/lib/labels";
 import type { EvidenceObservation, OutlineNodeView, SkillRow } from "@/lib/types";
 import { allowanceLine, anchorCountRows, coverageLines, decisionRows, linksWords, queueWords, refusedRows, stageRows } from "@/features/settings/SettingsPages";
-import { SkillState, observationsByAttempt, rowEvidence, skillEvidenceIndex } from "@/features/progress/ProgressPages";
-import { Callout, Fact, Facts, Lead, Picker, StateWords } from "@/features/search/SearchOverlay";
+import { SkillState, attemptRecordLine, observationsByAttempt, rowEvidence, skillEvidenceIndex } from "@/features/progress/ProgressPages";
+import { Callout, Disclosure, Fact, Facts, Lead, Picker, StateWords, lectureNameOf } from "@/features/search/SearchOverlay";
+import { bindingFacts } from "@/features/connect/ConnectPage";
 
 /** A fact keeps its parts together with non-breaking spaces; the wording is compared with plain ones. */
 const plain = (text: string | null | undefined): string => (text ?? "").split(NBSP).join(" ");
@@ -211,5 +212,53 @@ describe("what the pages share", () => {
     expect(note.className).toContain("mt-4");
     const { container } = render(<Lead>One sentence under a title.</Lead>);
     expect(container.querySelector(".ll-measure")?.textContent).toBe("One sentence under a title.");
+  });
+
+  it("detail that opens on request is a button that says whether it is open, and its content is absent until opened", () => {
+    render(<Disclosure title="Background preparation" count={6}><p>be505 · source refresh</p></Disclosure>);
+    const toggle = screen.getByRole("button", { name: /^Background preparation\s+6$/ });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("be505 · source refresh")).toBeNull();
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("be505 · source refresh")).toBeTruthy();
+    expect(document.getElementById(toggle.getAttribute("aria-controls") ?? "")?.textContent).toBe("be505 · source refresh");
+    fireEvent.click(toggle);
+    expect(screen.queryByText("be505 · source refresh")).toBeNull();
+  });
+
+  it("a lecture is named by its title where the course lists it, and by its identifier otherwise: no title is made up", () => {
+    const course = { lectures: [{ lecture_id: "lecture-02", title: "Lecture 02 - Expression control" }] };
+    expect(lectureNameOf(course, "lecture-02")).toBe("Lecture 02 - Expression control");
+    expect(lectureNameOf(course, "lecture-09")).toBe("lecture-09");
+    expect(lectureNameOf(undefined, "lecture-02")).toBe("lecture-02");
+    expect(lectureNameOf({ lectures: [{ lecture_id: "lecture-02", title: "" }] }, "lecture-02")).toBe("lecture-02");
+  });
+});
+
+describe("Connect: what a bound course holds", () => {
+  it("counts lecture units and sessions with the right number of each word", () => {
+    expect(bindingFacts({ course_id: "be505", lecture_units: 5, sessions: 4 })).toEqual(["be505", "5 lecture units", "4 sessions"]);
+    expect(bindingFacts({ course_id: "cs542", lecture_units: 1, sessions: 1 })).toEqual(["cs542", "1 lecture unit", "1 session"]);
+    expect(bindingFacts({ course_id: "ds551", lecture_units: 0, sessions: 2 })).toEqual(["ds551", "0 lecture units", "2 sessions"]);
+  });
+
+  it("writes each fact with ordinary spaces: the page keeps a figure with its word by not wrapping, so the text can be found as typed", () => {
+    expect(bindingFacts({ course_id: "be505", lecture_units: 5, sessions: 4 }).join(" · ")).not.toContain(NBSP);
+  });
+
+  it("states only the identifier of a course whose counts were not sent", () => {
+    expect(bindingFacts({ course_id: "be562" })).toEqual(["be562"]);
+  });
+});
+
+describe("Progress: what the record states about one attempt, beside its state", () => {
+  it("keeps the record's own word for prior exposure, which the state label reduces to seen or not", () => {
+    expect(attemptRecordLine({ reference_access: "none", confidence: "medium", prior_exposure: "seen_exact" })).toBe("no references · confidence medium · prior exposure: seen exact");
+    expect(attemptRecordLine({ reference_access: "notes", confidence: "low", prior_exposure: "same_family" })).toBe("notes/sources open · confidence low · prior exposure: same family");
+  });
+
+  it("shows a value this build has no words for as recorded", () => {
+    expect(attemptRecordLine({ reference_access: "open_book_exam", confidence: "high", prior_exposure: "unknown" })).toBe("open book exam · confidence high · prior exposure: unknown");
   });
 });

@@ -6,8 +6,8 @@ import { sampleLectureView, sampleLectureViewWithoutR2 } from "@/lib/fixtures/r2
 import { identityOf } from "@/lib/r2";
 import type { LectureView, SlideView, SourceMapOverrideRecord } from "@/lib/types";
 import { NO_TITLE, findRows, outlineFacts, outlineRows, plainRows, rowName } from "@/features/lecture/LectureOutline";
-import { STAGE_MIN_BLOCK_PX, groupingChoices, groupingRequest, learnerCorrections, stageBlock, takeBackChoice } from "@/features/lecture/LectureWorkspace";
-import { PAGER_STEPS, ROLE_ORDER, identityDetails, pagerHolds, pagerLevelFor, stepName } from "@/features/lecture/Pager";
+import { STAGE_MIN_BLOCK_PX, fileSize, groupingChoices, groupingRequest, learnerCorrections, rangesFollowTheMap, stageBlock, takeBackChoice } from "@/features/lecture/LectureWorkspace";
+import { PAGER_LAST_LEVEL, PAGER_STEPS, ROLE_ORDER, identityDetails, pagerHolds, pagerLevelFor, stepName } from "@/features/lecture/Pager";
 import { FIT_DATA, FIT_LABEL, PDF_CSS_UNITS, SLIDE_FITS, canvasDensity, slideWidth } from "@/features/lecture/SlideCanvas";
 import { thumbRenderWidth } from "@/lib/thumbs";
 
@@ -103,15 +103,21 @@ describe("the pager band: what leaves it, in the specified order (5.3)", () => {
     expect([479, 366].map(pagerLevelFor)).toEqual([4, 4]);
   });
   it("drops the role's state words, then Note and the size menu, then the role button, then the words of Next content and full screen", () => {
-    expect(pagerHolds(0)).toEqual({ roleState: true, noteAndFit: true, role: true, nextContentWords: true, fullScreen: true, smallIdentity: false });
+    expect(pagerHolds(0)).toEqual({ roleState: true, noteAndFit: true, role: true, nextContentWords: true, fullScreen: true, smallIdentity: false, wrapIdentity: false });
     expect(pagerHolds(1)).toMatchObject({ roleState: false, noteAndFit: true, role: true });
     expect(pagerHolds(2)).toMatchObject({ roleState: false, noteAndFit: false, role: true, fullScreen: true });
     expect(pagerHolds(3)).toMatchObject({ noteAndFit: false, role: false, nextContentWords: true, fullScreen: true, smallIdentity: false });
-    expect(pagerHolds(4)).toEqual({ roleState: false, noteAndFit: false, role: false, nextContentWords: false, fullScreen: false, smallIdentity: true });
+    expect(pagerHolds(4)).toEqual({ roleState: false, noteAndFit: false, role: false, nextContentWords: false, fullScreen: false, smallIdentity: true, wrapIdentity: false });
+  });
+  it("lets the identity line break between its parts only once nothing more can leave the band, and never for a width alone", () => {
+    expect(PAGER_LAST_LEVEL).toBe(5);
+    expect(pagerHolds(5)).toEqual({ roleState: false, noteAndFit: false, role: false, nextContentWords: false, fullScreen: false, smallIdentity: true, wrapIdentity: true });
+    for (const width of [1, 200, 320, 366, 479]) expect(pagerLevelFor(width)).toBeLessThan(PAGER_LAST_LEVEL);
+    for (let level = 0; level < PAGER_LAST_LEVEL; level += 1) expect(pagerHolds(level).wrapIdentity).toBe(false);
   });
   it("never brings something back at a deeper step", () => {
-    const kept = (level: number) => Object.entries(pagerHolds(level)).filter(([name, held]) => name !== "smallIdentity" && held).map(([name]) => name);
-    for (let level = 1; level <= 4; level += 1) for (const name of kept(level)) expect(kept(level - 1)).toContain(name);
+    const kept = (level: number) => Object.entries(pagerHolds(level)).filter(([name, held]) => name !== "smallIdentity" && name !== "wrapIdentity" && held).map(([name]) => name);
+    for (let level = 1; level <= PAGER_LAST_LEVEL; level += 1) for (const name of kept(level)) expect(kept(level - 1)).toContain(name);
   });
   it("lists the eight roles: the five of which something is forced, then the three of which nothing is", () => {
     expect([...ROLE_ORDER]).toEqual(["instructional", "worked_example_or_question", "objectives_or_summary", "mixed", "unknown", "structural_title_or_section", "administrative", "blank"]);
@@ -304,5 +310,32 @@ describe("taking back the learner's own corrections", () => {
     expect(plain(takeBackChoice(history[3]!).detail)).toMatch(/^Earlier you grouped pp\. 3–6\./);
     expect(plain(takeBackChoice(history[4]!).detail)).toMatch(/^Earlier you started a new slide at p\. 5\./);
     expect(groupingRequest(ungrouped, "build_group", "")).toEqual({ op: "revert", value: [3], reason: "Taken back by the learner in the lecture workspace" });
+  });
+});
+
+describe("a candidate file's size in words (the choice among several files)", () => {
+  it("is whole kilobytes under a megabyte and megabytes with one decimal from there; a small file is never 0.0 MB", () => {
+    expect([1, 1639, 2172, 1_048_575].map((bytes) => plain(fileSize(bytes)))).toEqual(["1 KB", "2 KB", "2 KB", "1024 KB"]);
+    expect([1_048_576, 5_600_000].map((bytes) => plain(fileSize(bytes)))).toEqual(["1.0 MB", "5.3 MB"]);
+  });
+  it("holds the figure and its unit together with a non-breaking space", () => {
+    expect(fileSize(2172)).toBe(`2${String.fromCharCode(0xa0)}KB`);
+  });
+});
+
+describe("a correction of the map is followed by matching the recording again", () => {
+  // The Brain serves no range that was matched under another map revision, so a correction would otherwise leave every
+  // page of the lecture at "Not matched yet" with nothing on screen to run the matching again.
+  const withAssociation = (state: "current" | "stale" | "not_run"): LectureView => ({ ...sampleLectureView,
+    timing: { ...sampleLectureView.timing!, recordings: sampleLectureView.timing!.recordings.map((recording) => ({ ...recording, association: { ...recording.association, state } })) } });
+  it("when the recording's ranges were matched to the pages at some time, current or already stale", () => {
+    expect(sampleLectureView.timing!.recordings.length).toBeGreaterThan(0);
+    expect(rangesFollowTheMap(withAssociation("current"))).toBe(true);
+    expect(rangesFollowTheMap(withAssociation("stale"))).toBe(true);
+  });
+  it("and not when nothing was ever matched, when there is no recording, or when the view states no timing", () => {
+    expect(rangesFollowTheMap(withAssociation("not_run"))).toBe(false);
+    expect(rangesFollowTheMap({ ...sampleLectureView, timing: { ...sampleLectureView.timing!, recordings: [] } })).toBe(false);
+    expect(rangesFollowTheMap(sampleLectureViewWithoutR2)).toBe(false);
   });
 });

@@ -6,7 +6,7 @@ import { render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import type { ReactElement } from "react";
-import { ConceptDetail, detailCounts, detailKicker, detailSummary, primaryPage, questionsHeading, sourceTieSentence } from "@/features/concepts/ConceptDetail";
+import { ConceptDetail, detailCounts, detailKicker, detailSummary, primaryPage, questionsHeading, sourceTieSentence, supportPlaceSentence } from "@/features/concepts/ConceptDetail";
 import { parseScope } from "@/features/concepts/map-model";
 import { sampleEvidence, sampleLectureView } from "@/lib/fixtures/r2-sample";
 import { NBSP } from "@/lib/labels";
@@ -144,6 +144,13 @@ describe("the panel", () => {
     expect(play.getAttribute("href")).toMatch(/\/lectures\/lecture-90\?page=5&range=.+&play=1$/);
   });
 
+  it("says that a suggested link is all that ties the node to the slide, when that is so", () => {
+    expect(supportPlaceSentence("on this build", "agent_inferred")).toBe("Its support is on this build, by a suggested link only.");
+    expect(supportPlaceSentence("on this build", "exact")).toBe("Its support is on this build.");
+    expect(supportPlaceSentence("on this build", "stated")).toBe("Its support is on this build.");
+    expect(supportPlaceSentence("group-level", null)).toBe("Its support is group-level.");
+  });
+
   it("shows the catalog's own definition when it has one", async () => {
     detail = { ...DETAIL, definition: { state: "catalog", text: "A synthetic definition from the catalog.", reason: null } };
     mount(panel("sources"));
@@ -178,6 +185,17 @@ describe("the panel", () => {
     const all = plain(screen.getByTestId("outline-detail").textContent);
     expect(all).toContain("Nothing is averaged into a score.");
     expect(all).not.toMatch(/%|mastery|mastered|proficien/i);
+  });
+
+  it("writes no row of zeros when nothing is recorded: unknown is said in words, not as a count", async () => {
+    detail = { ...DETAIL, evidence: { ...DETAIL.evidence, state: "unknown", assistance: null, prior_exposure: "unknown", attempts: 0, observations: [],
+      summary: { independent: 0, assisted: 0, not_separately_observed: 0, unknown: 0, observations: 0, attempts: 0 } } };
+    mount(panel("evidence"));
+    expect(await screen.findByText(/No attempt is recorded for this concept\. That says nothing about what you can do\./)).toBeInTheDocument();
+    expect(screen.queryByTestId("evidence-summary")).toBeNull();
+    const all = plain(screen.getByTestId("outline-detail").textContent);
+    expect(all).toContain("Unknown · no recorded attempt");
+    expect(all).not.toMatch(/Of 0|0 independent/);
   });
 
   it("says that nothing is selected, and explains an identifier the catalog does not hold", async () => {

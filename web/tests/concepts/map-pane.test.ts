@@ -52,6 +52,24 @@ describe("the pane: never under 100 %, and never away from the drawing", () => {
     expect(clampViewport({ x: 500, y: 500, zoom: 1 }, small, pane)).toEqual({ x: 100, y: 8, zoom: 1 });
   });
 
+  it("holds three columns that fill the pane still, wherever the selected node is: nothing is hidden, so no side fades", () => {
+    // 7.3: node width floor((590 − 4 − 80) / 3) = 168, so the drawing is 584 px in a 590 px pane.
+    const three = { width: 3 * 168 + 2 * 40, height: 300 };
+    const narrow = { width: 590, height: 500 };
+    for (const x of [-200, -2, 0, 3, 200]) {
+      const view = clampViewport({ x, y: 0, zoom: 1 }, three, narrow);
+      expect(view.x).toBe(3);
+      expect(moreSides(view, three, narrow)).toEqual({ left: false, right: false, top: false, bottom: false });
+    }
+    // centred on its rightmost node, it still does not move
+    expect(centreOn({ x: 416, y: 0, width: 168, height: 60 }, three, narrow).x).toBe(3);
+    // exactly as wide as the pane: flush, not panned
+    expect(clampViewport({ x: -40, y: 0, zoom: 1 }, { width: 590, height: 300 }, narrow).x).toBe(0);
+    // a drawing that ends inside the pane below its 8 px top margin is not moved up or down either
+    expect(clampViewport({ x: 0, y: -60, zoom: 1 }, { width: 584, height: 490 }, narrow)).toMatchObject({ y: 8 });
+    expect(moreSides(clampViewport({ x: 0, y: -60, zoom: 1 }, { width: 584, height: 490 }, narrow), { width: 584, height: 490 }, narrow).top).toBe(false);
+  });
+
   it("lets a larger drawing be moved until its edge is 8 px inside the pane, and no further", () => {
     expect(clampViewport({ x: 300, y: 300, zoom: 1 }, large, pane)).toEqual({ x: 8, y: 8, zoom: 1 });
     expect(clampViewport({ x: -5000, y: -5000, zoom: 1 }, large, pane)).toEqual({ x: 600 - 1400 - 8, y: 500 - 1200 - 8, zoom: 1 });

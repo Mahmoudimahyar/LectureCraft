@@ -3,7 +3,7 @@
 // (dagre) with its ranks. Synthetic sample graphs only.
 import { describe, expect, it } from "vitest";
 import {
-  MAP_RANKS, RANK_FOLD, buildMapModel, conceptMapHref, layoutMap, mapNodeWidth, parseScope, scopeParam, topicConceptCounts, topicNodeWidth, type MapModel, type MapNodeModel,
+  MAP_RANKS, RANK_FOLD, buildMapModel, conceptMapHref, layoutMap, mapNodeWidth, parseScope, scopeParam, sourceTies, topicConceptCounts, topicNodeWidth, type MapModel, type MapNodeModel,
 } from "@/features/concepts/map-model";
 import { sampleConceptGraphCourse, sampleConceptGraphLecture, sampleConceptGraphSlide } from "@/lib/fixtures/r2-sample";
 import { NBSP } from "@/lib/labels";
@@ -235,11 +235,42 @@ describe("the slide scope", () => {
     expect(model.legend).toContain("source");
   });
 
-  it("words a suggested link on its line, and leaves a course anchor unworded", () => {
+  it("says on the node, not on the line, that its support is only a suggested link", () => {
     const suggested = model.edges.filter((entry) => entry.family === "source" && entry.tie === "agent_inferred");
     expect(suggested.length).toBeGreaterThan(0);
-    expect(suggested.every((entry) => entry.label === "Suggested link")).toBe(true);
-    expect(model.edges.filter((entry) => entry.family === "source" && entry.tie === "stated").every((entry) => entry.label === null)).toBe(true);
+    expect(model.edges.filter((entry) => entry.family === "source").every((entry) => entry.label === null)).toBe(true);
+    for (const line of suggested) expect(byId(model, line.target).tie).toBe("agent_inferred");
+    expect(byId(model, "c-sample-1").tie).toBe("agent_inferred");
+    expect(byId(model, "t-sample-a").tie).toBeNull(); // no source line reaches the topic: nothing is said of it
+  });
+
+  it("draws one source line to a node however many ties name it, and the strongest tie speaks", () => {
+    const both: ConceptGraphView = { ...sampleConceptGraphSlide, edges: [
+      ...sampleConceptGraphSlide.edges,
+      edge("source", "slide_supports_by_assessment", sampleConceptGraphSlide.scope.logical_slide_id!, "c-sample-1", { tie: "exact", support_pages: [3, 4, 5], provenance: "course anchor (reviewed page)" }),
+    ] };
+    const merged = buildMapModel(both);
+    const lines = merged.edges.filter((entry) => entry.family === "source" && entry.target === "c-sample-1");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!.tie).toBe("exact");
+    expect(lines[0]!.provenance).toContain("course anchor (reviewed page)");
+    expect(lines[0]!.provenance).toContain("suggested link");
+    expect(byId(merged, "c-sample-1").tie).toBe("exact");
+    // The same answer whatever order the ties arrive in.
+    const reversed = buildMapModel({ ...both, edges: [...both.edges].reverse() });
+    expect(reversed.edges.filter((entry) => entry.family === "source" && entry.target === "c-sample-1").map((entry) => entry.tie)).toEqual(["exact"]);
+  });
+
+  it("reads the strongest tie of every supported node from the graph's source lines", () => {
+    const ties = sourceTies({ ...sampleConceptGraphSlide, edges: [
+      ...sampleConceptGraphSlide.edges,
+      edge("source", "slide_supports", sampleConceptGraphSlide.scope.logical_slide_id!, "s-sample-1", { tie: "stated", support_pages: [4] }),
+    ] });
+    expect(ties.get("c-sample-1")).toBe("agent_inferred");
+    expect(ties.get("s-sample-1")).toBe("stated");
+    expect(ties.has("t-sample-a")).toBe(false);
+    expect(sourceTies(sampleConceptGraphCourse).size).toBe(0);
+    expect(sourceTies(null).size).toBe(0);
   });
 
   it("keeps where each entry's support is", () => {
@@ -312,6 +343,88 @@ describe("the one layout (dagre, top to bottom)", () => {
     expect(placed.boxes.get(marker.id)!.x).toBeLessThan(placed.boxes.get(concept.id)!.x);
   });
 
+  it("keeps a topic straight above its one concept: the slide beside the concept does not pull it aside", () => {
+    const slide = buildMapModel(sampleConceptGraphSlide);
+    const placed = layoutMap(slide, sizes, { nodeWidth: 172 });
+    const centre = (id: string): number => placed.boxes.get(id)!.x + placed.boxes.get(id)!.width / 2;
+    expect(ids(slide, "topic")).toEqual(["t-sample-a"]);
+    expect(centre("t-sample-a")).toBe(centre("c-sample-1"));
+    // and every node still sits on the line of its kind
+    for (const rank of slide.ranks) expect(new Set(ids(slide, rank).map((id) => placed.boxes.get(id)!.y)).size).toBe(1);
+  });
+
+  describe("lines keep clear of the nodes they do not join", () => {
+    // A slide with two concepts and their skills; the second concept is tall (a long name), the slide is short.
+    const slideId = sampleConceptGraphSlide.scope.logical_slide_id!;
+    const overview = buildMapModel(graph(
+      [node("t-1", "topic", "Topic"), node("c-near", "concept", "A near concept", { where: "on_this_page", support_pages: [4] }), node("c-far", "concept", "Z far concept", { where: "on_this_page", support_pages: [4] }),
+        node("s-near", "skill", "Skill of the near concept", { where: "on_this_page", support_pages: [4] })],
+      [edge("structure", "topic_includes_concept", "t-1", "c-near"), edge("structure", "topic_includes_concept", "t-1", "c-far"), edge("structure", "concept_assessed_as_skill", "c-near", "s-near"),
+        edge("source", "slide_supports", slideId, "c-near", { tie: "exact" }), edge("source", "slide_supports", slideId, "c-far", { tie: "exact" }), edge("source", "slide_supports", slideId, "s-near", { tie: "exact" })],
+      null, { scope: { ...sampleConceptGraphSlide.scope } }));
+    const heightOf = (id: string): number => (id === "c-near" ? 150 : 60);
+    const placed = layoutMap(overview, heightOf, { nodeWidth: 172 });
+    const box = (id: string) => placed.boxes.get(id)!;
+    const line = (target: string) => overview.edges.find((entry) => entry.family === "source" && entry.target === target)!;
+
+    it("has the three nodes of the concept line in the order slide, near, far", () => {
+      expect(box(slideId).x).toBeLessThan(box("c-near").x);
+      expect(box("c-near").x).toBeLessThan(box("c-far").x);
+    });
+
+    it("keeps a skill straight under its concept although the slide supports both: the slide's line is drawn, it does not pull", () => {
+      expect(box("s-near").x + box("s-near").width / 2).toBe(box("c-near").x + box("c-near").width / 2);
+      expect(placed.edges.get(line("s-near").id)!.arrow).toMatchObject({ y: box("s-near").y - 2, angle: 90 });
+    });
+
+    it("drops a line from a short node straight to the foot of its line before it turns, so it does not cross a taller neighbour", () => {
+      const geometry = placed.edges.get(line("s-near").id)!;
+      const foot = box("c-near").y + box("c-near").height + 2;
+      const start = /^M([\d.]+) ([\d.]+)V([\d.]+)C/.exec(geometry.path);
+      expect(start).not.toBeNull();
+      expect(Number(start![2])).toBe(box(slideId).y + box(slideId).height + 2);
+      expect(Number(start![3])).toBe(foot);
+      // a line that leaves the tallest node of its line needs no such drop
+      const containment = overview.edges.find((entry) => entry.source === "c-near" && entry.target === "s-near")!;
+      expect(placed.edges.get(containment.id)!.path).toMatch(/^M[\d.]+ [\d.]+C/);
+    });
+
+    it("joins the slide and its neighbour by a straight line, and arcs over the line of nodes to one that is further away", () => {
+      expect(placed.edges.get(line("c-near").id)!.path).toMatch(/^M[\d.]+ [\d.]+H[\d.]+$/);
+      const far = placed.edges.get(line("c-far").id)!;
+      const top = box("c-far").y;
+      // the arrowhead points down into the top of the supported node, off its middle (where the topic's line arrives)
+      expect(far.arrow).toMatchObject({ y: top - 2, angle: 90 });
+      expect(far.arrow!.x).not.toBe(box("c-far").x + box("c-far").width / 2);
+      expect(far.arrow!.x).toBeGreaterThan(box("c-far").x);
+      // every point the curve is drawn from lies above the tops of the nodes: it never runs through the node in between
+      const ys = [...far.path.matchAll(/[\d.]+ ([\d.]+)/g)].map((match) => Number(match[1]));
+      expect(ys.length).toBeGreaterThan(2);
+      expect(Math.max(...ys)).toBeLessThanOrEqual(top - 2);
+      expect(Math.min(...ys)).toBeGreaterThanOrEqual(0);
+    });
+
+    it("lets a worded link between two nodes of one line dip under the tallest node between them", () => {
+      const questions = [node("q-1", "question", "Question 1"), node("q-2", "question", "Question 2"), node("q-3", "question", "Question 3")];
+      const model3 = buildMapModel(graph(
+        [node("s-1", "skill", "Skill"), ...questions, ...questions.map((question) => node(`${question.id}.C1`, "criterion", "Criterion"))],
+        [...questions.flatMap((question) => [edge("assessment", "question_has_criterion", question.id, `${question.id}.C1`), edge("assessment", "criterion_assesses_skill", `${question.id}.C1`, "s-1")]),
+          edge("structure", "diagnostic_prerequisite", "q-1", "q-3")],
+        "s-1"));
+      const tall = layoutMap(model3, (id) => (id === "q-2" ? 200 : 60), { nodeWidth: 172 });
+      const order = ["q-1", "q-2", "q-3"].sort((a, b) => tall.boxes.get(a)!.x - tall.boxes.get(b)!.x);
+      const relation = model3.edges.find((entry) => entry.legend === "prerequisite_or_overlap")!;
+      const geometry = tall.edges.get(relation.id)!;
+      const lowest = Math.max(...["q-1", "q-2", "q-3"].map((id) => tall.boxes.get(id)!.y + tall.boxes.get(id)!.height));
+      if (order[1] === "q-2") { // the tall question lies between the two that are joined
+        const control = /C[\d.]+ ([\d.]+) /.exec(geometry.path)!;
+        expect(Number(control[1])).toBeGreaterThan(lowest);
+        expect(geometry.label!.y).toBeGreaterThan(lowest);
+      } else expect(geometry.label).not.toBeNull();
+      expect(tall.height).toBeGreaterThanOrEqual(geometry.label!.y);
+    });
+  });
+
   it("lays the topic level out as a grid of three columns in reading order", () => {
     const topics = Array.from({ length: 7 }, (_, index) => node(`t-${index + 1}`, "topic", `Topic ${index + 1}`));
     const grid = buildMapModel(graph(topics, [], null));
@@ -325,6 +438,17 @@ describe("the one layout (dagre, top to bottom)", () => {
     expect(at("t-7").y).toBe(at("t-4").y + 84 + 16);
     expect(placed.rankLabels).toEqual([]);
     expect(placed.width).toBe(632);
+  });
+
+  it("puts the folded rest at the end of its line, and the first line of several nodes in the outline's order", () => {
+    // Names that sort against the order they arrive in, as a catalog's do.
+    const names = ["Delta", "Alpha", "Echo", "Charlie", "Bravo"];
+    const concepts = names.map((name, index) => node(`c-${index + 1}`, "concept", name));
+    const fan = buildMapModel(graph([node("t-1", "topic", "Topic"), ...concepts], concepts.map((concept) => edge("structure", "topic_includes_concept", "t-1", concept.id)), "t-1"));
+    const placed = layoutMap(fan, sizes, { nodeWidth: 172 });
+    const row = fan.nodes.filter((entry) => entry.rank === "concept").sort((a, b) => placed.boxes.get(a.id)!.x - placed.boxes.get(b.id)!.x);
+    expect(row.map((entry) => entry.label)).toEqual(["Alpha", "Bravo", "3 more concepts"].map((label) => expect.stringMatching(new RegExp(`^${label.replace(/ /g, "\\s")}$`))));
+    expect(row[row.length - 1]!.type).toBe("fold");
   });
 
   it("keeps an opened rank on its own line: the drawing grows sideways and is panned", () => {

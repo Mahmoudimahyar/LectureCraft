@@ -70,6 +70,31 @@ describe("what a row says", () => {
     expect(wherePhrase({ where: null }, place)).toBeNull();
   });
 
+  it("says so when a suggested link is all that ties an entry to the slide, and says nothing of a course anchor", () => {
+    const concept = { ...TREE["t-a"]![0]!, support_pages: [5] };
+    const suggested = rowLines(concept, { scopeKind: "slide", place, ties: new Map([["c-1", "agent_inferred"]]) });
+    expect(suggested.suggested).toBe(true);
+    expect(plain(suggested.where)).toBe("on this build"); // where the support is stays its own phrase
+    expect(rowLines(concept, { scopeKind: "slide", place, ties: new Map([["c-1", "exact"]]) }).suggested).toBe(false);
+    expect(rowLines(concept, { scopeKind: "slide", place, ties: new Map([["c-1", "stated"]]) }).suggested).toBe(false);
+    expect(rowLines(concept, { scopeKind: "slide", place }).suggested).toBe(false); // the tie is not known: nothing is claimed
+    // A question the scope lists as tied by a suggestion only.
+    const question = { ...TREE["t-a>c-1>s-1"]![0]!, where: "on_this_page" as const, support_pages: [5] };
+    expect(rowLines(question, { scopeKind: "slide", place, suggestedQuestions: new Set(["q-1"]) }).suggested).toBe(true);
+    expect(rowLines(question, { scopeKind: "slide", place, suggestedQuestions: new Set(["q-9"]) }).suggested).toBe(false);
+    // Outside the slide scope there is no slide to be tied to.
+    expect(rowLines(concept, { scopeKind: "lecture", place, ties: new Map([["c-1", "agent_inferred"]]) }).suggested).toBe(false);
+  });
+
+  it("draws the suggestion as a basis label on the row: the dashed square with its words", async () => {
+    mount(<ConceptTree courseId="sample-course" scope="slide:lecture-90:5" scopeKind="slide" place={place} ties={new Map([["c-1", "agent_inferred"], ["c-2", "exact"]])} openKinds={["topic"]} onSelect={() => undefined} label="Concept outline" />);
+    const calibration = await screen.findByRole("treeitem", { name: /Calibration/ });
+    const basis = within(calibration).getByText("Suggested link").closest("[data-basis]");
+    expect(basis).toHaveAttribute("data-basis", "suggested");
+    expect(calibration).toHaveAccessibleDescription(/Suggested link/);
+    expect(within(screen.getByRole("treeitem", { name: /Blank subtraction/ })).queryByText("Suggested link")).toBeNull();
+  });
+
   it("states a gap in the words of the scope, and never for a skill that has questions", () => {
     const bare = TREE["t-a>c-1"]![1]!;
     expect(rowLines(bare, { scopeKind: "course" }).note).toBe("No question in the catalog");
@@ -133,6 +158,13 @@ describe("the tree of the concept explorer", () => {
     expect(selected).toHaveAttribute("aria-selected", "true");
     expect(item("Concept: Blank subtraction")).toHaveAttribute("aria-selected", "false");
     expect(requested).toContain("t-a");
+    // the selected row is opened as well: what it holds is listed under it, as the map draws what surrounds it
+    expect(await screen.findByRole("treeitem", { name: "Skill: Explain the slope" })).toBeInTheDocument();
+    expect(selected).toHaveAttribute("aria-expanded", "true");
+    expect(requested).toContain("t-a>c-1");
+    // and it can be closed again: the reveal does not hold it open
+    fireEvent.click(screen.getByRole("button", { name: "Collapse Calibration" }));
+    expect(selected).toHaveAttribute("aria-expanded", "false");
   });
 
   it("is one tab stop, moved by the arrow keys; Right opens and steps in, Left closes and steps out", async () => {

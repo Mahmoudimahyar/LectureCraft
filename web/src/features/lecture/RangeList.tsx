@@ -94,7 +94,7 @@ function Qualities({ range, groupKind, structural, onCorrect, onOpenTranscriptLi
   const terms = (range.evidence?.terms ?? []).filter((term) => typeof term === "string" && term.trim() !== "");
   const where = rangeSupportLine(range.support, groupKind).full;
   return (
-    <dl className="col-span-2 mb-2 ml-9 mr-2 grid gap-0.5 border-t border-hairline pt-2 text-ui @max-[479px]:ml-[30px]" data-testid="range-qualities">
+    <dl className="col-span-2 mb-2 ml-9 mr-2 grid gap-1.5 border-t border-hairline pt-2 text-ui @max-[479px]:ml-[30px]" data-testid="range-qualities">
       {QUALITY_ORDER.map((name) => (
         <div key={name} className="grid grid-cols-[15em_minmax(0,1fr)] gap-x-3 @max-[639px]:grid-cols-1">
           <dt className="text-muted">{QUALITY_LABEL[name].label} <span className="block @max-[639px]:inline">({QUALITY_LABEL[name].question})</span></dt>

@@ -13,7 +13,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { BAND_CLASS } from "@/app/WorkspaceFrame";
 import { cn, ToolbarButton } from "@/components/ui";
 import { dotJoin } from "@/lib/format";
-import { NO_RANGE_OUTLINE_LINE, ROLE_LABEL, countLabel, groupRowLabel, nb, noRangeInOutline, pagesRef } from "@/lib/labels";
+import { NO_RANGE_OUTLINE_LINE, ROLE_LABEL, countLabel, groupRowLabel, noRangeInOutline, pagesRef } from "@/lib/labels";
 import { logicalSlides, type LogicalSlideRow } from "@/lib/r2";
 import { useFirstPageShape, useNearViewport, useThumb } from "@/lib/thumbs";
 import type { LectureView, SlideView } from "@/lib/types";
@@ -89,11 +89,12 @@ function PageThumb({ url, page, width, fallbackShape, current, root, className }
 }
 
 const ROW = "grid w-full flex-none items-start gap-x-2 gap-y-1 rounded-control border-0 bg-transparent p-2 pl-0.5 text-left transition-colors duration-[var(--ll-motion-small)]";
-const COLUMNS = "grid-cols-[22px_minmax(0,1fr)] min-[1920px]:grid-cols-[26px_minmax(0,1fr)]";
-/** The quiet row: number, small picture, words beside it from a list 216 px wide (an outline of 232 px); under it below that. */
-const QUIET_COLUMNS = `${COLUMNS} @min-[13.5rem]/outline:grid-cols-[22px_56px_minmax(0,1fr)] @min-[13.5rem]/outline:items-center @min-[13.5rem]/outline:gap-y-0 min-[1920px]:@min-[13.5rem]/outline:grid-cols-[26px_64px_minmax(0,1fr)]`;
-/** A title wraps in full: no clamp, no ellipsis; a word longer than the column is hyphenated, not cut. */
-const TITLE = "block hyphens-auto break-words text-ui leading-[1.125rem]";
+/** A number column of 22 px (26 from 1920) and the content column. In rem, so the columns grow with the learner's text size as the figures and the small picture do. */
+const COLUMNS = "grid-cols-[1.375rem_minmax(0,1fr)] min-[1920px]:grid-cols-[1.625rem_minmax(0,1fr)]";
+/** The quiet row: number, small picture (56 px, 64 from 1920), words beside it from a list 216 px wide (an outline of 232 px); under it below that. */
+const QUIET_COLUMNS = `${COLUMNS} @min-[13.5rem]/outline:grid-cols-[1.375rem_3.5rem_minmax(0,1fr)] @min-[13.5rem]/outline:items-center @min-[13.5rem]/outline:gap-y-0 min-[1920px]:@min-[13.5rem]/outline:grid-cols-[1.625rem_4rem_minmax(0,1fr)]`;
+/** A title wraps in full, between words: no clamp, no ellipsis, no hyphen put into a word; only a word longer than the column is broken. */
+const TITLE = "block break-words text-ui leading-[1.125rem]";
 
 export function LectureOutline({ lecture, page, pageCount, pdfUrl, onSelect, layout }: LectureOutlineProps) {
   const [finding, setFinding] = useState(false);
@@ -192,7 +193,7 @@ export function LectureOutline({ lecture, page, pageCount, pdfUrl, onSelect, lay
           {quiet && <span className="block text-ui leading-[1.125rem] text-muted">{role}</span>}
           {groupLine && <span className={cn("ll-num block text-ui leading-[1.125rem]", current ? "text-ink" : "text-muted")}>{groupLine}</span>}
           {facts.figures && <span className="ll-num block text-ui leading-[1.125rem] text-muted">{facts.figures}</span>}
-          {facts.noRange && <span className="block text-ui leading-[1.125rem] text-muted">{nb(NO_RANGE_OUTLINE_LINE)}</span>}
+          {facts.noRange && <span className="block text-ui leading-[1.125rem] text-muted">{NO_RANGE_OUTLINE_LINE}</span>}
         </span>
       </button>
     );
@@ -241,7 +242,8 @@ export function LectureOutline({ lecture, page, pageCount, pdfUrl, onSelect, lay
       </div>
       <div ref={setList} onScroll={measureEdges} role="navigation" aria-label="Pages"
         className={cn("@container/outline min-h-0 flex-1 overflow-y-auto overflow-x-hidden [scrollbar-width:thin]",
-          grid ? "grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] content-start gap-2 p-3" : "flex flex-col gap-1 px-2 pb-4 pt-2")}
+          // 160 px cells at the ordinary text size; in rem, so that enlarged text gets wider cells and fewer columns.
+          grid ? "grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] content-start gap-2 p-3" : "flex flex-col gap-1 px-2 pb-4 pt-2")}
         style={fade ? { maskImage: fade, WebkitMaskImage: fade } : undefined}>
         {shown.map(renderRow)}
         {shown.length === 0 && <p className="p-2 text-ui text-muted">{rows.length === 0 ? "The pages of this file are not known yet." : "No page has that number or title."}</p>}

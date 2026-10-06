@@ -21,7 +21,7 @@ import {
 } from "@/lib/labels";
 import { useConceptGraph, useConcepts, useHistory, useProgress } from "@/lib/queries";
 import type { ConceptEdge, ConceptGraphView, ConceptNode, Episode, EvidenceObject, EvidenceObservation, OutlineNodeView, SkillRow } from "@/lib/types";
-import { Callout, Lead, Picker, ReturnLink } from "@/features/search/SearchOverlay";
+import { Callout, Disclosure, Lead, Picker, ReturnLink } from "@/features/search/SearchOverlay";
 import { useSubmitActions } from "@/features/tutor/actions";
 
 const STATUS = SKILL_STATUS as Record<SkillRow["status"], { label: string; tone: "success" | "caution" | "unassessed" | "danger" | "neutral" }>;
@@ -59,22 +59,34 @@ export const useNodeDetail = (courseId: string | undefined, nodeId: string | und
   useQuery<OutlineNodeView, Error>({ queryKey: ["outline-node", courseId, nodeId], enabled: !!courseId && !!nodeId && enabled, retry: false, staleTime: 5_000,
     queryFn: ({ signal }) => apiGet<OutlineNodeView>(r2Paths.outlineNode(courseId ?? "", nodeId ?? ""), signal) });
 
-/** The conditions of one attempt: the five-state label when the Brain sent an observation for it, otherwise the recorded condition in words. */
+/**
+ * The conditions of one attempt: the five-state label when the Brain sent an observation for it (prior exposure stands
+ * beside the state, never as assistance), otherwise the recorded condition in words.
+ */
 function AttemptConditions({ episode, observation }: { episode: Episode; observation: EvidenceObservation | undefined }) {
   if (observation) {
     const beside = observation.prior_exposure === "seen" ? [] : [PRIOR_EXPOSURE_LABEL[observation.prior_exposure] ?? unlistedLabel(String(observation.prior_exposure))];
     return <StateLabel evidence={observation} beside={beside} />;
   }
-  return <span className="text-ui">{CONDITION_LABEL[episode.condition] ?? unlistedLabel(episode.condition)} <span className="text-muted">· {ASSISTANCE_LABEL[episode.assistance] ?? unlistedLabel(episode.assistance)} · prior exposure: {unlistedLabel(episode.prior_exposure)}</span></span>;
+  return <span className="text-ui">{CONDITION_LABEL[episode.condition] ?? unlistedLabel(episode.condition)} <span className="text-muted">· {ASSISTANCE_LABEL[episode.assistance] ?? unlistedLabel(episode.assistance)}</span></span>;
+}
+/**
+ * What the record states about one attempt beside its state: references, the assessor's confidence, and prior exposure
+ * in the record's own word. The state label reduces prior exposure to seen or not; the record's word (the exact question,
+ * one of the same family) is kept here.
+ */
+export function attemptRecordLine(episode: Pick<Episode, "reference_access" | "confidence" | "prior_exposure">): string {
+  return `${REFERENCE_LABEL[episode.reference_access] ?? unlistedLabel(episode.reference_access)} · confidence ${episode.confidence} · prior exposure: ${unlistedLabel(episode.prior_exposure)}`;
 }
 
 function EvidenceLine({ row }: { row: SkillRow }) {
   const status = STATUS[row.status]?.label ?? unlistedLabel(row.status);
-  if (!row.latest) return <p className="ll-measure text-ui"><span className="font-semibold">{status}.</span> <span className="text-muted">No attempt has observed this skill.</span></p>;
+  // The full stop stands outside the status words, so that the status can be found as exactly its own words.
+  if (!row.latest) return <p className="ll-measure text-ui"><span className="font-semibold">{status}</span>. <span className="text-muted">No attempt has observed this skill.</span></p>;
   const e = row.latest;
   return (
     <p className="ll-measure text-ui">
-      <span className="font-semibold">{status}.</span>{" "}
+      <span className="font-semibold">{status}</span>.{" "}
       <span className="text-muted">
         Latest: {outcomeWords(e.outcome)} · <strong className="font-semibold text-ink">{CONDITION_LABEL[e.condition] ?? e.condition}</strong> · {ASSISTANCE_LABEL[e.assistance] ?? e.assistance} · {REFERENCE_LABEL[e.reference_access] ?? e.reference_access} · recorded {formatWhen(e.recorded_at)} ({TIME_BASIS_LABEL[e.time_basis] ?? e.time_basis})
         {e.revised ? " · corrected assessment in effect" : ""}{e.conflict ? " · correction chain needs reconciliation" : ""}
@@ -100,7 +112,7 @@ function SkillDetail({ courseId, row, onNotice }: { courseId: string; row: Skill
               <li key={e.attempt_id} className="flex flex-col items-start gap-1 border-t border-hairline py-3 first:border-t-0 last:pb-0" data-attempt={e.attempt_id}>
                 <p><span className="font-semibold">{outcomeWords(e.outcome)}</span> <span className="text-muted">· {formatWhen(e.recorded_at)}</span></p>
                 <AttemptConditions episode={e} observation={observations.get(e.attempt_id)} />
-                <p className="text-muted">{REFERENCE_LABEL[e.reference_access] ?? unlistedLabel(e.reference_access)} · confidence {e.confidence}</p>
+                <p className="text-muted">{attemptRecordLine(e)}</p>
                 <p className="ll-measure text-read">{e.question_prompt}</p>
                 <p className="ll-measure text-muted">{e.analysis}</p>
                 <Link className="ll-link" to={`/history/${encodeURIComponent(e.attempt_id)}`}>Open the original attempt</Link>
@@ -369,13 +381,12 @@ export function HistoryPage() {
                       {a.effective.conflict && <Callout tone="caution" title="Conflicting corrections">Two corrections branch from the same assessment. They need reconciliation; neither was chosen automatically.</Callout>}
                     </div>
                     {a.revisions.length > 0 && (
-                      <details className="text-ui">
-                        <summary className="cursor-pointer font-semibold">{a.revisions.length} correction{a.revisions.length === 1 ? "" : "s"} — the original assessment is kept</summary>
-                        <ul className="ll-measure mt-1 list-disc pl-5">
+                      <Disclosure className="text-ui" title={`${a.revisions.length} correction${a.revisions.length === 1 ? "" : "s"} — the original assessment is kept`}>
+                        <ul className="ll-measure list-disc pb-1 pl-5">
                           <li>Original: {a.original_observations.map((o) => `${o.skill_id}: ${outcomeWords(o.outcome)}`).join("; ")}</li>
                           {a.revisions.map((r) => <li key={r.event_id}>{formatWhen(r.recorded_at)} — {r.reason} <span className="text-muted">(a regrade of the same response, not a new answer)</span></li>)}
                         </ul>
-                      </details>
+                      </Disclosure>
                     )}
                     {a.question.question_id && <div><Link className="ll-btn ll-btn-sm" to={`/courses/${courseId}/questions/${encodeURIComponent(a.question.question_id)}`}>Try again (new answer)</Link></div>}
                   </li>

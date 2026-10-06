@@ -318,10 +318,12 @@ export function TutorPanel({ courseId, lecture, page, slideRef, pinned, onUnpin,
             </ul>
           )}
 
-          {/* The one outlined field of the panel: the text, what it is about, and Send. */}
+          {/* The one outlined field of the panel: the text, what it is about, and Send. Focus is shown once, as a ring
+              around the whole field; the textarea's own ring is taken off (the sheet's unlayered :focus-visible rule would
+              otherwise draw a second one inside it). */}
           <div className="rounded-control border border-line bg-raised pb-2 pl-3 pr-2 pt-3 has-[textarea:focus-visible]:outline-2 has-[textarea:focus-visible]:outline-offset-1 has-[textarea:focus-visible]:outline-focus">
             <label className="sr-only" htmlFor="tutor-composer">{diagnosing ? "Your answer to the diagnostic check" : placeholder}</label>
-            <textarea id="tutor-composer" ref={textRef} rows={2} className="block max-h-[32dvh] min-h-[3.25rem] w-full resize-none overflow-y-auto border-0 bg-transparent p-0 text-read text-ink outline-none [field-sizing:content] placeholder:text-muted placeholder:opacity-100"
+            <textarea id="tutor-composer" ref={textRef} rows={2} className="block max-h-[32dvh] min-h-[3.25rem] w-full resize-none overflow-y-auto border-0 bg-transparent p-0 text-read text-ink outline-none! [field-sizing:content] placeholder:text-muted placeholder:opacity-100"
               placeholder={placeholder} value={text} onChange={(e) => setText(e.target.value)} maxLength={200000}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {

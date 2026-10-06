@@ -34,7 +34,7 @@ function ChosenCourse({ course, local, resume, headingRef, onActivate }: { cours
   headingRef: Ref<HTMLHeadingElement>; onActivate: () => void }) {
   const bound = course.binding === "bound";
   const view = useCourse(bound ? course.course_id : undefined);
-  const timingView = useCourseTiming(bound ? course.course_id : undefined);
+  const timingView = useCourseTiming(bound ? course.course_id : undefined, { queue: false });
   const timing = useMemo(() => new Map<string, TimingLectureRow>((timingView.data?.lectures ?? []).map((row) => [row.lecture_id, row])), [timingView.data]);
   const other = otherSynchronisedPlace(local, resume?.current);
   const otherTitle = other ? view.data?.lectures.find((lecture) => lecture.lecture_id === other.lectureId)?.title : null;

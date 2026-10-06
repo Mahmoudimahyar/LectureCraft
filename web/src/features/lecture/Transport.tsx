@@ -15,13 +15,13 @@
 import { useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { DropdownMenu, Popover } from "radix-ui";
 import { MediaMuteButton, MediaSeekBackwardButton, MediaSeekForwardButton, MediaVolumeRange } from "media-chrome/react";
-import { ChevronLeft, ChevronRight, Ellipsis, Pause, Play, Repeat, SkipForward, Volume1, Volume2, VolumeX } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Ellipsis, Pause, Play, Repeat, SkipForward, Volume1, Volume2, VolumeX } from "lucide-react";
 import { useWorkspaceFrame } from "@/app/WorkspaceFrame";
 import { ErrorGlyph } from "@/components/glyphs";
 import { BasisLabel } from "@/components/labels";
 import { Button, cn, IconButton, ToolbarButton } from "@/components/ui";
 import {
-  NBSP, NO_RANGE_LINE, R2_ACTION, RANGE_RELATION_LABEL, TOPIC_DISCUSSION_SENTENCE, clockLabel, countLabel, rangeOrdinalLabel, rangeSupportLine, timeSpanLabel, unlistedLabel, type NoRangeActionId,
+  NBSP, NO_RANGE_LINE, R2_ACTION, RANGE_RELATION_LABEL, TOPIC_DISCUSSION_SENTENCE, clockLabel, countLabel, rangeSupportLine, timeSpanLabel, unlistedLabel, type NoRangeActionId,
 } from "@/lib/labels";
 import { identityOf, isStructuralPage, noRangeDetail, noRangeSentence, rangesForPage } from "@/lib/r2";
 import type { NoRange, Occurrence, RecordingView, TimingRange } from "@/lib/types";
@@ -471,7 +471,12 @@ export function Transport({ lecture, page, slide, selection, onSelect, playerRef
   );
   const speedItems = (
     <DropdownMenu.RadioGroup value={String(clip.rate)} onValueChange={(value) => clip.setRate(Number(value))} aria-label="Playback speed">
-      {RATES.map((rate) => <DropdownMenu.RadioItem key={rate} value={String(rate)} className="ll-menu-item ll-num">{rateLabel(rate)}</DropdownMenu.RadioItem>)}
+      {RATES.map((rate) => (
+        <DropdownMenu.RadioItem key={rate} value={String(rate)} className="ll-menu-item ll-num">
+          <span className="flex-1">{rateLabel(rate)}</span>
+          <DropdownMenu.ItemIndicator><Check aria-hidden className="size-4" /></DropdownMenu.ItemIndicator>
+        </DropdownMenu.RadioItem>
+      ))}
     </DropdownMenu.RadioGroup>
   );
   const VolumeIcon = clip.muted || clip.volume === 0 ? VolumeX : clip.volume < 0.5 ? Volume1 : Volume2;
@@ -507,7 +512,10 @@ export function Transport({ lecture, page, slide, selection, onSelect, playerRef
             {selected && canCorrect(selected) && <DropdownMenu.Item className="ll-menu-item" onSelect={() => correct(selected)}>Correct this range</DropdownMenu.Item>}
             {stopped && !layout.method && <DropdownMenu.Item className="ll-menu-item" onSelect={goOn}>Go on in the whole recording</DropdownMenu.Item>}
             {(!layout.wholeToggle || noLine?.action === "next_content" || noLine?.action === "show_candidates") && (
-              <DropdownMenu.CheckboxItem className="ll-menu-item" checked={wholeShown} onCheckedChange={toggleWhole}>{R2_ACTION.whole_recording}</DropdownMenu.CheckboxItem>
+              <DropdownMenu.CheckboxItem className="ll-menu-item" checked={wholeShown} onCheckedChange={toggleWhole}>
+                <span className="flex-1">{R2_ACTION.whole_recording}</span>
+                <DropdownMenu.ItemIndicator><Check aria-hidden className="size-4" /></DropdownMenu.ItemIndicator>
+              </DropdownMenu.CheckboxItem>
             )}
             {!layout.volume && <DropdownMenu.Item className="ll-menu-item" onSelect={() => clip.setMuted(!clip.muted)}>{clip.muted ? "Unmute" : "Mute"}</DropdownMenu.Item>}
             {!layout.speed && <><DropdownMenu.Separator className={SEPARATOR} /><DropdownMenu.Label className={MENU_LABEL}>Playback speed</DropdownMenu.Label>{speedItems}</>}
@@ -545,7 +553,7 @@ export function Transport({ lecture, page, slide, selection, onSelect, playerRef
         {ranges.length > 1 && (
           <span className="inline-flex flex-none items-center gap-0.5 whitespace-nowrap" data-testid="range-stepper">
             <IconButton size="sm" label="Previous range" disabled={index <= 0} onClick={() => choose(ranges[index - 1]!.range_id)}><ChevronLeft aria-hidden /></IconButton>
-            <span className="ll-num ll-nb">{layout.stacked ? <><b className="font-semibold">{index + 1}</b>{`${NBSP}of${NBSP}${ranges.length}`}</> : rangeOrdinalLabel(index + 1, ranges.length)}</span>
+            <span className="ll-num ll-nb">{!layout.stacked && `Range${NBSP}`}<b className="font-semibold">{index + 1}</b>{`${NBSP}of${NBSP}${ranges.length}`}</span>
             <IconButton size="sm" label="Next range" disabled={index >= ranges.length - 1} onClick={() => choose(ranges[index + 1]!.range_id)}><ChevronRight aria-hidden /></IconButton>
           </span>
         )}
@@ -574,7 +582,7 @@ export function Transport({ lecture, page, slide, selection, onSelect, playerRef
       <>
         <b className="ll-nb flex-none font-semibold">{R2_ACTION.whole_recording}</b>
         {layout.hints && <LineSentence>{segments.length === 0 ? `This slide has ${countLabel(ranges.length, "range")}.` : segments.length === 1 ? "The segment above the track is where this slide is discussed."
-          : separate(segments) ? `The ${segments.length} segments above the track are where this slide is discussed.` : "The segments above the track are where this slide is discussed; some of them overlap."}</LineSentence>}
+          : separate(segments) ? `The ${segments.length} segments above the track are where this slide is discussed.` : "The segments above the track are where this slide is discussed; some overlap."}</LineSentence>}
         <span className="min-w-2 flex-1" />
         {wholeToggle}
         {rangesButton}

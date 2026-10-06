@@ -50,7 +50,7 @@ export function SourcesPage() {
   const courseId = app.courseId;
   const course = useCourse(courseId);
   // The stage of speech timing per lecture, as the Brain measured it; the row simply has no such line until it arrives.
-  const timing = useCourseTiming(courseId);
+  const timing = useCourseTiming(courseId, { queue: false });
   const queryClient = useQueryClient();
   const actions = useSubmitActions();
   const [hintOpen, setHintOpen] = useState(false);

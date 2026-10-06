@@ -3,16 +3,16 @@
 //
 // This file also holds what the pages that keep their layout share (Review, Progress, Library, Activity, Settings,
 // Connect, session summary, question practice): `ReturnLink`, and at the foot `Picker`, `StateWords`, `Callout` (held to
-// a reading measure), `Lead`, `Facts` / `Fact`.
+// a reading measure), `Disclosure`, `lectureNameOf`, `Lead`, `Facts` / `Fact`.
 // They belong in components/ui.tsx; they are here because that file was not this stream's to edit.
-import { useMemo, useState, type ComponentProps, type ReactNode } from "react";
+import { useId, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
 import { useQueries } from "@tanstack/react-query";
 import { Select as RSelect } from "radix-ui";
 import { Check, ChevronDown } from "lucide-react";
 import { courseName, useApp } from "@/app/state";
 import { ErrorGlyph } from "@/components/glyphs";
-import { Callout as BaseCallout, cn, Dialog, EmptyState, Segmented, type Tone } from "@/components/ui";
+import { Callout as BaseCallout, cn, Dialog, EmptyState, SectionToggle, Segmented, type Tone } from "@/components/ui";
 import { apiGet } from "@/lib/api";
 import { countLabel } from "@/lib/labels";
 import { hitHref, searchIndexes, TYPE_LABEL } from "@/lib/search";
@@ -143,6 +143,29 @@ export function StateWords({ tone = "neutral", children, detail, className }: { 
  */
 export function Callout({ className, ...rest }: ComponentProps<typeof BaseCallout>) {
   return <BaseCallout {...rest} className={cn("max-w-[36rem]", className)} />;
+}
+
+/**
+ * Detail that opens on request: the text button with a chevron of components/ui (`SectionToggle`) and, once opened,
+ * what it holds. It replaces the native details element, whose marker belongs to the browser and not to this system.
+ * Closed at first; the content is not in the page until it is opened.
+ */
+export function Disclosure({ title, count, children, className, bodyClassName, defaultOpen = false }: {
+  title: ReactNode; count?: number; children: ReactNode; className?: string; bodyClassName?: string; defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const body = useId();
+  return (
+    <div className={className}>
+      <SectionToggle aria-expanded={open} aria-controls={open ? body : undefined} count={count} className="text-ui" onClick={() => setOpen((value) => !value)}>{title}</SectionToggle>
+      {open && <div id={body} className={bodyClassName}>{children}</div>}
+    </div>
+  );
+}
+
+/** A lecture's own title where the course lists it; its identifier otherwise. No title is made up. */
+export function lectureNameOf(course: { lectures?: ReadonlyArray<{ lecture_id: string; title?: string | null }> } | null | undefined, lectureId: string): string {
+  return course?.lectures?.find((lecture) => lecture.lecture_id === lectureId)?.title || lectureId;
 }
 
 /** The sentence under a page title, held to the reading measure. */

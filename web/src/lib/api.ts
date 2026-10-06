@@ -121,7 +121,8 @@ export const r2Paths = {
     return `courses/${id(courseId)}/concept-graph?${params.toString()}`;
   },
   outlineNode: (courseId: string, nodeId: string): string => `courses/${id(courseId)}/outline/node?id=${id(nodeId)}`,
-  courseTiming: (courseId: string): string => `courses/${id(courseId)}/timing`,
+  /** `queue: false` leaves out the transcription runner's queue and allowance (it walks every course): for screens that show no queue. */
+  courseTiming: (courseId: string, options: { queue?: boolean } = {}): string => `courses/${id(courseId)}/timing${options.queue === false ? "?queue=false" : ""}`,
   /** POST: rebuilds the lecture's derived timing links from current inputs (app-private file only). */
   timingBuild: (courseId: string, lectureId: string): string => `courses/${id(courseId)}/lectures/${id(lectureId)}/timing/build`,
   /** `deck` selects another file of the unit, like the lecture view's own `?deck=`. */

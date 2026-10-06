@@ -1,18 +1,29 @@
 // SC01 Connect workspace (UI01/UI02). Separate, honest checks: which course folders are bound, whether
 // this device may submit, whether the native tutor is verified and whether saves reach the course.
 // Accepting this screen activates nothing; browsing works even when the tutor is not connected.
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Check as Tick, Flag, Minus } from "lucide-react";
 import { useApp } from "@/app/state";
 import { Button, ErrorState, LoadingState, PageHeader } from "@/components/ui";
 import { formatFingerprint } from "@/lib/device";
+import { countLabel, NBSP } from "@/lib/labels";
 import { Callout, Lead, StateWords } from "@/features/search/SearchOverlay";
 
 /** A list of entries on one surface, parted by hairlines: never a wall of boxes. */
 const ROWS = "ll-region flex flex-col";
 const ROW = "border-t border-hairline p-4 first:border-t-0 min-[900px]:px-5";
 const SECTION_HEAD = "mb-3 text-head font-semibold";
+
+/**
+ * What a bound course holds: its identifier, then counts with their words ("1 lecture unit", "4 sessions"). A count that
+ * was not sent is left out. Each fact is written with ordinary spaces (the page keeps it on one line by not wrapping
+ * it), so the line can be found and copied as it reads.
+ */
+export function bindingFacts(course: { course_id: string; lecture_units?: number | null; sessions?: number | null }): string[] {
+  const count = (value: number | null | undefined, noun: string): string[] => (typeof value === "number" ? [countLabel(value, noun).split(NBSP).join(" ")] : []);
+  return [course.course_id, ...count(course.lecture_units, "lecture unit"), ...count(course.sessions, "session")];
+}
 
 /**
  * One access check. Its state is said in words for assistive technology and drawn with a plain mark that is not a
@@ -76,7 +87,7 @@ export function ConnectPage() {
             <li key={course.course_id} className={`${ROW} flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1`}>
               <div className="min-w-0">
                 <p className="font-semibold">{course.display_name}</p>
-                <p className="ll-num text-ui text-muted">{course.course_id}{course.binding === "bound" ? ` · ${course.lecture_units} lecture units · ${course.sessions} sessions` : ""}</p>
+                <p className="ll-num text-ui text-muted">{(course.binding === "bound" ? bindingFacts(course) : [course.course_id]).map((fact, index) => <Fragment key={fact}>{index > 0 && " · "}<span className="ll-nb">{fact}</span></Fragment>)}</p>
               </div>
               {course.binding === "bound" ? <StateWords tone="success">Bound</StateWords> : <StateWords tone="danger" detail={course.problem}>Not bound: {course.problem}</StateWords>}
             </li>

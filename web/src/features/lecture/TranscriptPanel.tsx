@@ -13,7 +13,7 @@
 // here: they are in the bar and its list.
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { DropdownMenu } from "radix-ui";
-import { Quote } from "lucide-react";
+import { Check, Quote } from "lucide-react";
 import { BasisLabel } from "@/components/labels";
 import { Button, cn, SectionToggle, ToolbarButton } from "@/components/ui";
 import type { SourceRef } from "@/lib/db";
@@ -315,7 +315,8 @@ export function TranscriptPanel({ transcripts, slideRanges, positionMs, playing,
                   <DropdownMenu.Portal>
                     <DropdownMenu.Content align="start" sideOffset={6} className="ll-pop z-50 max-w-[min(92vw,26rem)] p-1">
                       <DropdownMenu.RadioGroup value={String(index)} onValueChange={(value) => { setIndex(Number(value)); setSelection(null); }} aria-label="Transcript">
-                        {transcripts.map((entry, at) => <DropdownMenu.RadioItem key={entry.source_id} value={String(at)} className="ll-menu-item"><span className="min-w-0 break-words">{entry.filename} <span className="text-muted">· session {entry.session_id}</span></span></DropdownMenu.RadioItem>)}
+                        {transcripts.map((entry, at) => <DropdownMenu.RadioItem key={entry.source_id} value={String(at)} className="ll-menu-item"><span className="min-w-0 flex-1 break-words">{entry.filename} <span className="text-muted">· session {entry.session_id}</span></span>
+                          <DropdownMenu.ItemIndicator><Check aria-hidden className="size-4 flex-none" /></DropdownMenu.ItemIndicator></DropdownMenu.RadioItem>)}
                       </DropdownMenu.RadioGroup>
                     </DropdownMenu.Content>
                   </DropdownMenu.Portal>
@@ -345,6 +346,9 @@ export function TranscriptPanel({ transcripts, slideRanges, positionMs, playing,
                 const chosen = !!selection && n >= selection.start && n <= selection.end;
                 const ruled = marked.has(n);
                 const quiet = !matches && inRange.size > 0 && !ruled;
+                // A stretch of lines (a linked stretch being spoken, several selected lines) is one block: only its ends are rounded.
+                const block = spoken || chosen;
+                const joined = (line: number) => !matches && ((!!active && spoken && line >= active[0] && line <= active[1]) || (!!selection && chosen && line >= selection.start && line <= selection.end));
                 return (
                   <li key={n} data-line={n} aria-current={spoken ? "true" : undefined}>
                     {!matches && inRange.size > 0 && n === rangeLines[0] && range && (
@@ -353,7 +357,8 @@ export function TranscriptPanel({ transcripts, slideRanges, positionMs, playing,
                         {ordinal && <span className="ll-num ll-nb flex-none">{rangeOrdinalLabel(ordinal.index, ordinal.of)}</span>}
                       </p>
                     )}
-                    <div className={cn("group/line flex items-start gap-3 rounded-r-row border-l-2 py-2 pl-3 pr-0.5 transition-colors duration-[var(--ll-motion-small)]",
+                    <div className={cn("group/line flex items-start gap-3 border-l-2 py-2 pl-3 pr-0.5 transition-colors duration-[var(--ll-motion-small)]",
+                      !(block && joined(n - 1)) && "rounded-tr-row", !(block && joined(n + 1)) && "rounded-br-row",
                       ruled ? "border-accent-text" : "border-transparent", spoken && "bg-pad", chosen && "bg-tint")}>
                       {time ? (
                         <button type="button" className={cn(GUTTER, "ll-num cursor-pointer rounded-thumb border-0 bg-transparent p-0 text-ui leading-[var(--ll-lh-read)] hover:text-accent-text hover:underline", spoken ? "font-semibold text-accent-text" : "text-muted")}

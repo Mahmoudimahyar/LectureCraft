@@ -16,7 +16,7 @@ import {
 } from "@/lib/labels";
 import { useCourse, useLecture } from "@/lib/queries";
 import { rangesForPage, whereLine } from "@/lib/r2";
-import type { ConceptGraphNode, EvidenceObservation, GraphNodeKind, GraphScopeKind, OutlineNodeView } from "@/lib/types";
+import type { AnchorTieKind, ConceptGraphNode, EvidenceObservation, GraphNodeKind, GraphScopeKind, OutlineNodeView } from "@/lib/types";
 import type { TreePlace } from "./ConceptTree";
 import type { ParsedScope } from "./map-model";
 
@@ -84,6 +84,11 @@ export function sourceTieSentence(source: Pick<Source, "tie" | "kind" | "pages">
   }
 }
 
+/** Slide scope: where the node's support is, and that a suggested link is all that ties it to the slide when that is so. */
+export function supportPlaceSentence(where: string, tie: AnchorTieKind | null | undefined): string {
+  return `Its support is ${where}${tie === "agent_inferred" ? ", by a suggested link only" : ""}.`;
+}
+
 /** The page "Open page N" opens: a page of the scope's own lecture and, in a slide scope, the page on which the node's support is recorded. */
 export function primaryPage(detail: Pick<OutlineNodeView, "sources"> | null | undefined, scope: ParsedScope, node?: Pick<ConceptGraphNode, "support_pages"> | null): { lectureId: string; page: number } | null {
   const rows = (detail?.sources ?? []).filter((source) => (source.kind ?? "pages") === "pages" && !!source.href && !!source.lecture_id && (source.pages?.length ?? 0) > 0);
@@ -117,6 +122,8 @@ export interface ConceptDetailProps {
   scope: ParsedScope;
   /** The selected node as the scoped graph holds it: its counts in this scope and where its support is. */
   graphNode?: ConceptGraphNode | null;
+  /** Slide scope: the strongest tie by which the slide supports the node. */
+  tie?: AnchorTieKind | null;
   place?: TreePlace | null;
   /** The address links out of the panel return to (the concept map as it is now). */
   returnTo: string;
@@ -170,7 +177,7 @@ function Observation({ observation, questionTitle, skillLabel, ownSkill }: { obs
   );
 }
 
-export function ConceptDetail({ courseId, nodeId, tab, scope, graphNode, place, returnTo, onClear, framed }: ConceptDetailProps) {
+export function ConceptDetail({ courseId, nodeId, tab, scope, graphNode, tie = null, place, returnTo, onClear, framed }: ConceptDetailProps) {
   const detail = useNodeDetail(courseId, nodeId);
   const data = detail.data ?? null;
   const primary = primaryPage(data, scope, graphNode);
@@ -229,7 +236,7 @@ export function ConceptDetail({ courseId, nodeId, tab, scope, graphNode, place, 
           <span className="font-semibold">{kicker.kind}</span>{kicker.place ? <span className="min-w-0 break-words">{kicker.place}</span> : null}
         </p>
         <h2 className="break-words text-title font-semibold tracking-[-0.01em]">{data.node.label}</h2>
-        {(summary || where) && <p className={READ}>{summary}{where ? `${summary ? " " : ""}Its support is ${where}.` : ""}</p>}
+        {(summary || where) && <p className={READ} data-testid="detail-summary">{summary}{where ? `${summary ? " " : ""}${supportPlaceSentence(where, tie)}` : ""}</p>}
         {primary && openHref && (
           <div className="mt-2 flex flex-wrap gap-2">
             <Link to={openHref} state={back} className="ll-btn ll-btn-sm max-[1179px]:flex-1"><FileText aria-hidden />{nb(`Open page ${primary.page}`)}</Link>
@@ -308,7 +315,8 @@ export function ConceptDetail({ courseId, nodeId, tab, scope, graphNode, place, 
           {evidence.state ? (
             <>
               <StateLabel evidence={{ state: evidence.state, assistance: evidence.assistance ?? null, prior_exposure: evidence.prior_exposure ?? "unknown", attempts: evidence.attempts ?? 0 }} className="text-read font-semibold [&_.ll-beside]:font-normal" />
-              {evidence.summary && <p className={cn(READ, "mt-1")} data-testid="evidence-summary">{evidenceSummarySentence(evidence.summary)}</p>}
+              {/* Counts with their denominator. With nothing recorded there is no denominator: a row of zeros is not written (9.8). */}
+              {evidence.summary && (evidence.summary.observations ?? observations.length) > 0 && <p className={cn(READ, "mt-1")} data-testid="evidence-summary">{evidenceSummarySentence(evidence.summary)}</p>}
               {evidence.note && <p className={cn(READ, "mt-1")}>{evidence.note}</p>}
               {observations.length > 0
                 ? <ul className="mt-2 flex flex-col">{observations.map((observation) => (

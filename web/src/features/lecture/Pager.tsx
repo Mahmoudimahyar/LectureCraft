@@ -3,9 +3,11 @@
 //
 // Previous and Next move one physical page and say so inside a group ("Next page: build 3 of 3"). Next content passes
 // over the pages of which nothing is forced (title, section, administrative, blank). The identity line is composed by
-// lib/r2 `identityOf` in the words of 9.2 and is the polite position announcement; it never wraps and is never cut:
-// what the band cannot hold leaves it in the order the specification gives and is offered in More, first by the band's
-// width (900, 780, 640, 480 px) and then, when a long identity line still does not fit, one step further at a time.
+// lib/r2 `identityOf` in the words of 9.2 and is the polite position announcement; it is never cut: what the band cannot
+// hold leaves it in the order the specification gives and is offered in More, first by the band's width (900, 780, 640,
+// 480 px) and then, when a long identity line still does not fit, one step further at a time. Only when nothing more can
+// leave (a build with a printed slide number on a phone, say) does the line break, between two of its parts and never
+// inside one, so that every part and the More button stay on screen.
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { DropdownMenu } from "radix-ui";
 import { Check, ChevronLeft, ChevronRight, Ellipsis, Maximize, Minimize, PanelLeftClose, PanelLeftOpen, Pencil, SkipForward } from "lucide-react";
@@ -13,7 +15,7 @@ import { BAND_CLASS, useWorkspaceFrame } from "@/app/WorkspaceFrame";
 import { BasisGlyph, type BasisGlyphKind } from "@/components/glyphs";
 import { cn, IconButton, ToolbarButton } from "@/components/ui";
 import {
-  GROUPING_NOT_ESTABLISHED, NO_PPTX_MATCH_LABEL, R2_ACTION, ROLE_LABEL, copyOfOneSlideLabel, groupRowLabel, groupingLabel, nb, positionLabel, pptxMatchLabel, pptxSlideLabel, printedBasisLabel,
+  GROUPING_NOT_ESTABLISHED, NBSP, NO_PPTX_MATCH_LABEL, R2_ACTION, ROLE_LABEL, copyOfOneSlideLabel, groupRowLabel, groupingLabel, nb, positionLabel, pptxMatchLabel, pptxSlideLabel, printedBasisLabel,
   printedSlideLabel, roleStateLabel,
 } from "@/lib/labels";
 import { identityOf, nextContentPage, type IdentityView } from "@/lib/r2";
@@ -31,6 +33,8 @@ const SEPARATOR = "my-1 h-px bg-hairline";
 /** Band widths under which something leaves the band, widest first (5.3). */
 export const PAGER_STEPS = [900, 780, 640, 480] as const;
 export type PagerLevel = 0 | 1 | 2 | 3 | 4;
+/** One step past the last width step: nothing more can leave the band, so the identity line may break between its parts. Never reached by a width alone. */
+export const PAGER_LAST_LEVEL = 5;
 export interface PagerHolds {
   /** The words of how the role was established stand beside the role. */
   roleState: boolean;
@@ -44,6 +48,8 @@ export interface PagerHolds {
   fullScreen: boolean;
   /** The identity line is set at the control size. */
   smallIdentity: boolean;
+  /** The identity line may break between two of its parts (never inside one); the band grows only if two lines are not enough. */
+  wrapIdentity: boolean;
 }
 /** How many of the steps a band of this width is under. A width that is not known yet (0) holds everything. */
 export function pagerLevelFor(width: number): PagerLevel {
@@ -52,7 +58,7 @@ export function pagerLevelFor(width: number): PagerLevel {
 }
 /** What the band holds once `level` steps have been taken; each step keeps what the steps before it took out. */
 export function pagerHolds(level: number): PagerHolds {
-  return { roleState: level < 1, noteAndFit: level < 2, role: level < 3, nextContentWords: level < 4, fullScreen: level < 4, smallIdentity: level >= 4 };
+  return { roleState: level < 1, noteAndFit: level < 2, role: level < 3, nextContentWords: level < 4, fullScreen: level < 4, smallIdentity: level >= 4, wrapIdentity: level >= PAGER_LAST_LEVEL };
 }
 
 /** Width of the band (the menus live outside it, where a container query cannot reach). */
@@ -137,11 +143,11 @@ export function Pager({ lecture, page, total, onGoTo, onNote, fit, onFit, focus,
   // Whatever changes what the row holds starts the count again from the width's own level.
   const key = [width, identity.label, roleWords, role ? roleStateLabel(role) : "", !!onNote, frame.arrangement, paged].join("|");
   const base = pagerLevelFor(width);
-  const level = Math.min(4, Math.max(base, extra.key === key ? extra.level : 0));
+  const level = Math.min(PAGER_LAST_LEVEL, Math.max(base, extra.key === key ? extra.level : 0));
   useLayoutEffect(() => {
     const node = band.current;
     if (!node || node.clientWidth <= 0) return;
-    if (level < 4 && node.scrollWidth > node.clientWidth + 1) setExtra({ key, level: level + 1 });
+    if (level < PAGER_LAST_LEVEL && node.scrollWidth > node.clientWidth + 1) setExtra({ key, level: level + 1 });
   }, [key, level]);
   const holds = pagerHolds(level);
 
@@ -208,7 +214,8 @@ export function Pager({ lecture, page, total, onGoTo, onNote, fit, onFit, focus,
   const fullScreenName = focus ? "Leave full screen" : "Show the slide full screen";
   const nextContentName = nextContent === null ? `${R2_ACTION.next_content}: no further content page` : `${R2_ACTION.next_content}: the next page that is not a title, section, administrative or blank page`;
   return (
-    <div ref={band} className={cn(BAND_CLASS, "min-w-0 gap-1 overflow-hidden pl-3 pr-2 max-[599px]:h-11 max-[599px]:px-1")} data-testid="pager" data-level={level}>
+    <div ref={band} className={cn(BAND_CLASS, "min-w-0 gap-1 overflow-hidden pl-3 pr-2 max-[599px]:h-11 max-[599px]:px-1",
+      holds.wrapIdentity && "h-auto min-h-[var(--ll-band-h,48px)] py-1 max-[599px]:h-auto max-[599px]:min-h-11")} data-testid="pager" data-level={level}>
       {frame.arrangement === "frame" && (
         <IconButton label={frame.outlineOpen ? "Hide the outline" : "Show the outline"} aria-pressed={frame.outlineOpen} onClick={frame.toggleOutline} data-testid="outline-toggle">
           {frame.outlineOpen ? <PanelLeftClose aria-hidden /> : <PanelLeftOpen aria-hidden />}
@@ -224,10 +231,15 @@ export function Pager({ lecture, page, total, onGoTo, onNote, fit, onFit, focus,
         data-testid="next-content">
         {R2_ACTION.next_content}
       </ToolbarButton>
-      <p className={cn("ll-num flex-none whitespace-nowrap", holds.smallIdentity ? "ml-0 text-ui" : "ml-1 text-read max-[899px]:text-ui")} aria-live="polite" data-testid="slide-position">
-        {/* The separators are text, so the line reads and copies as "PDF page 23 of 91 · build 2 of 3". */}
+      <p className={cn("ll-num", holds.wrapIdentity ? "min-w-0 shrink text-ui leading-[1.125rem]" : "flex-none whitespace-nowrap", !holds.wrapIdentity && (holds.smallIdentity ? "ml-0 text-ui" : "ml-1 text-read max-[899px]:text-ui"))}
+        aria-live="polite" data-testid="slide-position">
+        {/* The separators are text, so the line reads and copies as "PDF page 23 of 91 · build 2 of 3". A dot stays with
+            the part before it, so a line that has to break ends with the dot and the next begins with a part. */}
         {paged ? identity.parts.map((part, index) => (
-          <span key={index}>{index > 0 && <>{" "}<span className="mx-0.5 text-muted">·</span>{" "}</>}<IdentityPart text={part} /></span>
+          <span key={index}>
+            {index > 0 && " "}
+            <span className="ll-nb"><IdentityPart text={part} />{index < identity.parts.length - 1 && <>{NBSP}<span className="mx-0.5 text-muted">·</span></>}</span>
+          </span>
         )) : <span className="text-muted">No page is on screen</span>}
       </p>
       {role && holds.role && (

@@ -153,6 +153,14 @@
       "reference": "REF29",
       "exact_dependency_lock": "Pinned in the repository's own lock files by the task that installs it; this record names no version",
       "added_by": "Remediation amendment R2 (2026-10-05), decision D61"
+    },
+    {
+      "role": "resizable-context-panel",
+      "selection": "react-resizable-panels",
+      "purpose": "The lecture workspace's resizable context panel and collapsible outline: pointer and keyboard resizing with stated minimum, default and maximum sizes. No hand-built drag handling.",
+      "reference": "REF30",
+      "exact_dependency_lock": "Pinned in web/package-lock.json",
+      "added_by": "Remediation amendment R2 (2026-10-05), decision D61"
     }
   ],
   "amendments": [

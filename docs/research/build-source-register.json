@@ -152,6 +152,13 @@
       "url": "https://github.com/dagrejs/dagre/wiki",
       "added_by": "Remediation amendment R2 (2026-10-05)",
       "note": "URL fetched once on 2026-10-05 in the review round of the amendment: it resolves to the Dagre wiki, which describes a JavaScript library for laying out directed graphs. Nothing else on the page was verified. The installed version, license and integrity are fixed by the lock files of the task that installs the package."
+    },
+    {
+      "id": "REF30",
+      "purpose": "Resizable split panels with keyboard support (package react-resizable-panels)",
+      "url": "https://www.npmjs.com/package/react-resizable-panels",
+      "added_by": "Remediation amendment R2 (2026-10-05)",
+      "note": "Registry metadata read with npm view on 2026-10-05: version 4.14.2, license MIT, peer dependencies React 18 or 19. The page at the URL was not fetched. The installed version and integrity are fixed by web/package-lock.json."
     }
   ]
 }

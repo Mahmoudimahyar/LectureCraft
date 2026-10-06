@@ -1,12 +1,31 @@
-// Page thumbnails for navigation (the lecture outline, the build strip, Study rows, the Resume picture): ONE pdf.js queue
-// and one cache for the session (design specification 5.2, 6). One page is rendered at a time, the row asked for last
-// first, so what is in view wins over what was scrolled past. A rendered page is kept as an image for the session; a
-// request for the same page at the same or a smaller width is answered from memory. Nothing is drawn in place of a page
-// that cannot be rendered: the caller keeps its neutral placeholder.
+// Page pictures for navigation (the lecture outline, the build strip, Study rows, the Resume picture): ONE pdf.js loader,
+// ONE queue and one cache for the session (design specification 5.2, 6). One page is rendered at a time, the row asked
+// for last first, so what is in view wins over what was scrolled past. A rendered page is kept as an image for the
+// session; a request for the same page at the same or a smaller width is answered from memory. Nothing is drawn in place
+// of a page that cannot be rendered: the caller keeps its neutral placeholder.
 //
-// The document itself comes from the slide canvas's loader, so a deck is opened once however many pictures are made.
+// The document loader lives here too, so a deck is opened once however many pictures are made of it: the slide canvas
+// (features/lecture/SlideCanvas) and the thumbnails share it.
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { loadPdf } from "@/features/lecture/SlideCanvas";
+import * as pdfjs from "pdfjs-dist";
+import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+
+pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+
+export type PdfDocument = Awaited<ReturnType<typeof pdfjs.getDocument>["promise"]>;
+const documents = new Map<string, Promise<PdfDocument>>();
+
+/** One loaded document per URL for the lifetime of the page (theme, pane and panel changes never reload it). A failed load is forgotten, so it can be tried again. */
+export function loadPdf(url: string): Promise<PdfDocument> {
+  let doc = documents.get(url);
+  if (!doc) {
+    // Scripts, external links and embedded actions in the source are not executed or followed.
+    doc = pdfjs.getDocument({ url, enableXfa: false, disableAutoFetch: true, stopAtErrors: false }).promise;
+    doc.catch(() => documents.delete(url));
+    documents.set(url, doc);
+  }
+  return doc;
+}
 
 export interface Thumb {
   /** An object URL of the rendered page (valid for the session). */
@@ -16,6 +35,12 @@ export interface Thumb {
   height: number;
   /** Width over height of the page. */
   aspect: number;
+}
+
+/** The page's own size in PDF points (1/72 in), as the file states it after its rotation. */
+export interface PageBox {
+  width: number;
+  height: number;
 }
 
 interface Job {
@@ -33,25 +58,33 @@ export function thumbRenderWidth(cssWidth: number): number {
 }
 
 const cache = new Map<string, Thumb>();
-const shapes = new Map<string, number>();
+const boxes = new Map<string, PageBox>();
 const queue: Job[] = [];
 let running = false;
 
 const pageKey = (url: string, page: number): string => `${url}#${page}`;
+const shapeOf = (box: PageBox | undefined): number | null => (box && box.width > 0 && box.height > 0 ? box.width / box.height : null);
 
 /** A page already rendered at this width or wider, or null. */
 export function cachedThumb(url: string, page: number, cssWidth: number): Thumb | null {
   const hit = cache.get(pageKey(url, page));
   return hit && hit.width >= thumbRenderWidth(cssWidth) ? hit : null;
 }
+/** The size in points of a page whose picture or size is already known, or null. */
+export const knownPageBox = (url: string, page: number): PageBox | null => boxes.get(pageKey(url, page)) ?? null;
 /** The shape (width over height) of a page whose picture or size is already known, or null. */
-export const knownPageShape = (url: string, page: number): number | null => shapes.get(pageKey(url, page)) ?? null;
+export const knownPageShape = (url: string, page: number): number | null => shapeOf(boxes.get(pageKey(url, page)));
+/** Remember the size of a page somebody else read from the file (the slide canvas does, when it renders). */
+export function notePageBox(url: string, page: number, box: PageBox): void {
+  if (box.width > 0 && box.height > 0) boxes.set(pageKey(url, page), { width: box.width, height: box.height });
+}
 
 async function render(job: Job): Promise<Thumb> {
   const doc = await loadPdf(job.url);
   if (job.page < 1 || job.page > doc.numPages) throw new Error(`This file has ${doc.numPages} page(s); page ${job.page} does not exist.`);
   const page = await doc.getPage(job.page);
   const base = page.getViewport({ scale: 1 });
+  notePageBox(job.url, job.page, base);
   const viewport = page.getViewport({ scale: job.width / base.width });
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.floor(viewport.width));
@@ -80,7 +113,6 @@ async function drain(): Promise<void> {
         if (thumb !== previous) {
           if (previous) URL.revokeObjectURL(previous.src);
           cache.set(job.key, thumb);
-          shapes.set(job.key, thumb.aspect);
         }
         for (const entry of job.waiting) entry.resolve(thumb);
       } catch (error) {
@@ -108,20 +140,28 @@ export function requestThumb(url: string, page: number, cssWidth: number, signal
   });
 }
 
-/** Width over height of a page, read from the file without rendering it. Remembered for the session. */
-export async function pageShape(url: string, page = 1): Promise<number> {
-  const key = pageKey(url, page);
-  const known = shapes.get(key);
+/** The size in points of a page, read from the file without rendering it. Remembered for the session. */
+export async function pageBox(url: string, page = 1): Promise<PageBox> {
+  const known = boxes.get(pageKey(url, page));
   if (known) return known;
   const doc = await loadPdf(url);
   const base = (await doc.getPage(Math.min(Math.max(1, page), doc.numPages))).getViewport({ scale: 1 });
-  const aspect = base.width / base.height;
-  shapes.set(key, aspect);
-  return aspect;
+  const box = { width: base.width, height: base.height };
+  if (page >= 1 && page <= doc.numPages) notePageBox(url, page, box);
+  return box;
+}
+/** Width over height of a page, read from the file without rendering it. Remembered for the session. */
+export async function pageShape(url: string, page = 1): Promise<number> {
+  const box = await pageBox(url, page);
+  return box.width / box.height;
 }
 
-/** True once the element has come within `margin` of the viewport of its scroller (and stays true: a rendered page is kept). */
-export function useNearViewport<T extends Element>(margin = "200px"): [RefObject<T | null>, boolean] {
+/**
+ * True once the element has come within `margin` of what is visible (and stays true: a rendered page is kept). Inside a
+ * scrolling list pass the list as `root`: without it the margin applies to the window only, so a row just below the
+ * list's fold would not count as near.
+ */
+export function useNearViewport<T extends Element>(margin = "200px", root?: Element | null): [RefObject<T | null>, boolean] {
   const ref = useRef<T>(null);
   const [near, setNear] = useState(false);
   useEffect(() => {
@@ -133,10 +173,10 @@ export function useNearViewport<T extends Element>(margin = "200px"): [RefObject
     }
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) setNear(true);
-    }, { rootMargin: margin });
+    }, { rootMargin: margin, root: root ?? null });
     observer.observe(node);
     return () => observer.disconnect();
-  }, [near, margin]);
+  }, [near, margin, root]);
   return [ref, near];
 }
 
@@ -165,14 +205,28 @@ export function useThumb(url: string | null | undefined, page: number, cssWidth:
 
 /** The shape of the deck's first page as soon as pdf.js reports it (placeholders are 4:3 until then, 5.2). */
 export function useFirstPageShape(url: string | null | undefined): number | null {
-  const [shape, setShape] = useState<number | null>(() => (url ? knownPageShape(url, 1) : null));
+  return usePageBox(url, 1).shape;
+}
+
+/**
+ * The size and shape of one page as soon as pdf.js reports them. While a page's own size is being read, the size of the
+ * page shown before it (or of the deck's first page) stands in, so a block sized by it does not jump to 4:3 and back.
+ * `exact` says whether the answer is this page's own.
+ */
+export function usePageBox(url: string | null | undefined, page: number): { box: PageBox | null; shape: number | null; exact: boolean } {
+  const [, setTick] = useState(0);
+  const last = useRef<{ url: string; box: PageBox } | null>(null);
+  const own = url ? knownPageBox(url, page) : null;
   useEffect(() => {
+    if (!url || knownPageBox(url, page)) return;
     let alive = true;
-    setShape(url ? knownPageShape(url, 1) : null);
-    if (url) pageShape(url, 1).then((aspect) => alive && setShape(aspect)).catch(() => undefined);
+    pageBox(url, page).then(() => alive && setTick((tick) => tick + 1)).catch(() => undefined);
     return () => {
       alive = false;
     };
-  }, [url]);
-  return shape;
+  }, [url, page]);
+  if (!url) return { box: null, shape: null, exact: false };
+  if (own) last.current = { url, box: own };
+  const box = own ?? (last.current?.url === url ? last.current.box : null) ?? knownPageBox(url, 1);
+  return { box, shape: shapeOf(box ?? undefined), exact: !!own };
 }

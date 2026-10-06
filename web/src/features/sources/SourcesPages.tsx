@@ -1,18 +1,24 @@
-// Sources (UI05) and SC05 Source detail. The inventory lists every unit and file with its own state;
-// preparation stages are shown separately from registration, and neither says anything about learning.
-// This app never registers a source itself: new material stays with the existing course updater.
+// Library (UI05; the course-wide sources page, named apart from the lecture panel's Sources tab) and SC05 Source detail.
+// The inventory lists every unit and file with its own state; preparation stages are shown separately from
+// registration, and neither says anything about learning. This app never registers a source itself: new material
+// stays with the existing course updater.
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useApp } from "@/app/state";
-import { Button, Callout, Dialog, EmptyState, ErrorState, Field, LoadingState, PageHeader, StatusChip } from "@/components/ui";
+import { Button, cn, Dialog, EmptyState, ErrorState, Field, LoadingState, PageHeader } from "@/components/ui";
 import { apiGet, apiPost, contentUrl } from "@/lib/api";
-import { dispositionLabel, kindLabel, SESSION_STATE, SOURCE_STATE } from "@/lib/labels";
-import { useCourse } from "@/lib/queries";
+import { dispositionLabel, kindLabel, nb, SESSION_STATE, SOURCE_STATE, TIMING_STAGE_LABEL, unlistedLabel } from "@/lib/labels";
+import { useCourse, useCourseTiming } from "@/lib/queries";
 import type { InventoryItem } from "@/lib/types";
-import { ReturnLink } from "@/features/search/SearchOverlay";
+import { Callout, Fact, Facts, ReturnLink, StateWords } from "@/features/search/SearchOverlay";
 import { SlideCanvas } from "@/features/lecture/SlideCanvas";
 import { useSubmitActions } from "@/features/tutor/actions";
+
+/** A list of entries on one surface, parted by hairlines: never a wall of boxes. */
+const ROWS = "ll-region flex flex-col";
+const ROW = "border-t border-hairline p-4 first:border-t-0 min-[900px]:px-5";
+const SECTION_HEAD = "mb-3 text-head font-semibold";
 
 function bytes(n: number | null): string {
   if (n === null || n === undefined) return "size unknown";
@@ -21,18 +27,18 @@ function bytes(n: number | null): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function ItemRow({ courseId, item }: { courseId: string; item: InventoryItem }) {
-  const state = SOURCE_STATE[item.state] ?? { label: item.state, tone: "neutral" as const, detail: "" };
+function ItemRow({ courseId, item, nested = false }: { courseId: string; item: InventoryItem; nested?: boolean }) {
+  const state = SOURCE_STATE[item.state] ?? { label: unlistedLabel(item.state), tone: "neutral" as const, detail: "" };
   const restricted = item.disclosure === "restricted_solution";
   return (
-    <li className="ll-card flex flex-wrap items-center justify-between gap-2 p-2 text-sm">
-      <div className="min-w-0">
-        <p className="font-medium">{item.filename ?? item.source_id}</p>
-        <p className="text-muted">{kindLabel(item.kind)} · {bytes(item.bytes)} · {item.registration === "registered" ? "registered by the course updater" : "not registered"}</p>
+    <li className={cn("flex flex-wrap items-center justify-between gap-x-6 gap-y-2", nested ? "border-t border-hairline py-3 first:border-t-0 last:pb-0" : ROW)}>
+      <div className="min-w-0 flex-1 basis-72">
+        <p className="break-words font-semibold">{item.filename ?? item.source_id}</p>
+        <p className="ll-num text-ui text-muted">{kindLabel(item.kind)} · {bytes(item.bytes)} · {item.registration === "registered" ? "registered by the course updater" : "not registered"}</p>
+        {restricted && <p className="text-ui text-muted">Answer material — opens only by deliberate reveal</p>}
       </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {restricted && <StatusChip tone="caution">Answer material — opens only by deliberate reveal</StatusChip>}
-        <StatusChip tone={state.tone} title={state.detail}>{state.label}</StatusChip>
+      <div className="flex flex-none flex-wrap items-center gap-x-4 gap-y-2">
+        <StateWords tone={state.tone} detail={state.detail}>{state.label}</StateWords>
         <Link className="ll-btn ll-btn-sm" to={`/courses/${courseId}/sources/${encodeURIComponent(item.source_id)}`}>Details</Link>
       </div>
     </li>
@@ -43,6 +49,8 @@ export function SourcesPage() {
   const app = useApp();
   const courseId = app.courseId;
   const course = useCourse(courseId);
+  // The stage of speech timing per lecture, as the Brain measured it; the row simply has no such line until it arrives.
+  const timing = useCourseTiming(courseId);
   const queryClient = useQueryClient();
   const actions = useSubmitActions();
   const [hintOpen, setHintOpen] = useState(false);
@@ -54,6 +62,7 @@ export function SourcesPage() {
   if (course.isLoading) return <LoadingState label="Reading the source inventory…" />;
   if (course.isError || !course.data) return <ErrorState error={course.error} retry={() => void course.refetch()} />;
   const data = course.data;
+  const stageOf = new Map((timing.data?.lectures ?? []).map((lecture) => [lecture.lecture_id, lecture.stage]));
   const driveIds = ids.split(/[\s,]+/).filter(Boolean);
   const idsValid = driveIds.length > 0 && driveIds.every((id) => /^[A-Za-z0-9_-]{1,256}$/.test(id));
 
@@ -72,37 +81,36 @@ export function SourcesPage() {
 
   return (
     <div className="ll-page">
-      <PageHeader title="Sources" subtitle={`${data.display_name} — inventory, versions and preparation`} actions={<>
+      <PageHeader title="Library" subtitle={`${data.display_name} — inventory, versions and preparation`} actions={<>
         <Button onClick={prepare} busy={busy === "prepare"}>Prepare a batch now</Button>
         <Button onClick={() => setHintOpen(true)}>Tell the Brain about new material</Button>
       </>} />
-      {notice && <Callout tone="accent" role="status" className="mb-3" title="Preparation">{notice}</Callout>}
+      {notice && <Callout tone="accent" role="status" className="mb-4" title="Preparation">{notice}</Callout>}
       {data.index.status === "ok" ? (
-        <p className="mb-3 text-sm text-muted">Course source index revision {data.index.revision} (as of {data.index.as_of}). It is a logistics index kept by the course updater; files it has not registered are still listed here from the folder itself.</p>
-      ) : <Callout tone="caution" className="mb-3" title="The published source index is temporarily not trusted">{data.index.reason}</Callout>}
-      {data.enumeration_truncated && <Callout tone="caution" className="mb-3" title="Listing truncated">This course has more files than one listing shows. The total is not complete on this page.</Callout>}
+        <p className="ll-measure mb-6 text-ui text-muted">Course source index revision {data.index.revision} (as of {data.index.as_of}). It is a logistics index kept by the course updater; files it has not registered are still listed here from the folder itself.</p>
+      ) : <Callout tone="caution" className="mb-6" title="The published source index is temporarily not trusted">{data.index.reason}</Callout>}
+      {data.enumeration_truncated && <Callout tone="caution" className="mb-6" title="Listing truncated">This course has more files than one listing shows. The total is not complete on this page.</Callout>}
 
-      <section aria-labelledby="lectures-h" className="mb-6">
-        <h2 id="lectures-h" className="mb-2 text-lg font-semibold">Lecture units ({data.lectures.length})</h2>
-        <ul className="flex flex-col gap-2">
+      <section aria-labelledby="lectures-h" className="mb-8">
+        <h2 id="lectures-h" className={SECTION_HEAD}>Lecture units <span className="ll-sec-n">({data.lectures.length})</span></h2>
+        <ul className={ROWS}>
           {data.lectures.map((lecture) => {
             const prep = dispositionLabel(lecture.disposition);
+            const stage = stageOf.get(lecture.lecture_id);
             return (
-              <li key={lecture.lecture_id} className="ll-card p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="font-semibold">{lecture.displayable ? <Link className="hover:underline" to={`/courses/${courseId}/lectures/${lecture.lecture_id}`}>{lecture.title}</Link> : lecture.title}</h3>
-                  <StatusChip tone={prep.tone}>{prep.label}</StatusChip>
+              <li key={lecture.lecture_id} className={ROW}>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+                  <h3 className="min-w-0 font-semibold">{lecture.displayable ? <Link className="hover:underline" to={`/courses/${courseId}/lectures/${lecture.lecture_id}`}>{lecture.title}</Link> : lecture.title}</h3>
+                  <StateWords tone={prep.tone}>{prep.label}</StateWords>
                 </div>
-                {prep.detail && <p className="text-sm text-muted">{prep.detail}</p>}
-                <dl className="mt-2 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
-                  <dt className="text-muted">Slides</dt>
-                  <dd>{lecture.deck ? `${lecture.deck.filename} — ${SOURCE_STATE[lecture.deck.state]?.label ?? lecture.deck.state}${lecture.deck.rendition === "needs_rendition" ? " · needs a PDF rendition to display" : ""}` : "No slide file in this unit"}</dd>
-                  <dt className="text-muted">Slide links</dt>
-                  <dd>{lecture.pages ? `${lecture.pages_confirmed} reviewed · ${lecture.pages_suggested} suggested by transcript wording (no recording times) · ${lecture.pages_unresolved ?? 0} unresolved of ${lecture.pages} slides` : "not prepared"}</dd>
-                  {lecture.other_materials_count > 0 && <><dt className="text-muted">Other files</dt><dd>{lecture.other_materials_count} more in this unit — listed under Sources when the lecture is open</dd></>}
-                  <dt className="text-muted">Sessions</dt>
-                  <dd>{lecture.sessions.length ? lecture.sessions.map((s) => `${s.date}: ${SESSION_STATE[s.state]?.label ?? s.state}`).join(" · ") : "none linked by the course records"}</dd>
-                </dl>
+                {prep.detail && <p className="ll-measure text-ui text-muted">{prep.detail}</p>}
+                <Facts className="mt-3">
+                  <Fact term="Slides">{lecture.deck ? `${lecture.deck.filename} — ${SOURCE_STATE[lecture.deck.state]?.label ?? lecture.deck.state}${lecture.deck.rendition === "needs_rendition" ? " · needs a PDF rendition to display" : ""}` : "No slide file in this unit"}</Fact>
+                  <Fact term="Slide links">{lecture.pages ? `${nb(`${lecture.pages_confirmed} reviewed`)} · ${lecture.pages_suggested} suggested by transcript wording (no recording times) · ${nb(`${lecture.pages_unresolved ?? 0} unresolved of ${lecture.pages} pages`)}` : "not prepared"}</Fact>
+                  {stage && <Fact term="Speech timing">{(TIMING_STAGE_LABEL as Record<string, string | undefined>)[stage] ?? unlistedLabel(String(stage))}</Fact>}
+                  {lecture.other_materials_count > 0 && <Fact term="Other files">{lecture.other_materials_count} more in this unit — listed under Sources when the lecture is open</Fact>}
+                  <Fact term="Sessions">{lecture.sessions.length ? lecture.sessions.map((s) => `${s.date}: ${SESSION_STATE[s.state]?.label ?? s.state}`).join(" · ") : "none linked by the course records"}</Fact>
+                </Facts>
               </li>
             );
           })}
@@ -110,13 +118,13 @@ export function SourcesPage() {
       </section>
 
       {data.unlinked_sessions.length > 0 && (
-        <section aria-labelledby="sessions-h" className="mb-6">
-          <h2 id="sessions-h" className="mb-2 text-lg font-semibold">Sessions with no recorded lecture link ({data.unlinked_sessions.length})</h2>
-          <ul className="flex flex-col gap-2">
+        <section aria-labelledby="sessions-h" className="mb-8">
+          <h2 id="sessions-h" className={SECTION_HEAD}>Sessions with no recorded lecture link <span className="ll-sec-n">({data.unlinked_sessions.length})</span></h2>
+          <ul className={ROWS}>
             {data.unlinked_sessions.map((s) => (
-              <li key={s.session_id} className="ll-card p-3 text-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2"><span className="font-medium">{s.date}</span><StatusChip tone={SESSION_STATE[s.state]?.tone ?? "neutral"}>{SESSION_STATE[s.state]?.label ?? s.state}</StatusChip></div>
-                {s.items.length > 0 && <ul className="mt-2 flex flex-col gap-1">{s.items.map((i) => <ItemRow key={i.source_id} courseId={courseId} item={i} />)}</ul>}
+              <li key={s.session_id} className={ROW}>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1"><span className="ll-num font-semibold">{s.date}</span><StateWords tone={SESSION_STATE[s.state]?.tone ?? "neutral"}>{SESSION_STATE[s.state]?.label ?? unlistedLabel(s.state)}</StateWords></div>
+                {s.items.length > 0 && <ul className="mt-2 flex flex-col">{s.items.map((i) => <ItemRow key={i.source_id} courseId={courseId} item={i} nested />)}</ul>}
               </li>
             ))}
           </ul>
@@ -124,9 +132,9 @@ export function SourcesPage() {
       )}
 
       <section aria-labelledby="other-h">
-        <h2 id="other-h" className="mb-2 text-lg font-semibold">Other course sources ({data.other_sources.length})</h2>
+        <h2 id="other-h" className={SECTION_HEAD}>Other course sources <span className="ll-sec-n">({data.other_sources.length})</span></h2>
         {data.other_sources.length === 0 ? <p className="text-muted">No other files were found under this course's materials.</p> : (
-          <ul className="flex flex-col gap-1">{data.other_sources.map((item) => <ItemRow key={item.source_id} courseId={courseId} item={item} />)}</ul>
+          <ul className={ROWS}>{data.other_sources.map((item) => <ItemRow key={item.source_id} courseId={courseId} item={item} />)}</ul>
         )}
       </section>
 
@@ -146,8 +154,8 @@ export function SourcesPage() {
               setBusy(null);
             }
           }}>Send hint</Button></>}>
-        <div className="flex flex-col gap-3">
-          <p className="text-sm text-muted">Destination course: <strong className="text-ink">{data.display_name}</strong>. Files you put in the course folder are detected on the next inventory read even without a hint.</p>
+        <div className="flex flex-col gap-4">
+          <p className="text-ui text-muted">Destination course: <strong className="text-ink">{data.display_name}</strong>. Files you put in the course folder are detected on the next inventory read even without a hint.</p>
           <Field label="Google Drive file ID(s)" htmlFor="hint-ids" hint="IDs only (letters, digits, - and _), separated by spaces. Links and paths are not accepted.">
             <input id="hint-ids" className="ll-input" value={ids} onChange={(e) => setIds(e.target.value)} aria-invalid={ids.length > 0 && !idsValid} />
           </Field>
@@ -179,7 +187,7 @@ export function SourceDetail() {
   if (detail.isLoading) return <LoadingState label="Resolving source…" />;
   if (detail.isError || !detail.data) return <><ReturnLink /><ErrorState error={detail.error} /></>;
   const item = detail.data;
-  const state = SOURCE_STATE[item.state] ?? { label: item.state, tone: "neutral" as const, detail: "" };
+  const state = SOURCE_STATE[item.state] ?? { label: unlistedLabel(item.state), tone: "neutral" as const, detail: "" };
   const restricted = item.disclosure === "restricted_solution";
   const openable = ["registered_readable", "present_unindexed"].includes(item.state);
   const base = `sources/${courseId}/${encodeURIComponent(sourceId)}/content`;
@@ -191,19 +199,17 @@ export function SourceDetail() {
     <div className="ll-page">
       <ReturnLink />
       <PageHeader title={item.filename ?? item.source_id} subtitle={`${kindLabel(item.kind)} · ${item.kind_basis === "owner_index" ? "kind from the course index" : "kind inferred from its folder"}`} />
-      <dl className="ll-card mb-4 grid gap-x-4 gap-y-1 p-3 text-sm sm:grid-cols-[auto_1fr]">
-        <dt className="text-muted">State</dt><dd><StatusChip tone={state.tone}>{state.label}</StatusChip> <span className="text-muted">{state.detail}</span></dd>
-        <dt className="text-muted">Source id</dt><dd className="break-all font-mono">{item.source_id}</dd>
-        {item.identity === "provisional" && (
-          <><dt className="text-muted">Identity</dt><dd data-testid="identity-note"><StatusChip tone="caution">Provisional</StatusChip> <span className="text-muted">{item.identity_note}</span></dd></>
-        )}
-        <dt className="text-muted">Version</dt><dd className="break-all font-mono">{item.version_id ?? "not identified (file has not been hashed)"}</dd>
-        <dt className="text-muted">Size / type</dt><dd>{bytes(item.bytes)} · {item.media_type ?? "unknown type"}</dd>
+      <Facts className="mb-6">
+        <Fact term="State"><StateWords tone={state.tone}>{state.label}</StateWords>{state.detail && <span className="text-muted"> · {state.detail}</span>}</Fact>
+        <Fact term="Source id"><span className="select-all break-all">{item.source_id}</span></Fact>
+        {item.identity === "provisional" && <Fact term="Identity" testId="identity-note">Provisional <span className="text-muted">· {item.identity_note}</span></Fact>}
+        <Fact term="Version">{item.version_id ? <span className="select-all break-all">{item.version_id}</span> : "not identified (file has not been hashed)"}</Fact>
+        <Fact term="Size / type"><span className="ll-num">{bytes(item.bytes)} · {item.media_type ?? "unknown type"}</span></Fact>
         {item.historical_versions.length > 0 && (
-          <><dt className="text-muted">Earlier versions</dt><dd>{item.historical_versions.map((v) => v.version_id).join(", ")} — historical bytes are not available; only the current file can be opened.</dd></>
+          <Fact term="Earlier versions">{item.historical_versions.map((v) => v.version_id).join(", ")} — historical bytes are not available; only the current file can be opened.</Fact>
         )}
-      </dl>
-      {error && <Callout tone="danger" role="alert" title="Could not open" className="mb-3">{error}</Callout>}
+      </Facts>
+      {error && <Callout tone="danger" role="alert" title="Could not open" className="mb-4">{error}</Callout>}
       {!openable ? (
         <Callout tone="unassessed" title="There is nothing to open for this source">{state.detail} No substitute from another file or edition is shown.</Callout>
       ) : restricted && !revealToken ? (
@@ -218,16 +224,16 @@ export function SourceDetail() {
           It is not shown as an ordinary source. Revealing it is recorded, and answers you submit afterwards are marked as given with the solution seen.
         </Callout>
       ) : isPdf ? (
-        <>
-          <div className="mb-2 flex items-center gap-2">
+        <div className="max-w-[64rem]">
+          <div className="mb-3 flex flex-wrap items-center gap-3">
             <Button size="sm" disabled={page <= 1} onClick={() => setParams({ page: String(page - 1) }, { replace: true })}>Previous page</Button>
-            <span className="text-sm" aria-live="polite">PDF page {page}{pages ? ` of ${pages}` : ""}</span>
+            <span className="ll-num text-ui" aria-live="polite">PDF page {page}{pages ? ` of ${pages}` : ""}</span>
             <Button size="sm" disabled={!!pages && page >= pages} onClick={() => setParams({ page: String(page + 1) }, { replace: true })}>Next page</Button>
           </div>
           <SlideCanvas url={url} page={page} label={`${item.filename}, PDF page ${page} — original source`} onPageCount={setPages} />
-        </>
+        </div>
       ) : isMedia ? (
-        item.media_type!.startsWith("video/") ? <video controls preload="metadata" src={url} className="w-full" /> : <audio controls preload="metadata" src={url} className="w-full" />
+        item.media_type!.startsWith("video/") ? <video controls preload="metadata" src={url} className="w-full rounded-row" /> : <audio controls preload="metadata" src={url} className="w-full" />
       ) : item.media_type?.startsWith("text/") ? (
         <TextSource url={url} line={Number(params.get("line")) || null} />
       ) : (
@@ -242,11 +248,12 @@ function TextSource({ url, line: wanted }: { url: string; line: number | null })
   if (text.isLoading) return <LoadingState />;
   if (text.isError) return <ErrorState error={text.error} />;
   return (
-    <ol className="ll-card max-h-[70dvh] overflow-auto p-3 text-sm" aria-label="Text source, numbered lines">
+    <ol className="ll-region max-h-[70dvh] overflow-auto py-3" aria-label="Text source, numbered lines">
       {(text.data ?? "").split(/\r?\n/).map((line, i) => (
-        <li key={i} className={`flex gap-3 ${wanted === i + 1 ? "rounded bg-tint font-medium outline outline-2 outline-focus" : ""}`} aria-current={wanted === i + 1 ? "location" : undefined}
+        <li key={i} aria-current={wanted === i + 1 ? "location" : undefined}
+          className={cn("relative flex gap-4 px-4 py-0.5", wanted === i + 1 && "bg-tint font-semibold before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-accent-text before:content-['']")}
           ref={wanted === i + 1 ? (el) => el?.scrollIntoView({ block: "center" }) : undefined}>
-          <span className="w-10 shrink-0 text-right tabular-nums text-muted">{i + 1}</span><span className="whitespace-pre-wrap">{line}</span>
+          <span className="ll-num w-10 flex-none text-right text-meta leading-[var(--ll-lh-read)] text-muted">{i + 1}</span><span className="ll-measure min-w-0 whitespace-pre-wrap">{line}</span>
         </li>
       ))}
     </ol>

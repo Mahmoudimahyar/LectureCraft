@@ -1,218 +1,155 @@
-// SC02 Study home and SC03 Course lecture list (UI03). Every configured course and every inventoried
-// lecture unit is listed whatever its readiness; preparation status is kept apart from learning evidence.
-import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router";
-import { ArrowRight, BookOpen, CalendarDays } from "lucide-react";
+// SC02 Study home and SC03 the course on Study (design specification 6): one bounded browsing page, decided apart from
+// the reading view. Top to bottom and nothing else: the title, Resume (the place you left, or one sentence on a first
+// run), the configured courses as tabs joined to the chosen course's lectures, one closing line.
+//
+// `/study` shows the active course; `/courses/:courseId` is the same page with that course chosen (the header's course
+// link leads here). Every configured course is listed whatever its state, and every inventoried lecture of the chosen
+// course whatever its readiness. Counts are real totals; nothing on this page measures what the learner knows.
+import { useEffect, useMemo, useRef, useState, type Ref } from "react";
+import { Link, useNavigate, useParams } from "react-router";
+import { Tabs } from "radix-ui";
 import { useApp } from "@/app/state";
-import { Callout, EmptyState, ErrorState, formatWhen, LoadingState, PageHeader, StatusChip } from "@/components/ui";
-import { dispositionLabel, SESSION_STATE, SOURCE_STATE } from "@/lib/labels";
-import { useCourse, useResume } from "@/lib/queries";
-import type { WorkspaceCourse } from "@/lib/types";
+import { Callout, EmptyState, ErrorState, formatWhen, Skeleton } from "@/components/ui";
+import { useCourse, useCourseTiming } from "@/lib/queries";
+import type { ResumeState, WorkspaceCourse } from "@/lib/types";
+import { CoursePane, CourseTabs, SynchronisedPlaceLine, type CourseTabItem } from "./CourseBrowser";
+import { ResumeBlock, ResumeFirstRun, ResumePending } from "./ResumeBlock";
+import { lastPosition, useCourseResumes } from "./study-data";
+import { STUDY_CLOSING_LINE, STUDY_SAMPLE_SENTENCE, chosenCourseId, courseTabLine, latestPlace, otherSynchronisedPlace, studyPlace, type LastPlace, type StudyPlace, type TimingLectureRow } from "./study-facts";
 
-export function lastPosition(courseId: string): { lectureId: string; page: number; title?: string; at?: number } | null {
-  try {
-    const raw = window.localStorage.getItem(`ll.last.${courseId}`);
-    return raw ? (JSON.parse(raw) as { lectureId: string; page: number; title?: string; at?: number }) : null;
-  } catch {
-    return null;
-  }
+export { lastPosition };
+
+/** The home column (specification 6): full width under 1200 px, then 1280, 1400 and 1760 px including the 48 px sides (24 of them are the shell's). */
+const COLUMN = "mx-auto w-full pb-6 max-[899px]:pt-2 min-[1200px]:max-w-[1232px] min-[1200px]:px-6 min-[1200px]:pt-2 min-[1920px]:max-w-[1352px] min-[1920px]:pt-6 min-[2400px]:max-w-[1712px]";
+// Courses beside the pane from 900 px; with enlarged text (as under 900 px) the courses come first and the pane beneath,
+// at every width, like the shell's own compact arrangement.
+const BROWSE_GRID = "mt-3 grid grid-cols-1 items-start gap-4 min-[900px]:grid-cols-[264px_minmax(0,1fr)] min-[1200px]:grid-cols-[336px_minmax(0,1fr)] min-[1200px]:gap-6 min-[2400px]:grid-cols-[400px_minmax(0,1fr)] [html[data-text-scale=large]_&]:grid-cols-1 [html[data-text-scale=large]_&]:gap-4";
+const TITLE = "text-display font-semibold tracking-[-0.015em]";
+
+/** True where the courses are stacked above the pane: under 900 px, and whenever the learner has enlarged text. */
+const narrow = (): boolean => typeof window !== "undefined" && ((typeof window.matchMedia === "function" && window.matchMedia("(max-width: 899px)").matches) || document.documentElement.getAttribute("data-text-scale") === "large");
+
+/** The pane of the chosen course: its lectures, where their timing stands, and the lines that need the learner. */
+function ChosenCourse({ course, local, resume, headingRef, onActivate }: { course: WorkspaceCourse; local: LastPlace | null; resume: ResumeState | undefined;
+  headingRef: Ref<HTMLHeadingElement>; onActivate: () => void }) {
+  const bound = course.binding === "bound";
+  const view = useCourse(bound ? course.course_id : undefined);
+  const timingView = useCourseTiming(bound ? course.course_id : undefined);
+  const timing = useMemo(() => new Map<string, TimingLectureRow>((timingView.data?.lectures ?? []).map((row) => [row.lecture_id, row])), [timingView.data]);
+  const other = otherSynchronisedPlace(local, resume?.current);
+  const otherTitle = other ? view.data?.lectures.find((lecture) => lecture.lecture_id === other.lectureId)?.title : null;
+  const notices = (resume?.conflict || other) ? (
+    <>
+      {resume?.conflict && (
+        <div className="px-4 pt-3 min-[600px]:px-6" data-testid="resume-conflict">
+          <Callout tone="caution" title="Two study positions need your choice" actions={<Link className="ll-btn ll-btn-sm" to={`/activity/conflicts/resume-${course.course_id}`}>Compare and choose</Link>}>
+            Checkpoints from different devices do not follow one another. Both drafts are kept; nothing was merged or overwritten.
+          </Callout>
+        </div>
+      )}
+      {other && !resume?.conflict && <SynchronisedPlaceLine courseId={course.course_id} lectureId={other.lectureId} title={otherTitle} page={other.page} when={formatWhen(other.updatedAt)} />}
+    </>
+  ) : null;
+  return (
+    <CoursePane course={course} view={view.data} loading={bound && view.isLoading} error={view.isError ? view.error : null} onRetry={() => void view.refetch()} timing={timing}
+      leftAt={local ? { lectureId: local.lectureId, page: local.page } : null} notices={notices} onActivate={onActivate} headingRef={headingRef} />
+  );
 }
 
-function ContinueCard({ course }: { course: WorkspaceCourse }) {
-  const resume = useResume(course.course_id);
-  const local = lastPosition(course.course_id);
-  if (resume.data?.conflict) {
+function StudyPage({ routeCourseId }: { routeCourseId?: string }) {
+  const app = useApp();
+  const navigate = useNavigate();
+  const [picked, setPicked] = useState<string | null>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  /** Set when the learner chooses a course, or arrives by a course address: under 900 px the pane is then brought into view. */
+  const reveal = useRef(!!routeCourseId);
+
+  const courses = useMemo(() => app.workspace?.courses ?? [], [app.workspace]);
+  const boundIds = useMemo(() => courses.filter((course) => course.binding === "bound").map((course) => course.course_id), [courses]);
+  const resumes = useCourseResumes(boundIds);
+  // Read on every render of the page: a place written by the lecture workspace is there as soon as the learner comes back.
+  const locals: Record<string, LastPlace | null> = Object.fromEntries(courses.map((course) => [course.course_id, course.binding === "bound" ? lastPosition(course.course_id) : null]));
+  const places: Record<string, StudyPlace | null> = Object.fromEntries(courses.map((course) => [course.course_id, studyPlace(course.course_id, locals[course.course_id] ?? null, resumes.byCourse[course.course_id]?.current)]));
+  const resumeAt = latestPlace(Object.values(places));
+
+  const chosen = chosenCourseId(courses, routeCourseId ?? picked, app.courseId);
+  const unknownRoute = !!routeCourseId && courses.length > 0 && !courses.some((course) => course.course_id === routeCourseId);
+
+  useEffect(() => {
+    if (!chosen || !reveal.current || !heading.current) return;
+    reveal.current = false;
+    if (narrow()) heading.current.scrollIntoView({ block: "start" });
+  }, [chosen, app.workspace]);
+
+  if (app.workspaceLoading) {
     return (
-      <Callout tone="caution" title="Two study positions need your choice" actions={<Link className="ll-btn ll-btn-sm" to={`/activity/conflicts/resume-${course.course_id}`}>Compare and choose</Link>}>
-        Checkpoints from different devices do not follow one another. Both drafts are kept; nothing was merged or overwritten.
-      </Callout>
-    );
-  }
-  const head = resume.data?.current;
-  if (head) {
-    const page = (head.cursor.source.locator as { page?: number }).page ?? 1;
-    // The synchronised position is written when a session is finished; this device may have moved on since.
-    const moved = local && (local.lectureId !== head.cursor.lecture_id || local.page !== page);
-    return (
-      <div className="flex flex-col gap-2">
-        <Link to={`/courses/${course.course_id}/lectures/${head.cursor.lecture_id}?page=${page}`} className="ll-btn ll-btn-primary w-full justify-between">
-          <span>Continue: {head.cursor.lecture_id.replace("-", " ")}, slide {page}</span>
-          <span className="text-sm font-normal opacity-90">synchronised {formatWhen(head.updated_at)} · paused</span>
-        </Link>
-        {moved && (
-          <Link to={`/courses/${course.course_id}/lectures/${local.lectureId}?page=${local.page}`} className="ll-btn w-full justify-between">
-            <span>Continue on this device: {local.lectureId.replace("-", " ")}, slide {local.page}</span>
-            <ArrowRight aria-hidden className="size-4" />
-          </Link>
-        )}
+      <div className={COLUMN} data-testid="study-home" role="status">
+        <h1 className={TITLE}>Study</h1>
+        <span className="sr-only">Loading your courses…</span>
+        <div className="mt-6 grid max-w-[34rem] gap-2" aria-hidden>
+          <Skeleton height={18} width="50%" /><Skeleton height={14} width="90%" /><Skeleton height={14} width="70%" />
+        </div>
       </div>
     );
   }
-  if (local) {
-    return (
-      <Link to={`/courses/${course.course_id}/lectures/${local.lectureId}?page=${local.page}`} className="ll-btn w-full justify-between">
-        <span>Continue on this device: {local.lectureId.replace("-", " ")}, slide {local.page}</span>
-        <ArrowRight aria-hidden className="size-4" />
-      </Link>
-    );
-  }
-  return <p className="text-sm text-muted">No saved position yet.</p>;
-}
+  if (!app.workspace) return <div className={COLUMN} data-testid="study-home"><h1 className={TITLE}>Study</h1><ErrorState error={app.workspaceError} title="Your courses could not be loaded" /></div>;
 
-export function StudyHome() {
-  const app = useApp();
-  if (app.workspaceLoading) return <LoadingState label="Loading your courses…" />;
-  if (!app.workspace) return <ErrorState error={app.workspaceError} />;
-  const { workspace } = app;
-  // Where this device was last: the most recent lecture position across the courses (a per-device convenience).
-  const recent = workspace.courses.filter((c) => c.binding === "bound").map((c) => ({ course: c, last: lastPosition(c.course_id) })).filter((r) => r.last)
-    .sort((a, b) => (b.last!.at ?? 0) - (a.last!.at ?? 0))[0];
+  const choose = (courseId: string) => {
+    if (courseId === chosen) return;
+    reveal.current = true;
+    if (routeCourseId) {
+      navigate(`/courses/${encodeURIComponent(courseId)}`);
+      return;
+    }
+    setPicked(courseId);
+    if (courses.find((course) => course.course_id === courseId)?.binding === "bound") app.setCourseId(courseId);
+  };
+
+  const items: CourseTabItem[] = courses.map((course) => ({
+    courseId: course.course_id, name: course.display_name,
+    line: courseTabLine(places[course.course_id] ?? null, { bound: course.binding === "bound", conflict: !!resumes.byCourse[course.course_id]?.conflict }),
+  }));
+  const course = courses.find((candidate) => candidate.course_id === chosen) ?? null;
+  const resumeCourse = resumeAt ? courses.find((candidate) => candidate.course_id === resumeAt.courseId) : undefined;
+
   return (
-    <div className="ll-page" data-testid="study-home">
-      <PageHeader title="Study" subtitle={`All configured courses · ${workspace.term}`} actions={app.pairing.state !== "paired" ? <Link className="ll-btn" to="/connect">Pair this device</Link> : undefined} />
-      <section aria-labelledby="continue-h" className="ll-card mb-5 flex flex-wrap items-center justify-between gap-4 p-5" data-testid="continue-studying">
-        <div className="min-w-0">
-          <h2 id="continue-h" className="text-xl font-semibold">Continue studying</h2>
-          {recent ? (
-            <p className="ll-measure mt-1 text-lg">{recent.course.display_name} — {recent.last!.title ?? recent.last!.lectureId.replace("-", " ")}, slide {recent.last!.page}</p>
-          ) : (
-            <p className="ll-measure mt-1 text-muted">Nothing opened on this device yet. Choose a course below; your place is remembered when you open a lecture.</p>
-          )}
-        </div>
-        {recent && (
-          <div className="flex flex-wrap gap-2">
-            <Link to={`/courses/${recent.course.course_id}/lectures/${recent.last!.lectureId}?page=${recent.last!.page}`} onClick={() => app.setCourseId(recent.course.course_id)} className="ll-btn ll-btn-primary">
-              Open the slide <ArrowRight aria-hidden className="size-4" />
-            </Link>
-            {recent.course.catalogued_questions ? <Link className="ll-btn" to={`/courses/${recent.course.course_id}/questions?lecture=${encodeURIComponent(recent.last!.lectureId)}`}>Questions for this lecture</Link> : null}
-          </div>
+    <div className={COLUMN} data-testid="study-home">
+      <h1 className={TITLE}>Study</h1>
+      {app.workspace.fixture_label && <p className="mt-1 max-w-[64ch] text-read text-muted" data-testid="sample-data-sentence">{STUDY_SAMPLE_SENTENCE}</p>}
+
+      {resumeAt && resumeCourse ? <ResumeBlock key={`${resumeAt.courseId}/${resumeAt.lectureId}`} place={resumeAt} courseName={resumeCourse.display_name} />
+        : resumes.settled ? <ResumeFirstRun /> : <ResumePending />}
+
+      <section aria-labelledby="study-courses" className="mt-8 min-[900px]:mt-12">
+        <h2 id="study-courses" className="text-head font-semibold">Courses</h2>
+        {unknownRoute ? (
+          <EmptyState title="No course is configured under this address" action={<Link className="ll-btn" to="/study">Back to Study</Link>}>
+            “{routeCourseId}” is not one of the configured courses. Your records are not affected.
+          </EmptyState>
+        ) : courses.length === 0 || !course ? (
+          <EmptyState title="No course is configured">Courses are configured on the Brain PC; none is listed for this profile.</EmptyState>
+        ) : (
+          <Tabs.Root value={course.course_id} onValueChange={choose} orientation="vertical" activationMode="manual" className={BROWSE_GRID}>
+            <CourseTabs items={items} chosen={course.course_id} />
+            <Tabs.Content value={course.course_id} className="ll-region min-w-0 scroll-mt-3 overflow-hidden" data-testid="course-pane" data-course={course.course_id}>
+              <ChosenCourse key={course.course_id} course={course} local={locals[course.course_id] ?? null} resume={resumes.byCourse[course.course_id]} headingRef={heading}
+                onActivate={() => course.binding === "bound" && app.setCourseId(course.course_id)} />
+            </Tabs.Content>
+          </Tabs.Root>
         )}
+        <p className="mt-6 max-w-[76ch] text-ui text-muted" data-testid="study-closing-line">{STUDY_CLOSING_LINE}</p>
       </section>
-      <h2 className="mb-2 text-lg font-semibold">Courses</h2>
-      <ul className="ll-card-grid">
-        {workspace.courses.map((course) => {
-          const bound = course.binding === "bound";
-          const prep = course.preparation ?? {};
-          const pendingLinks = prep.links_pending_review ?? 0;
-          return (
-            <li key={course.course_id} className="ll-card flex flex-col gap-3 p-5">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <h3 className="text-xl font-semibold">{bound ? <Link to={`/courses/${course.course_id}`} onClick={() => app.setCourseId(course.course_id)} className="hover:underline">{course.display_name}</Link> : course.display_name}</h3>
-                  <p className="text-sm text-muted">{course.course_id}</p>
-                </div>
-                <BookOpen aria-hidden className="size-6 shrink-0 text-accent-text" />
-              </div>
-              {!bound ? <Callout tone="danger" title="This course is not bound">{course.problem} Other courses are unaffected.</Callout> : (
-                <>
-                  <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
-                    <dt className="text-muted">Lecture units</dt><dd>{course.lecture_units}</dd>
-                    <dt className="text-muted">Sessions</dt><dd>{course.sessions}</dd>
-                    <dt className="text-muted">Questions</dt>
-                    <dd>{course.catalogued_questions ? <Link className="text-accent-text hover:underline" to={`/courses/${course.course_id}/questions`} onClick={() => app.setCourseId(course.course_id)}>{course.catalogued_questions} in the catalog</Link> : "No question catalog"}</dd>
-                    <dt className="text-muted">Recorded evidence</dt><dd><StatusChip tone={course.recorded_attempts ? "neutral" : "unassessed"}>{course.assessed_label}</StatusChip></dd>
-                    <dt className="text-muted">Preparation</dt>
-                    <dd>{pendingLinks ? `${pendingLinks} with suggested links` : prep.not_processed ? `${prep.not_processed} not prepared yet` : "No pending link review"}</dd>
-                  </dl>
-                  <div className="flex flex-wrap gap-2">
-                    {course.due_items ? <Link className="ll-chip" to="/review" onClick={() => app.setCourseId(course.course_id)}>{course.due_items} review item{course.due_items === 1 ? "" : "s"} available</Link> : null}
-                    {course.pending_requests ? <Link className="ll-chip" to="/activity">{course.pending_requests} open request{course.pending_requests === 1 ? "" : "s"}</Link> : null}
-                  </div>
-                  <ContinueCard course={course} />
-                  <Link to={`/courses/${course.course_id}`} onClick={() => app.setCourseId(course.course_id)} className="ll-btn ll-btn-sm self-start">All lectures</Link>
-                </>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-      <p className="ll-measure mt-4 text-sm text-muted">Counts describe what exists and what was prepared. They say nothing about what you know; reading or replaying a lecture is never treated as an assessment.</p>
     </div>
   );
 }
 
+/** `/study`: the active course is the chosen one; choosing another makes it the active course. */
+export function StudyHome() {
+  return <StudyPage />;
+}
+
+/** `/courses/:courseId`: the same page with that course chosen; choosing another course goes to its address. */
 export function CourseLectures() {
   const { courseId } = useParams();
-  const app = useApp();
-  const course = useCourse(courseId);
-  const [filter, setFilter] = useState("");
-  const [only, setOnly] = useState<"all" | "openable" | "needs_attention">("all");
-  const lectures = course.data?.lectures ?? [];
-  const shown = useMemo(() => lectures.filter((l) => {
-    const text = `${l.title} ${l.lecture_id}`.toLowerCase();
-    if (filter && !text.includes(filter.toLowerCase())) return false;
-    if (only === "openable") return l.displayable || l.deck_choice.state === "unresolved";
-    if (only === "needs_attention") return !l.displayable || l.disposition.startsWith("links_pending") || l.disposition.startsWith("not_processed");
-    return true;
-  }), [lectures, filter, only]);
-
-  if (course.isLoading) return <LoadingState label="Loading lectures…" />;
-  if (course.isError || !course.data) return <ErrorState error={course.error} retry={() => void course.refetch()} />;
-  const data = course.data;
-  return (
-    <div className="ll-page">
-      <nav aria-label="Breadcrumb" className="mb-2 text-sm text-muted"><Link to="/study" className="hover:underline">Courses</Link> › <span aria-current="page">{data.display_name}</span></nav>
-      <PageHeader title={data.display_name} subtitle={`${lectures.length} lecture unit${lectures.length === 1 ? "" : "s"} in the inventory${shown.length !== lectures.length ? ` · showing ${shown.length} (filter does not change the total)` : ""}`}
-        actions={<><Link className="ll-btn ll-btn-sm" to={`/courses/${data.course_id}/questions`}>Question bank ({data.question_bank.total})</Link>
-          <Link className="ll-btn ll-btn-sm" to="/sources" onClick={() => app.setCourseId(data.course_id)}>Sources and preparation</Link></>} />
-      {data.index.status !== "ok" && <Callout tone="caution" className="mb-3" title="The course's published source index could not be trusted right now">{data.index.reason} Files on disk are still listed; registration details are temporarily unavailable.</Callout>}
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <input type="search" className="ll-input max-w-xs" placeholder="Filter lectures…" aria-label="Filter lectures in this course" value={filter} onChange={(e) => setFilter(e.target.value)} />
-        <select className="ll-input w-auto" aria-label="Show" value={only} onChange={(e) => setOnly(e.target.value as typeof only)}>
-          <option value="all">All lecture units</option>
-          <option value="openable">Slides can be opened</option>
-          <option value="needs_attention">Needs attention</option>
-        </select>
-      </div>
-      {shown.length === 0 ? <EmptyState title="No lecture matches this filter">The course still has {lectures.length} lecture unit{lectures.length === 1 ? "" : "s"}; clear the filter to see them.</EmptyState> : (
-        <ul className="flex flex-col gap-2">
-          {shown.map((lecture) => {
-            const prep = dispositionLabel(lecture.disposition);
-            const deckState = lecture.deck ? SOURCE_STATE[lecture.deck.state] : null;
-            return (
-              <li key={lecture.lecture_id} className="ll-card p-3">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h2 className="font-semibold">
-                      {lecture.displayable || lecture.deck_choice.state === "unresolved" ? <Link className="hover:underline" to={`/courses/${data.course_id}/lectures/${lecture.lecture_id}`}>{lecture.title}</Link> : lecture.title}
-                    </h2>
-                    <p className="text-sm text-muted">{lecture.lecture_id}{lecture.pages ? ` · ${lecture.pages} slides` : ""}</p>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {deckState ? <StatusChip tone={deckState.tone} title={deckState.detail}>Slides: {deckState.label}</StatusChip>
-                      : lecture.deck_choice.state === "unresolved" ? <StatusChip tone="caution">{lecture.deck_choice.candidates} candidate files: choose one</StatusChip> : <StatusChip tone="unassessed">No slide file</StatusChip>}
-                    {lecture.questions.count > 0
-                      ? <Link className="ll-chip hover:underline" to={`/courses/${data.course_id}/questions?lecture=${encodeURIComponent(lecture.lecture_id)}`}>{lecture.questions.count} question{lecture.questions.count === 1 ? "" : "s"}</Link>
-                      : <StatusChip tone="unassessed">No question collection</StatusChip>}
-                    <StatusChip tone={prep.tone} title={prep.detail ?? undefined}>{prep.label}</StatusChip>
-                  </div>
-                </div>
-                {prep.detail && <p className="mt-1 text-sm text-muted">{prep.detail}</p>}
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-                  <CalendarDays aria-hidden className="size-4 text-muted" />
-                  {lecture.sessions.length === 0 ? <span className="text-muted">No dated session is linked to this lecture by the course records (not guessed).</span> :
-                    lecture.sessions.map((s) => <StatusChip key={s.session_id} tone={SESSION_STATE[s.state]?.tone ?? "neutral"}>{s.date}: {SESSION_STATE[s.state]?.label ?? s.state}</StatusChip>)}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      {data.unlinked_sessions.length > 0 && (
-        <section className="mt-6" aria-labelledby="unlinked-heading">
-          <h2 id="unlinked-heading" className="mb-2 text-lg font-semibold">Dated sessions without a recorded lecture link</h2>
-          <ul className="flex flex-col gap-2">
-            {data.unlinked_sessions.map((s) => (
-              <li key={s.session_id} className="ll-card flex flex-wrap items-center justify-between gap-2 p-3">
-                <span className="font-medium">{s.date}</span>
-                <StatusChip tone={SESSION_STATE[s.state]?.tone ?? "neutral"}>{SESSION_STATE[s.state]?.label ?? s.state}</StatusChip>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-1 text-sm text-muted">The course records do not say which lecture these belong to, so no pairing is assumed.</p>
-        </section>
-      )}
-      <p className="mt-4 text-sm text-muted">Recorded evidence in this course: {data.recorded_attempts === 0 ? "Not assessed (no attempts recorded) — that is not a score of zero." : `${data.recorded_attempts} attempt record(s).`}</p>
-    </div>
-  );
+  return <StudyPage routeCourseId={courseId} />;
 }

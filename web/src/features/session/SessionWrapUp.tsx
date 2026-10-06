@@ -4,16 +4,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { useApp, courseName } from "@/app/state";
-import { Button, Callout, formatMs, formatWhen, LoadingState, PageHeader, StatusChip } from "@/components/ui";
+import { Button, formatMs, formatWhen, LoadingState, PageHeader } from "@/components/ui";
 import { listDrafts, listOutbox, type LocalRequest } from "@/lib/db";
 import { JOB_STATE } from "@/lib/labels";
 import { useActivity, useResume, useReview } from "@/lib/queries";
 import { reviewItemPayload } from "@/lib/requests";
 import type { ActivityJob, QuestionRecord } from "@/lib/types";
+import { Callout, Lead, StateWords } from "@/features/search/SearchOverlay";
 import { useLocalRequests, useSubmitActions } from "@/features/tutor/actions";
 
 const ANSWERS = new Set(["explain", "practice", "review_answer", "diagnose"]);
 const TERMINAL = new Set(["SUCCEEDED", "FAILED_FINAL", "CANCELLED", "SUPERSEDED"]);
+/** The sections of the summary are parted by a hairline, not boxed. */
+const SECTION = "border-t border-hairline py-6 first-of-type:border-t-0 first-of-type:pt-0";
+const SECTION_HEAD = "text-head font-semibold";
 
 function publicationOf(job: ActivityJob | undefined): { label: string; tone: "success" | "caution" | "unassessed" | "neutral" } {
   if (!job) return { label: "Not received by the Brain yet", tone: "caution" };
@@ -97,77 +101,79 @@ export function SessionWrapUp() {
     const job = jobs.get(r.requestId);
     const status = ANSWERS.has(r.action) ? publicationOf(job) : { label: !job ? "Not received by the Brain yet" : r.action === "ask" && job.state === "SUCCEEDED" ? "Answer received — not assessed in this exchange" : (JOB_STATE[job.state]?.label ?? job.state), tone: (!job || !TERMINAL.has(job.state) ? "caution" : "unassessed") as "caution" | "unassessed" };
     return (
-      <li key={r.requestId} className="rounded border border-line/40 p-2 text-sm" data-testid="wrapup-row">
-        <p className="font-medium">{r.label}</p>
-        <p className="text-muted">{r.text.slice(0, 160)}{r.text.length > 160 ? "…" : ""}</p>
-        <p className="mt-1 flex flex-wrap items-center gap-2"><StatusChip tone={status.tone}>{status.label}</StatusChip><Link className="underline" to={`/activity/${encodeURIComponent(r.requestId)}`}>Details</Link></p>
+      <li key={r.requestId} className="border-t border-hairline py-3 first:border-t-0 first:pt-1" data-testid="wrapup-row">
+        <p className="font-semibold">{r.label}</p>
+        <p className="ll-measure text-ui text-muted">{r.text.slice(0, 160)}{r.text.length > 160 ? "…" : ""}</p>
+        <p className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-ui"><StateWords tone={status.tone === "unassessed" ? "neutral" : status.tone}>{status.label}</StateWords><Link className="ll-link" to={`/activity/${encodeURIComponent(r.requestId)}`}>Details</Link></p>
       </li>
     );
   };
+  const count = (label: string, value: number) => <div><dt className="text-ui text-muted">{label}</dt><dd className="ll-num text-title font-semibold">{value}</dd></div>;
 
   return (
     <div className="ll-page ll-page-reading">
-      <PageHeader title="Session summary" subtitle={`${courseName(app.workspace, courseId)} · built from this session's actual requests and receipts, not from a model's recollection.`} />
+      <PageHeader title="Session summary" subtitle={<Lead>{courseName(app.workspace, courseId)} · built from this session's actual requests and receipts, not from a model's recollection.</Lead>} />
 
-      <section className="ll-card mb-4 p-4" aria-labelledby="where-h">
-        <h2 id="where-h" className="text-lg font-semibold">Where you stopped</h2>
+      <section className={SECTION} aria-labelledby="where-h">
+        <h2 id="where-h" className={SECTION_HEAD}>Where you stopped</h2>
         {here ? (
-          <p className="mt-1">Slide {String((here.cursor.source.locator as { page?: number }).page ?? "?")} of {here.cursor.lecture_id}{here.cursor.position_ms != null ? ` · recording at ${formatMs(here.cursor.position_ms)}` : ""} · synchronised {formatWhen(here.updated_at)}.{here.cursor.draft ? " Your unsent draft text was saved with it." : ""}</p>
+          <p className="ll-measure mt-1">{here.cursor.lecture_id}, PDF page {String((here.cursor.source.locator as { page?: number }).page ?? "?")}{here.cursor.position_ms != null ? ` · recording at ${formatMs(here.cursor.position_ms)}` : ""} · synchronised {formatWhen(here.updated_at)}.{here.cursor.draft ? " Your unsent draft text was saved with it." : ""}</p>
         ) : lectureId ? (
-          <p className="mt-1">Slide {page ?? "?"} of {lectureId}. <StatusChip tone="caution">Position not confirmed by the Brain yet</StatusChip> {head ? `The last synchronised position is from ${formatWhen(head.updated_at)}.` : "It is remembered on this device only."}</p>
+          <p className="ll-measure mt-1">{lectureId}, PDF page {page ?? "?"}. Position not confirmed by the Brain yet. <span className="text-muted">{head ? `The last synchronised position is from ${formatWhen(head.updated_at)}.` : "It is remembered on this device only."}</span></p>
         ) : <p className="mt-1 text-muted">No lecture position was recorded in this session.</p>}
-        {resume.data?.conflict && <Callout tone="caution" title="Two devices stopped in different places" actions={<Link className="ll-btn ll-btn-sm" to={`/activity/conflicts/resume-${courseId}`}>Choose which to keep</Link>}>{resume.data.conflict.note}</Callout>}
-        {lectureId && <Link className="ll-btn mt-2" to={`/courses/${courseId}/lectures/${lectureId}${page ? `?page=${page}` : ""}`}>Continue this lecture</Link>}
+        {resume.data?.conflict && <Callout tone="caution" className="mt-3" title="Two devices stopped in different places" actions={<Link className="ll-btn ll-btn-sm" to={`/activity/conflicts/resume-${courseId}`}>Choose which to keep</Link>}>{resume.data.conflict.note}</Callout>}
+        {lectureId && <Link className="ll-btn mt-3" to={`/courses/${courseId}/lectures/${lectureId}${page ? `?page=${page}` : ""}`}>Continue this lecture</Link>}
       </section>
 
-      <section className="ll-card mb-4 p-4" aria-labelledby="did-h">
-        <h2 id="did-h" className="text-lg font-semibold">What actually happened</h2>
-        <dl className="mt-2 grid grid-cols-3 gap-2 text-center" data-testid="wrapup-counts">
-          <div className="rounded border border-line/40 p-2"><dt className="text-sm text-muted">Answers requested</dt><dd className="text-2xl font-semibold">{asked.length}</dd></div>
-          <div className="rounded border border-line/40 p-2"><dt className="text-sm text-muted">Responses you submitted</dt><dd className="text-2xl font-semibold">{answered.length}</dd></div>
-          <div className="rounded border border-line/40 p-2"><dt className="text-sm text-muted">Assessed and saved</dt><dd className="text-2xl font-semibold">{assessed.length}</dd></div>
+      <section className={SECTION} aria-labelledby="did-h">
+        <h2 id="did-h" className={SECTION_HEAD}>What actually happened</h2>
+        <dl className="mt-3 flex flex-wrap gap-x-12 gap-y-4" data-testid="wrapup-counts">
+          {count("Answers requested", asked.length)}
+          {count("Responses you submitted", answered.length)}
+          {count("Assessed and saved", assessed.length)}
         </dl>
-        {mine.length === 0 && <p className="mt-2 text-muted">You looked at material without sending anything. That is fine; viewing is not recorded as learning or as a gap.</p>}
-        {asked.length > 0 && answered.length === 0 && <Callout tone="neutral" role="note" className="mt-3" title="Understanding was not assessed in this session">You asked for answers. Receiving an answer says nothing about what you know, so no result — and no failure — was recorded.</Callout>}
-        {asked.length > 0 && <><h3 className="mt-3 font-medium">Answers you asked for</h3><ul className="mt-1 flex flex-col gap-2">{asked.map(row)}</ul></>}
-        {answered.length > 0 && <><h3 className="mt-3 font-medium">Your own responses</h3><ul className="mt-1 flex flex-col gap-2">{answered.map(row)}</ul></>}
-        {other.length > 0 && <><h3 className="mt-3 font-medium">Notes and corrections</h3><ul className="mt-1 flex flex-col gap-2">{other.map(row)}</ul></>}
-        <p className="mt-3 text-sm text-muted">Time spent and slides viewed are observations only; they are never treated as evidence of knowledge.</p>
+        {mine.length === 0 && <p className="ll-measure mt-3 text-muted">You looked at material without sending anything. That is fine; viewing is not recorded as learning or as a gap.</p>}
+        {asked.length > 0 && answered.length === 0 && <Callout tone="neutral" role="note" className="mt-4" title="Understanding was not assessed in this session">You asked for answers. Receiving an answer says nothing about what you know, so no result — and no failure — was recorded.</Callout>}
+        {asked.length > 0 && <><h3 className="mt-5 text-ui font-semibold text-muted">Answers you asked for</h3><ul className="flex flex-col">{asked.map(row)}</ul></>}
+        {answered.length > 0 && <><h3 className="mt-5 text-ui font-semibold text-muted">Your own responses</h3><ul className="flex flex-col">{answered.map(row)}</ul></>}
+        {other.length > 0 && <><h3 className="mt-5 text-ui font-semibold text-muted">Notes and corrections</h3><ul className="flex flex-col">{other.map(row)}</ul></>}
+        <p className="ll-measure mt-4 text-ui text-muted">Time spent and slides viewed are observations only; they are never treated as evidence of knowledge.</p>
       </section>
 
-      <section className="ll-card mb-4 p-4" aria-labelledby="pending-h">
-        <h2 id="pending-h" className="text-lg font-semibold">Still pending</h2>
-        {pending.length === 0 && (device?.outbox ?? 0) === 0 ? <p className="mt-1" data-testid="pending-none">Nothing from this session is waiting. Everything listed above has a final state.</p> : (
+      <section className={SECTION} aria-labelledby="pending-h">
+        <h2 id="pending-h" className={SECTION_HEAD}>Still pending</h2>
+        {pending.length === 0 && (device?.outbox ?? 0) === 0 ? <p className="ll-measure mt-1" data-testid="pending-none">Nothing from this session is waiting. Everything listed above has a final state.</p> : (
           <div className="mt-1 flex flex-col gap-2" data-testid="pending-some">
-            <p>{pending.length} request{pending.length === 1 ? "" : "s"} from this session {pending.length === 1 ? "has" : "have"} no final state yet{(device?.outbox ?? 0) > 0 ? `, and ${device!.outbox} signed request(s) are held on this device waiting to be sent` : ""}.</p>
-            <p className="text-sm text-muted">Leaving this page does not cancel work the Brain already accepted, and nothing is submitted again when you come back. Requests held only on this device are sent the next time the app is open and the Brain is reachable.</p>
+            <p className="ll-measure">{pending.length} request{pending.length === 1 ? "" : "s"} from this session {pending.length === 1 ? "has" : "have"} no final state yet{(device?.outbox ?? 0) > 0 ? `, and ${device!.outbox} signed request(s) are held on this device waiting to be sent` : ""}.</p>
+            <p className="ll-measure text-ui text-muted">Leaving this page does not cancel work the Brain already accepted, and nothing is submitted again when you come back. Requests held only on this device are sent the next time the app is open and the Brain is reachable.</p>
             <div><Link className="ll-btn" to="/activity">Open Activity</Link></div>
           </div>
         )}
-        {(device?.drafts ?? 0) > 0 && <p className="mt-2 text-sm text-muted">{device!.drafts} unsent draft{device!.drafts === 1 ? "" : "s"} stay on this device until you send or discard them.</p>}
+        {(device?.drafts ?? 0) > 0 && <p className="ll-measure mt-2 text-ui text-muted">{device!.drafts} unsent draft{device!.drafts === 1 ? "" : "s"} stay on this device until you send or discard them.</p>}
       </section>
 
-      <section className="ll-card mb-4 p-4" aria-labelledby="next-h">
-        <h2 id="next-h" className="text-lg font-semibold">Optional next steps</h2>
-        {suggestions.length === 0 ? <p className="mt-1 text-muted">No course question from this session is waiting to be added to your review list.</p> : (
+      <section className={SECTION} aria-labelledby="next-h">
+        <h2 id="next-h" className={SECTION_HEAD}>Optional next steps</h2>
+        {suggestions.length === 0 ? <p className="ll-measure mt-1 text-muted">No course question from this session is waiting to be added to your review list.</p> : (
           <>
-            <p className="mt-1 text-sm text-muted">Tick only what you want to keep. Unticked suggestions are dropped — they do not become scheduled work.</p>
-            <ul className="mt-2 flex flex-col gap-2">
+            <p className="ll-measure mt-1 text-ui text-muted">Tick only what you want to keep. Unticked suggestions are dropped — they do not become scheduled work.</p>
+            <ul className="mt-3 flex flex-col gap-3">
               {suggestions.map((q) => (
-                <li key={q.question_id}><label className="flex items-start gap-2"><input type="checkbox" className="mt-1 size-5" checked={chosen.has(q.question_id)} onChange={(e) => setChosen((prev) => {
+                <li key={q.question_id}><label className="flex items-start gap-3"><input type="checkbox" className="mt-0.5 size-5 flex-none accent-accent" checked={chosen.has(q.question_id)} onChange={(e) => setChosen((prev) => {
                   const next = new Set(prev);
                   if (e.target.checked) next.add(q.question_id); else next.delete(q.question_id);
                   return next;
-                })} /><span><span className="font-medium">{q.title ?? q.question_id}</span><span className="block text-sm text-muted">{q.prompt.slice(0, 140)}{q.prompt.length > 140 ? "…" : ""}</span></span></label></li>
+                })} /><span><span className="font-semibold">{q.title ?? q.question_id}</span><span className="ll-measure block text-ui text-muted">{q.prompt.slice(0, 140)}{q.prompt.length > 140 ? "…" : ""}</span></span></label></li>
               ))}
             </ul>
           </>
         )}
-        {saved && <p role="status" className="mt-2 text-sm">{saved}</p>}
-        <div className="mt-3 flex flex-wrap gap-2">
-          {suggestions.length > 0 && <Button busy={busy} disabled={chosen.size === 0} onClick={saveChosen}>Save selected for later</Button>}
-          <Link className="ll-btn" to="/review">Review now</Link>
+        {saved && <p role="status" className="ll-measure mt-3 text-ui">{saved}</p>}
+        <div className="mt-4 flex flex-wrap items-center gap-2">
           <Link className="ll-btn ll-btn-primary" to="/study">Done</Link>
+          <Link className="ll-btn" to="/review">Review now</Link>
+          {suggestions.length > 0 && <Button busy={busy} disabled={chosen.size === 0} onClick={saveChosen}>Save selected for later</Button>}
+          {suggestions.length > 0 && chosen.size === 0 && <span className="text-ui text-muted">Tick a question to save it.</span>}
         </div>
       </section>
     </div>

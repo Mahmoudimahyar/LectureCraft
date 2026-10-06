@@ -2,26 +2,131 @@
 // Everything shown is linked to actual attempt records: observed performance, assistance and time
 // basis. There is no mastery percentage, no forgetting estimate and no exam probability; zero records
 // reads "Not assessed". Structure views are projections of the course's own catalogs.
+//
+// Amendment R2: where the Brain sends the five evidence states (Unknown, Not applicable, Not separately observed,
+// Assisted with its kind, Independent) they are shown with `StateLabel`, prior exposure beside the state and never as
+// assistance. The progress view itself does not carry them yet, so a skill's state is read from the course's concept
+// graph (`nodes[].evidence`) and an attempt's own conditions from the skill's node detail (`evidence.observations`).
+// A row for which nothing was sent claims nothing: the web never works a state out of counts or of the older status.
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
+import { useQuery } from "@tanstack/react-query";
 import { useApp } from "@/app/state";
-import { Button, Callout, EmptyState, ErrorState, formatWhen, LoadingState, OUTCOME_LABEL, PageHeader, StatusChip, Tab, TabList, TabPanel, Tabs } from "@/components/ui";
-import { ASSISTANCE_LABEL, CONDITION_LABEL, NODE_TYPE_LABEL, REFERENCE_LABEL, RELATION_LABEL, SKILL_STATUS, TIME_BASIS_LABEL } from "@/lib/labels";
-import { useConcepts, useHistory, useProgress } from "@/lib/queries";
-import type { ConceptEdge, ConceptNode, SkillRow } from "@/lib/types";
-import { ReturnLink } from "@/features/search/SearchOverlay";
+import { KindGlyph, type KindGlyphKind } from "@/components/glyphs";
+import { StateLabel } from "@/components/labels";
+import { Button, cn, EmptyState, ErrorState, formatWhen, LoadingState, OUTCOME_LABEL, PageHeader, Tab, TabList, TabPanel, Tabs } from "@/components/ui";
+import { apiGet, r2Paths } from "@/lib/api";
+import {
+  ASSISTANCE_LABEL, CONDITION_LABEL, NODE_TYPE_LABEL, PRIOR_EXPOSURE_LABEL, R2_ACTION, REFERENCE_LABEL, RELATION_LABEL, SKILL_STATUS, TIME_BASIS_LABEL, evidenceSummarySentence, unlistedLabel,
+} from "@/lib/labels";
+import { useConceptGraph, useConcepts, useHistory, useProgress } from "@/lib/queries";
+import type { ConceptEdge, ConceptGraphView, ConceptNode, Episode, EvidenceObject, EvidenceObservation, OutlineNodeView, SkillRow } from "@/lib/types";
+import { Callout, Lead, Picker, ReturnLink } from "@/features/search/SearchOverlay";
 import { useSubmitActions } from "@/features/tutor/actions";
 
 const STATUS = SKILL_STATUS as Record<SkillRow["status"], { label: string; tone: "success" | "caution" | "unassessed" | "danger" | "neutral" }>;
+/** A small label line above a field of an entry ("Question shown"). Sentence case, never upper case. */
+const FIELD = "text-ui font-semibold text-muted";
+const outcomeWords = (outcome: string): string => OUTCOME_LABEL[outcome]?.label ?? unlistedLabel(outcome);
+
+// ---- R2 evidence: read, never derived (tested in tests/features/other-pages.test.tsx) --------------------------------------
+/** A skill row; `evidence` is read when a Brain sends it with the progress view (today it does not). */
+export type SkillRowWithEvidence = SkillRow & { evidence?: EvidenceObject | null };
+
+/** The evidence of each skill of a course's concept graph, by skill id. Topics and concepts are not skills and are left out. */
+export function skillEvidenceIndex(graph: Pick<ConceptGraphView, "nodes"> | null | undefined): Map<string, EvidenceObject> {
+  const index = new Map<string, EvidenceObject>();
+  for (const node of graph?.nodes ?? []) if (node.kind === "skill" && node.evidence) index.set(node.id, node.evidence);
+  return index;
+}
+/** The row's own evidence object first, then the graph's node for that skill; null when neither was sent. */
+export function rowEvidence(row: SkillRowWithEvidence, index: ReadonlyMap<string, EvidenceObject>): EvidenceObject | null {
+  return row.evidence ?? index.get(row.skill_id) ?? null;
+}
+/** The observations of a node's detail by attempt, so that an attempt line states the conditions of that attempt. */
+export function observationsByAttempt(detail: Pick<OutlineNodeView, "evidence"> | null | undefined): Map<string, EvidenceObservation> {
+  const index = new Map<string, EvidenceObservation>();
+  for (const observation of detail?.evidence?.observations ?? []) if (!index.has(observation.attempt_id)) index.set(observation.attempt_id, observation);
+  return index;
+}
+/** One of the five evidence states of a skill, with its attempts and prior exposure beside it. Nothing is drawn when no evidence object was sent. */
+export function SkillState({ evidence, className }: { evidence: EvidenceObject | null | undefined; className?: string }) {
+  if (!evidence) return null;
+  return <span data-testid="skill-state" className={className}><StateLabel evidence={evidence} /></span>;
+}
+/** The node detail of one skill or question (the same cache entry the concept views use). */
+export const useNodeDetail = (courseId: string | undefined, nodeId: string | undefined, enabled = true) =>
+  useQuery<OutlineNodeView, Error>({ queryKey: ["outline-node", courseId, nodeId], enabled: !!courseId && !!nodeId && enabled, retry: false, staleTime: 5_000,
+    queryFn: ({ signal }) => apiGet<OutlineNodeView>(r2Paths.outlineNode(courseId ?? "", nodeId ?? ""), signal) });
+
+/** The conditions of one attempt: the five-state label when the Brain sent an observation for it, otherwise the recorded condition in words. */
+function AttemptConditions({ episode, observation }: { episode: Episode; observation: EvidenceObservation | undefined }) {
+  if (observation) {
+    const beside = observation.prior_exposure === "seen" ? [] : [PRIOR_EXPOSURE_LABEL[observation.prior_exposure] ?? unlistedLabel(String(observation.prior_exposure))];
+    return <StateLabel evidence={observation} beside={beside} />;
+  }
+  return <span className="text-ui">{CONDITION_LABEL[episode.condition] ?? unlistedLabel(episode.condition)} <span className="text-muted">· {ASSISTANCE_LABEL[episode.assistance] ?? unlistedLabel(episode.assistance)} · prior exposure: {unlistedLabel(episode.prior_exposure)}</span></span>;
+}
 
 function EvidenceLine({ row }: { row: SkillRow }) {
-  if (!row.latest) return <p className="text-sm text-muted">No attempt has observed this skill.</p>;
+  const status = STATUS[row.status]?.label ?? unlistedLabel(row.status);
+  if (!row.latest) return <p className="ll-measure text-ui"><span className="font-semibold">{status}.</span> <span className="text-muted">No attempt has observed this skill.</span></p>;
   const e = row.latest;
   return (
-    <p className="text-sm text-muted">
-      Latest: {OUTCOME_LABEL[e.outcome]?.label ?? e.outcome} · <strong className="font-medium text-ink">{CONDITION_LABEL[e.condition] ?? e.condition}</strong> · {ASSISTANCE_LABEL[e.assistance] ?? e.assistance} · {REFERENCE_LABEL[e.reference_access] ?? e.reference_access} · recorded {formatWhen(e.recorded_at)} ({TIME_BASIS_LABEL[e.time_basis] ?? e.time_basis})
-      {e.revised ? " · corrected assessment in effect" : ""}{e.conflict ? " · correction chain needs reconciliation" : ""}
+    <p className="ll-measure text-ui">
+      <span className="font-semibold">{status}.</span>{" "}
+      <span className="text-muted">
+        Latest: {outcomeWords(e.outcome)} · <strong className="font-semibold text-ink">{CONDITION_LABEL[e.condition] ?? e.condition}</strong> · {ASSISTANCE_LABEL[e.assistance] ?? e.assistance} · {REFERENCE_LABEL[e.reference_access] ?? e.reference_access} · recorded {formatWhen(e.recorded_at)} ({TIME_BASIS_LABEL[e.time_basis] ?? e.time_basis})
+        {e.revised ? " · corrected assessment in effect" : ""}{e.conflict ? " · correction chain needs reconciliation" : ""}
+      </span>
     </p>
+  );
+}
+
+/** What opens under a skill: its attempts, each with its own conditions, and the study priority (a planning choice). */
+function SkillDetail({ courseId, row, onNotice }: { courseId: string; row: SkillRow; onNotice: (text: string) => void }) {
+  const actions = useSubmitActions();
+  const detail = useNodeDetail(courseId, row.skill_id);
+  const observations = useMemo(() => observationsByAttempt(detail.data), [detail.data]);
+  const summary = detail.data?.evidence?.summary;
+  return (
+    <div className="mt-4 flex flex-col gap-5 border-t border-hairline pt-4 text-ui">
+      <section aria-label="Attempts">
+        <h4 className="font-semibold">Attempts observing this skill</h4>
+        {summary && <p className="ll-measure mt-0.5 text-muted" data-testid="evidence-summary">{evidenceSummarySentence(summary)}</p>}
+        {row.history.length === 0 ? <p className="mt-1 text-muted">None.</p> : (
+          <ul className="mt-1 flex flex-col">
+            {row.history.map((e) => (
+              <li key={e.attempt_id} className="flex flex-col items-start gap-1 border-t border-hairline py-3 first:border-t-0 last:pb-0" data-attempt={e.attempt_id}>
+                <p><span className="font-semibold">{outcomeWords(e.outcome)}</span> <span className="text-muted">· {formatWhen(e.recorded_at)}</span></p>
+                <AttemptConditions episode={e} observation={observations.get(e.attempt_id)} />
+                <p className="text-muted">{REFERENCE_LABEL[e.reference_access] ?? unlistedLabel(e.reference_access)} · confidence {e.confidence}</p>
+                <p className="ll-measure text-read">{e.question_prompt}</p>
+                <p className="ll-measure text-muted">{e.analysis}</p>
+                <Link className="ll-link" to={`/history/${encodeURIComponent(e.attempt_id)}`}>Open the original attempt</Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      <section aria-label="Study priority">
+        <h4 className="font-semibold">Study priority (a planning choice, separate from evidence)</h4>
+        <p className="mt-1">Priority: {row.study.priority ?? "not set"} · decision: {(row.study.study_decision ?? "undecided").replace(/_/g, " ")} · basis: {(row.study.need_basis ?? "not recorded").replace(/_/g, " ")}</p>
+        {row.study.priority_reason && <p className="ll-measure text-muted">Reason on record: {row.study.priority_reason}</p>}
+        <div className="mt-2 flex flex-wrap gap-2">
+          {(["practise soon", "defer"] as const).map((choice) => (
+            <Button key={choice} size="sm" variant="quiet" onClick={async () => {
+              try {
+                await actions.control(courseId, "save_note", { text: `Study preference: ${choice} — ${row.label} (${row.skill_id})`, sources: [], attachments: [] }, { label: "Study preference", text: `${choice}: ${row.label}` });
+                onNotice(`Saved as your note: ${choice}. The course catalog, your record and any calendar are unchanged.`);
+              } catch (e) {
+                onNotice((e as Error).message);
+              }
+            }}>Note: {choice}</Button>
+          ))}
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -29,7 +134,9 @@ export function ProgressPage() {
   const app = useApp();
   const courseId = app.courseId;
   const progress = useProgress(courseId);
-  const actions = useSubmitActions();
+  // The five-state evidence of each skill, as the course's concept graph carries it (as many nodes as the route allows).
+  const graph = useConceptGraph(courseId, { scope: "course", limit: 400 });
+  const evidenceOf = useMemo(() => skillEvidenceIndex(graph.data), [graph.data]);
   const [status, setStatus] = useState<string>("all");
   const [conditions, setConditions] = useState<string>("all");
   const [open, setOpen] = useState<string | null>(null);
@@ -45,141 +152,113 @@ export function ProgressPage() {
   if (progress.isError || !progress.data) return <ErrorState error={progress.error} retry={() => void progress.refetch()} />;
   const data = progress.data;
   const s = data.summary;
+  const facts = [
+    `${data.recorded_attempts} recorded attempt${data.recorded_attempts === 1 ? "" : "s"}`,
+    `${data.assessment_revisions} assessment correction${data.assessment_revisions === 1 ? "" : "s"} (not new attempts)`,
+    `${s.current_gap ?? 0} gap${(s.current_gap ?? 0) === 1 ? "" : "s"} in latest responses`,
+    `${(s.not_assessed ?? 0) + (s.not_observed_only ?? 0)} of ${s.skills} skills not assessed`,
+  ];
 
   return (
     <div className="ll-page">
       <PageHeader title="Progress" subtitle="What your recorded responses showed — not a score."
-        actions={<><Link className="ll-btn" to={`/courses/${courseId}/outline`}>Concept outline</Link><Link className="ll-btn" to="/history">Study history</Link></>} />
-      {data.owner_view_status === "stale" && <Callout tone="caution" className="mb-3" title="The course's own summary view is out of date">Its original attempt records are intact and are what you see here; only the generated summary lags. <Link className="text-accent-text underline" to="/settings/maintenance">Maintenance</Link></Callout>}
-      <ul className="mb-4 flex flex-wrap gap-2" aria-label="Evidence summary">
-        <li><StatusChip tone="neutral">{data.recorded_attempts} recorded attempt{data.recorded_attempts === 1 ? "" : "s"}</StatusChip></li>
-        <li><StatusChip tone="neutral">{data.assessment_revisions} assessment correction{data.assessment_revisions === 1 ? "" : "s"} (not new attempts)</StatusChip></li>
-        <li><StatusChip tone="caution">{s.current_gap ?? 0} gap{(s.current_gap ?? 0) === 1 ? "" : "s"} in latest responses</StatusChip></li>
-        <li><StatusChip tone="unassessed">{(s.not_assessed ?? 0) + (s.not_observed_only ?? 0)} of {s.skills} skills not assessed</StatusChip></li>
+        actions={<><Link className="ll-btn" to={`/courses/${courseId}/concepts`}>{R2_ACTION.concept_map}</Link><Link className="ll-btn" to="/history">Study history</Link></>} />
+      {data.owner_view_status === "stale" && <Callout tone="caution" className="mb-4" title="The course's own summary view is out of date">Its original attempt records are intact and are what you see here; only the generated summary lags. <Link className="ll-link" to="/settings/maintenance">Maintenance</Link></Callout>}
+      <ul className="ll-num mb-6 flex flex-col gap-y-1 min-[600px]:flex-row min-[600px]:flex-wrap min-[600px]:gap-x-2 min-[600px]:[&>li+li]:before:mr-2 min-[600px]:[&>li+li]:before:text-muted min-[600px]:[&>li+li]:before:content-['·']" aria-label="Evidence summary">
+        {facts.map((fact) => <li key={fact}>{fact}</li>)}
       </ul>
-      <section aria-labelledby="facets-h" className="ll-card mb-4 p-4" data-testid="facet-summary">
-        <h2 id="facets-h" className="text-lg font-semibold">Recorded evidence by kind of performance</h2>
-        <p className="ll-measure mb-2 text-sm text-muted">Unit: distinct skills of this course's catalog ({s.skills}). "Unaided" means an observed, demonstrated response recorded with no assistance, no reference and no known prior exposure.
+      {data.recorded_attempts === 0 && <Callout tone="unassessed" className="mb-6" title="Not assessed">No attempt is recorded for this course. That is not a score of zero — nothing has been measured yet.</Callout>}
+
+      <section aria-labelledby="facets-h" className="mb-8" data-testid="facet-summary">
+        <h2 id="facets-h" className="text-head font-semibold">Recorded evidence by kind of performance</h2>
+        <p className="ll-measure mb-3 mt-1 text-ui text-muted">Unit: distinct skills of this course's catalog ({s.skills}). "Unaided" means an observed, demonstrated response recorded with no assistance, no reference and no known prior exposure.
           Rules: conditions {data.rules.evidence_conditions}, facet mapping v{data.rules.facet_mapping}.</p>
-        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Evidence by kind of performance (scrolls sideways on a narrow screen)">
-          <table className="w-full min-w-[44rem] border-collapse text-left">
-            <thead><tr className="border-b border-line/40 text-sm text-muted">
-              <th scope="col" className="py-1 pr-3 font-medium">Kind of performance</th><th scope="col" className="px-2 font-medium">Skills</th><th scope="col" className="px-2 font-medium">With an unaided demonstration</th>
-              <th scope="col" className="px-2 font-medium">Observed otherwise</th><th scope="col" className="px-2 font-medium">Uncertain</th><th scope="col" className="px-2 font-medium">Not assessed</th>
-              <th scope="col" className="pl-2 font-medium">Recorded observations</th></tr></thead>
+        <div className="ll-region overflow-x-auto px-4 py-2 min-[900px]:px-5" tabIndex={0} role="region" aria-label="Evidence by kind of performance (scrolls sideways on a narrow screen)">
+          <table className="ll-num w-full min-w-[46rem] border-collapse text-left text-ui">
+            <thead><tr className="border-b border-hairline align-bottom text-muted">
+              <th scope="col" className="py-2 pr-3 font-normal">Kind of performance</th><th scope="col" className="px-3 py-2 font-normal">Skills</th><th scope="col" className="px-3 py-2 font-normal">With an unaided demonstration</th>
+              <th scope="col" className="px-3 py-2 font-normal">Observed otherwise</th><th scope="col" className="px-3 py-2 font-normal">Uncertain</th><th scope="col" className="px-3 py-2 font-normal">Not assessed</th>
+              <th scope="col" className="py-2 pl-3 font-normal">Recorded observations</th></tr></thead>
             <tbody>
               {data.facets.rows.map((row) => (
-                <tr key={row.facet} className="border-b border-line/20 align-top" data-facet={row.facet}>
-                  <th scope="row" className="py-1.5 pr-3 font-medium">{row.label}{row.note && <span className="block text-sm font-normal text-muted">{row.note}</span>}</th>
-                  <td className="px-2 tabular-nums">{row.target_skills}</td>
-                  <td className="px-2 tabular-nums">{row.target_skills ? `${row.qualifying_unaided_skills} of ${row.target_skills}` : "—"}</td>
-                  <td className="px-2 tabular-nums">{row.target_skills ? row.observed_other_skills : "—"}</td>
-                  <td className="px-2 tabular-nums">{row.target_skills ? row.uncertain_skills : "—"}</td>
-                  <td className="px-2 tabular-nums">{row.target_skills ? row.unassessed_skills : "—"}</td>
-                  <td className="pl-2 text-sm">{Object.entries(row.observations_by_condition).filter(([, n]) => n > 0).map(([c, n]) => `${n} ${CONDITION_LABEL[c] ?? c}`).join(", ") || "none"}</td>
+                <tr key={row.facet} className="border-b border-hairline align-top last:border-b-0" data-facet={row.facet}>
+                  <th scope="row" className="py-2 pr-3 font-semibold">{row.label}{row.note && <span className="mt-0.5 block max-w-[52ch] font-normal text-muted">{row.note}</span>}</th>
+                  <td className="px-3 py-2">{row.target_skills}</td>
+                  <td className="px-3 py-2">{row.target_skills ? `${row.qualifying_unaided_skills} of ${row.target_skills}` : "—"}</td>
+                  <td className="px-3 py-2">{row.target_skills ? row.observed_other_skills : "—"}</td>
+                  <td className="px-3 py-2">{row.target_skills ? row.uncertain_skills : "—"}</td>
+                  <td className="px-3 py-2">{row.target_skills ? row.unassessed_skills : "—"}</td>
+                  <td className="py-2 pl-3">{Object.entries(row.observations_by_condition).filter(([, n]) => n > 0).map(([c, n]) => `${n} ${CONDITION_LABEL[c] ?? c}`).join(", ") || "none"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <p className="ll-measure mt-2 text-sm text-muted" data-testid="criterion-evidence">{data.criterion_evidence.criteria_in_catalog} criteria are listed in the catalog; {data.criterion_evidence.attempts_with_criterion_observations} recorded attempts carry observations per criterion. {data.criterion_evidence.note}</p>
+        <p className="ll-measure mt-3 text-ui text-muted" data-testid="criterion-evidence">{data.criterion_evidence.criteria_in_catalog} criteria are listed in the catalog; {data.criterion_evidence.attempts_with_criterion_observations} recorded attempts carry observations per criterion. {data.criterion_evidence.note}</p>
       </section>
-      {data.recorded_attempts === 0 && <Callout tone="unassessed" className="mb-3" title="Not assessed">No attempt is recorded for this course. That is not a score of zero — nothing has been measured yet.</Callout>}
 
-      <div className="mb-3 flex flex-wrap gap-3 text-sm">
-        <label className="flex items-center gap-2">Show
-          <select className="ll-input w-auto" value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="all">all skills</option>
-            {Object.entries(STATUS).map(([value, { label }]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-        </label>
-        <label className="flex items-center gap-2">Conditions
-          <select className="ll-input w-auto" value={conditions} onChange={(e) => setConditions(e.target.value)}>
-            <option value="all">any</option><option value="unaided">has unaided evidence (no help, no reference, not seen before)</option><option value="assisted">has assisted evidence</option>
-            <option value="prior_exposure">has evidence after prior exposure</option><option value="conditions_unknown">has evidence with conditions not recorded</option>
-          </select>
-        </label>
-      </div>
-      {notice && <p role="status" className="mb-2 text-sm text-muted">{notice}</p>}
+      <section aria-labelledby="skills-h">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+          <h2 id="skills-h" className="text-head font-semibold">Skills <span className="ll-sec-n">({rows.length === data.skills.length ? data.skills.length : `${rows.length} of ${data.skills.length}`})</span></h2>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-ui">
+            <span className="flex flex-wrap items-center gap-2">Show
+              <Picker label="Show" value={status} onChange={setStatus} options={[{ value: "all", label: "all skills" }, ...Object.entries(STATUS).map(([value, { label }]) => ({ value, label }))]} />
+            </span>
+            <span className="flex flex-wrap items-center gap-2">Conditions
+              <Picker label="Conditions" value={conditions} onChange={setConditions} options={[
+                { value: "all", label: "any" }, { value: "unaided", label: "has unaided evidence (no help, no reference, not seen before)" }, { value: "assisted", label: "has assisted evidence" },
+                { value: "prior_exposure", label: "has evidence after prior exposure" }, { value: "conditions_unknown", label: "has evidence with conditions not recorded" },
+              ]} />
+            </span>
+          </div>
+        </div>
+        {notice && <p role="status" className="mb-3 text-ui text-muted">{notice}</p>}
 
-      {rows.length === 0 ? <EmptyState title="No skill matches these filters">The course catalog has {data.skills.length} skill(s).</EmptyState> : (
-        <ul className="flex flex-col gap-2" data-testid="skill-list">
-          {rows.map((row) => {
-            const st = STATUS[row.status];
-            const expanded = open === row.skill_id;
-            return (
-              <li key={row.skill_id} className="ll-card p-3" data-status={row.status}>
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <h2 className="font-semibold">{row.label}</h2>
-                    <p className="text-sm text-muted">{row.ability ?? "skill"} · {row.episodes} evidence episode{row.episodes === 1 ? "" : "s"}{row.unaided_demonstrated ? ` · ${row.unaided_demonstrated} unaided demonstration${row.unaided_demonstrated === 1 ? "" : "s"}` : ""}</p>
+        {rows.length === 0 ? <EmptyState title="No skill matches these filters">The course catalog has {data.skills.length} skill(s).</EmptyState> : (
+          <ul className="ll-region flex flex-col" data-testid="skill-list">
+            {rows.map((row) => {
+              const expanded = open === row.skill_id;
+              return (
+                <li key={row.skill_id} className="border-t border-hairline p-4 first:border-t-0 min-[900px]:px-5" data-status={row.status}>
+                  <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-1">
+                    <div className="min-w-0 flex-1 basis-80">
+                      <h3 className="font-semibold">{row.label}</h3>
+                      <p className="text-ui text-muted">{row.ability ?? "skill"} · {row.episodes} evidence episode{row.episodes === 1 ? "" : "s"}{row.unaided_demonstrated ? ` · ${row.unaided_demonstrated} unaided demonstration${row.unaided_demonstrated === 1 ? "" : "s"}` : ""}</p>
+                    </div>
+                    <SkillState evidence={rowEvidence(row, evidenceOf)} className="flex-none" />
                   </div>
-                  <StatusChip tone={st.tone}>{st.label}</StatusChip>
-                </div>
-                <EvidenceLine row={row} />
-                {row.gap && <p className="mt-1 text-sm">Observed in that response: {(row.gap.observed.missing_or_incorrect as string[]).join("; ") || (row.gap.observed.analysis as string)} <span className="text-muted">— the cause is not established.</span></p>}
-                {row.counterevidence.length > 0 && <p className="text-sm text-muted">Other evidence: {row.counterevidence.map((c) => `${OUTCOME_LABEL[c.outcome]?.label ?? c.outcome} (${formatWhen(c.recorded_at)})`).join("; ")}</p>}
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <Button size="sm" aria-expanded={expanded} onClick={() => setOpen(expanded ? null : row.skill_id)}>{expanded ? "Hide" : "Show"} evidence and priority</Button>
-                  <Link className="ll-btn ll-btn-sm" to={`/courses/${courseId}/concepts/${encodeURIComponent(row.skill_id)}`}>Related questions and concepts</Link>
-                </div>
-                {expanded && (
-                  <div className="mt-3 flex flex-col gap-3 border-t border-line/40 pt-3 text-sm">
-                    <section aria-label="Attempts">
-                      <p className="ll-label mb-1">Attempts observing this skill</p>
-                      {row.history.length === 0 ? <p className="text-muted">None.</p> : (
-                        <ul className="flex flex-col gap-1">
-                          {row.history.map((e) => (
-                            <li key={e.attempt_id} className="rounded border border-line/40 p-2">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <StatusChip tone={OUTCOME_LABEL[e.outcome]?.tone ?? "neutral"}>{OUTCOME_LABEL[e.outcome]?.label ?? e.outcome}</StatusChip>
-                                <StatusChip tone={e.condition === "unaided" ? "success" : "neutral"}>{CONDITION_LABEL[e.condition] ?? e.condition}</StatusChip>
-                                <span className="text-muted">{formatWhen(e.recorded_at)} · {ASSISTANCE_LABEL[e.assistance]} · {REFERENCE_LABEL[e.reference_access]} · prior exposure: {e.prior_exposure.replace(/_/g, " ")} · confidence {e.confidence}</span>
-                              </div>
-                              <p className="mt-1">{e.question_prompt}</p>
-                              <p className="text-muted">{e.analysis}</p>
-                              <Link className="text-accent-text underline" to={`/history/${encodeURIComponent(e.attempt_id)}`}>Open the original attempt</Link>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </section>
-                    <section aria-label="Study priority">
-                      <p className="ll-label mb-1">Study priority (a planning choice, separate from evidence)</p>
-                      <p>Priority: {row.study.priority ?? "not set"} · decision: {(row.study.study_decision ?? "undecided").replace(/_/g, " ")} · basis: {(row.study.need_basis ?? "not recorded").replace(/_/g, " ")}</p>
-                      {row.study.priority_reason && <p className="text-muted">Reason on record: {row.study.priority_reason}</p>}
-                      <div className="mt-1 flex flex-wrap gap-2">
-                        {(["practise soon", "defer"] as const).map((choice) => (
-                          <Button key={choice} size="sm" variant="quiet" onClick={async () => {
-                            try {
-                              await actions.control(courseId, "save_note", { text: `Study preference: ${choice} — ${row.label} (${row.skill_id})`, sources: [], attachments: [] }, { label: "Study preference", text: `${choice}: ${row.label}` });
-                              setNotice(`Saved as your note: ${choice}. The course catalog, your record and any calendar are unchanged.`);
-                            } catch (e) {
-                              setNotice((e as Error).message);
-                            }
-                          }}>Note: {choice}</Button>
-                        ))}
-                      </div>
-                    </section>
+                  <div className="mt-2 flex flex-col gap-1">
+                    <EvidenceLine row={row} />
+                    {row.gap && <p className="ll-measure text-ui">Observed in that response: {(row.gap.observed.missing_or_incorrect as string[]).join("; ") || (row.gap.observed.analysis as string)} <span className="text-muted">— the cause is not established.</span></p>}
+                    {row.counterevidence.length > 0 && <p className="ll-measure text-ui text-muted">Other evidence: {row.counterevidence.map((c) => `${outcomeWords(c.outcome)} (${formatWhen(c.recorded_at)})`).join("; ")}</p>}
                   </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      <ul className="mt-4 list-disc pl-5 text-sm text-muted">{data.notes.map((n) => <li key={n}>{n}</li>)}<li>A due review or time passing is not evidence of forgetting.</li></ul>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button size="sm" aria-expanded={expanded} onClick={() => setOpen(expanded ? null : row.skill_id)}>{expanded ? "Hide" : "Show"} evidence and priority</Button>
+                    <Link className="ll-btn ll-btn-sm ll-btn-quiet" to={`/courses/${courseId}/concepts/${encodeURIComponent(row.skill_id)}`}>Related questions and concepts</Link>
+                  </div>
+                  {expanded && <SkillDetail courseId={courseId} row={row} onNotice={setNotice} />}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+      <ul className="ll-measure mt-6 list-disc pl-5 text-ui text-muted">{data.notes.map((n) => <li key={n}>{n}</li>)}<li>A due review or time passing is not evidence of forgetting.</li></ul>
     </div>
   );
 }
 
+const KIND_OF_TYPE: Partial<Record<ConceptNode["type"], KindGlyphKind>> = { topic: "topic", concept: "concept", skill: "skill", question: "question" };
+
 export function ConceptDetail() {
   const { courseId = "", typedId = "" } = useParams();
   const concepts = useConcepts(courseId);
+  const node: ConceptNode | undefined = concepts.data?.nodes[typedId];
+  // The five-state evidence of a skill, with its composition, from the node detail the concept views use.
+  const detail = useNodeDetail(courseId, typedId, node?.type === "skill");
   if (concepts.isLoading) return <LoadingState label="Loading structure…" />;
   if (concepts.isError || !concepts.data) return <><ReturnLink /><ErrorState error={concepts.error} /></>;
   const view = concepts.data;
-  const node: ConceptNode | undefined = view.nodes[typedId];
   if (!node) {
     return <><ReturnLink /><EmptyState title="This item is not in the course's catalogs">It may not be mapped yet. That is a gap in the system's mapping, not a statement about what you know.</EmptyState></>;
   }
@@ -194,43 +273,48 @@ export function ConceptDetail() {
     const target = view.nodes[id];
     if (!target) return <span>{id}</span>;
     const href = target.type === "question" ? `/courses/${courseId}/questions/${encodeURIComponent(id)}` : `/courses/${courseId}/concepts/${encodeURIComponent(id)}`;
-    return <Link className="text-accent-text underline" to={href}>{target.label}</Link>;
+    return <Link className="ll-link" to={href}>{target.label}</Link>;
   };
   const evidence = node.evidence_by_outcome ?? {};
+  const kind = KIND_OF_TYPE[node.type];
+  const groups = [...group(incoming, "from"), ...group(outgoing, "to")];
+  const r2 = detail.data?.evidence;
   return (
     <div className="ll-page ll-page-reading">
       <ReturnLink />
-      <PageHeader title={node.label} subtitle={<><StatusChip tone="accent">{NODE_TYPE_LABEL[node.type] ?? node.type}</StatusChip> <span className="ml-2 break-all font-mono text-sm">{node.id}</span></>} />
-      {node.mapping === "system_mapping_incomplete" && <Callout tone="unassessed" className="mb-3" title="System mapping incomplete">This skill is not linked to a concept in the course catalog. That is a coverage gap in the catalog — it says nothing about you.</Callout>}
+      <PageHeader title={node.label} subtitle={<span className="inline-flex flex-wrap items-center gap-x-2 text-ui">{kind && <KindGlyph kind={kind} />}<span className="text-ink">{NODE_TYPE_LABEL[node.type] ?? node.type}</span> <span className="break-all">{node.id}</span></span>} />
+      {node.mapping === "system_mapping_incomplete" && <Callout tone="unassessed" className="mb-4" title="System mapping incomplete">This skill is not linked to a concept in the course catalog. That is a coverage gap in the catalog — it says nothing about you.</Callout>}
       {node.type === "skill" && (
-        <section className="ll-card mb-4 p-3" aria-labelledby="ev-h">
-          <h2 id="ev-h" className="mb-1 font-semibold">Recorded evidence for this skill</h2>
+        <section className="mb-6 flex flex-col gap-1.5" aria-labelledby="ev-h">
+          <h2 id="ev-h" className="text-head font-semibold">Recorded evidence for this skill</h2>
+          {r2?.state && <SkillState evidence={r2 as EvidenceObject} />}
+          {r2?.summary && <p className="ll-measure text-ui text-muted">{evidenceSummarySentence(r2.summary)}</p>}
           {Object.keys(evidence).length === 0 ? <p className="text-muted">Not assessed: no attempt has observed this skill.</p> : (
-            <ul className="flex flex-wrap gap-2">{Object.entries(evidence).map(([outcome, count]) => <li key={outcome}><StatusChip tone={OUTCOME_LABEL[outcome]?.tone ?? "neutral"}>{count} × {OUTCOME_LABEL[outcome]?.label ?? outcome}</StatusChip></li>)}</ul>
+            <p className="ll-measure text-ui">Outcomes of the recorded observations: {Object.entries(evidence).map(([outcome, count]) => `${count} × ${outcomeWords(outcome)}`).join(", ")}.</p>
           )}
-          <p className="mt-2 text-sm text-muted">Counts of observations across attempts (a regrade replaces, it does not add). <Link className="text-accent-text underline" to="/progress">See the attempts in Progress</Link>.</p>
+          <p className="ll-measure text-ui text-muted">Counts of observations across attempts (a regrade replaces, it does not add). <Link className="ll-link" to="/progress">See the attempts in Progress</Link>.</p>
         </section>
       )}
-      {[...group(incoming, "from"), ...group(outgoing, "to")].length === 0 ? <p className="text-muted">No relationship to other items is recorded.</p> : (
-        <div className="flex flex-col gap-3">
-          {[...group(incoming, "from"), ...group(outgoing, "to")].map(({ relation, list, side }) => (
-            <section key={relation + side} className="ll-card p-3" aria-label={RELATION_LABEL[relation] ?? relation}>
-              <h2 className="ll-label mb-1">{side === "from" ? "Reached from" : "Leads to"} · {RELATION_LABEL[relation] ?? relation.replace(/_/g, " ")}</h2>
-              <ul className="flex flex-col gap-1 text-sm">
+      {groups.length === 0 ? <p className="text-muted">No relationship to other items is recorded.</p> : (
+        <div className="flex flex-col">
+          {groups.map(({ relation, list, side }) => (
+            <section key={relation + side} className="border-t border-hairline py-4" aria-label={RELATION_LABEL[relation] ?? relation}>
+              <h2 className="text-head font-semibold">{side === "from" ? "Reached from" : "Leads to"} <span className="font-normal text-muted">· {RELATION_LABEL[relation] ?? relation.replace(/_/g, " ")}</span></h2>
+              <ul className="mt-2 flex flex-col gap-1.5">
                 {list.map((edge, i) => (
                   <li key={i}>
-                    {linkFor(side === "from" ? edge.from : edge.to)} <span className="text-muted">({NODE_TYPE_LABEL[view.nodes[side === "from" ? edge.from : edge.to]?.type ?? ""] ?? "item"})</span>
-                    {edge.rationale && <span className="block text-muted">{edge.rationale}</span>}
-                    {edge.other_courses?.length ? <span className="block text-muted">Also linked in: {edge.other_courses.join(", ")} — no credit transfers between courses.</span> : null}
+                    {linkFor(side === "from" ? edge.from : edge.to)} <span className="text-ui text-muted">({NODE_TYPE_LABEL[view.nodes[side === "from" ? edge.from : edge.to]?.type ?? ""] ?? "item"})</span>
+                    {edge.rationale && <span className="ll-measure block text-ui text-muted">{edge.rationale}</span>}
+                    {edge.other_courses?.length ? <span className="ll-measure block text-ui text-muted">Also linked in: {edge.other_courses.join(", ")} — no credit transfers between courses.</span> : null}
                   </li>
                 ))}
               </ul>
-              <p className="mt-1 text-sm text-muted">Source: {list[0]!.provenance}.{list[0]!.scope === "question_to_question" ? " This is a relation between questions; it is not a concept prerequisite and gives no automatic credit." : ""}</p>
+              <p className="ll-measure mt-2 text-ui text-muted">Source: {list[0]!.provenance}.{list[0]!.scope === "question_to_question" ? " This is a relation between questions; it is not a concept prerequisite and gives no automatic credit." : ""}</p>
             </section>
           ))}
         </div>
       )}
-      <p className="mt-4 text-sm text-muted">{view.note}</p>
+      <p className="ll-measure mt-4 text-ui text-muted">{view.note}</p>
     </div>
   );
 }
@@ -248,66 +332,71 @@ export function HistoryPage() {
   const data = history.data;
   const attempts = data.attempts.filter((a) => (!filter || `${a.question.prompt} ${a.attempt_id} ${a.effective.observations.map((o) => o.skill_id).join(" ")}`.toLowerCase().includes(filter.toLowerCase())) && (!onlyRevised || a.revisions.length > 0));
   return (
-    <div className="ll-page">
+    <div className="ll-page ll-page-reading">
       <ReturnLink />
-      <PageHeader title="Study history" subtitle={data.note} />
+      <PageHeader title="Study history" subtitle={<Lead>{data.note}</Lead>} />
       <Tabs defaultValue="attempts">
-        <TabList label="History views"><Tab value="attempts">Attempts ({data.attempts.length})</Tab><Tab value="conversations">Conversations ({data.conversations.length})</Tab></TabList>
-        <TabPanel value="attempts" className="pt-3">
-          <div className="mb-3 flex flex-wrap items-center gap-3 text-sm">
+        <TabList label="History views" className="-ml-[10px]"><Tab value="attempts" count={data.attempts.length}>Attempts</Tab><Tab value="conversations" count={data.conversations.length}>Conversations</Tab></TabList>
+        <TabPanel value="attempts" className="pt-4">
+          <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-3 text-ui">
             <input type="search" className="ll-input max-w-xs" placeholder="Filter by question, skill or id…" aria-label="Filter attempts" value={filter} onChange={(e) => setFilter(e.target.value)} />
-            <label className="flex items-center gap-2"><input type="checkbox" className="size-4" checked={onlyRevised} onChange={(e) => setOnlyRevised(e.target.checked)} /> Only attempts with corrections</label>
+            <label className="flex items-center gap-2"><input type="checkbox" className="size-5 flex-none accent-accent" checked={onlyRevised} onChange={(e) => setOnlyRevised(e.target.checked)} /> Only attempts with corrections</label>
           </div>
           {attempts.length === 0 ? <EmptyState title={data.attempts.length ? "No attempt matches" : "Not assessed"}>{data.attempts.length ? "Clear the filter to see all attempts." : "No attempt is recorded for this course yet."}</EmptyState> : (
-            <ul className="flex flex-col gap-3">
-              {attempts.map((a) => (
-                <li key={a.attempt_id} id={a.attempt_id} className={`ll-card p-3 ${sessionId === a.attempt_id ? "outline outline-2 outline-accent-text" : ""}`}>
-                  <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <span className="font-mono">{a.attempt_id}</span>
-                    <StatusChip tone="neutral">{a.mode}</StatusChip>
-                    <span className="text-muted">recorded {formatWhen(a.recorded_at)} · {a.occurred_at ? `happened ${formatWhen(a.occurred_at)}` : "time of the response not recorded"} ({TIME_BASIS_LABEL[a.time_basis] ?? a.time_basis})</span>
-                  </div>
-                  <p className="mt-2"><span className="ll-label">Question shown</span><br />{a.question.prompt}</p>
-                  <p className="mt-2"><span className="ll-label">Your response {a.response.availability === "full_capture" ? "(full capture)" : a.response.availability === "capture_unavailable" ? "(excerpt; the full capture is no longer available)" : "(excerpt only — the full text was not retained)"}</span><br />
-                    <span className="whitespace-pre-wrap">{a.response.full_text ?? a.response.excerpt}</span></p>
-                  <div className="mt-2 flex flex-col gap-1 text-sm">
-                    <span className="ll-label">{a.revisions.length ? "Assessment in effect (after correction)" : "Assessment"}</span>
-                    {a.effective.observations.map((o) => (
-                      <div key={o.skill_id} className="rounded border border-line/40 p-2">
-                        <StatusChip tone={OUTCOME_LABEL[o.outcome]?.tone ?? "neutral"}>{OUTCOME_LABEL[o.outcome]?.label ?? o.outcome}</StatusChip> <span className="text-muted">{o.skill_id} · {ASSISTANCE_LABEL[o.assistance as string] ?? String(o.assistance)}</span>
-                        <p className="text-muted">{o.analysis}</p>
-                      </div>
-                    ))}
-                    {a.effective.conflict && <Callout tone="caution" title="Conflicting corrections">Two corrections branch from the same assessment. They need reconciliation; neither was chosen automatically.</Callout>}
-                  </div>
-                  {a.revisions.length > 0 && (
-                    <details className="mt-2 text-sm">
-                      <summary className="cursor-pointer font-medium">{a.revisions.length} correction{a.revisions.length === 1 ? "" : "s"} — the original assessment is kept</summary>
-                      <ul className="mt-1 list-disc pl-5">
-                        <li>Original: {a.original_observations.map((o) => `${o.skill_id}: ${OUTCOME_LABEL[o.outcome]?.label ?? o.outcome}`).join("; ")}</li>
-                        {a.revisions.map((r) => <li key={r.event_id}>{formatWhen(r.recorded_at)} — {r.reason} <span className="text-muted">(a regrade of the same response, not a new answer)</span></li>)}
-                      </ul>
-                    </details>
-                  )}
-                  {a.question.question_id && <div className="mt-2"><Link className="ll-btn ll-btn-sm" to={`/courses/${courseId}/questions/${encodeURIComponent(a.question.question_id)}`}>Try again (new answer)</Link></div>}
-                </li>
-              ))}
+            <ul className="ll-region flex flex-col">
+              {attempts.map((a) => {
+                const here = sessionId === a.attempt_id;
+                return (
+                  <li key={a.attempt_id} id={a.attempt_id} aria-current={here ? "true" : undefined}
+                    className={cn("relative flex flex-col gap-3 border-t border-hairline p-4 first:border-t-0 first:rounded-t-region last:rounded-b-region min-[900px]:px-5",
+                      here && "bg-tint before:absolute before:bottom-4 before:left-0 before:top-4 before:w-[3px] before:rounded-r-[3px] before:bg-accent-text before:content-['']")}>
+                    <p className="ll-measure text-ui text-muted">
+                      <span className="break-all text-ink">{a.attempt_id}</span> · {unlistedLabel(a.mode)} · recorded {formatWhen(a.recorded_at)} · {a.occurred_at ? `happened ${formatWhen(a.occurred_at)}` : "time of the response not recorded"} ({TIME_BASIS_LABEL[a.time_basis] ?? a.time_basis})
+                    </p>
+                    <div><p className={FIELD}>Question shown</p><p className="ll-measure">{a.question.prompt}</p></div>
+                    <div>
+                      <p className={FIELD}>Your response {a.response.availability === "full_capture" ? "(full capture)" : a.response.availability === "capture_unavailable" ? "(excerpt; the full capture is no longer available)" : "(excerpt only — the full text was not retained)"}</p>
+                      <p className="ll-measure whitespace-pre-wrap">{a.response.full_text ?? a.response.excerpt}</p>
+                    </div>
+                    <div className="flex flex-col gap-2 text-ui">
+                      <p className={FIELD}>{a.revisions.length ? "Assessment in effect (after correction)" : "Assessment"}</p>
+                      {a.effective.observations.map((o) => (
+                        <div key={o.skill_id}>
+                          <p><span className="font-semibold">{outcomeWords(o.outcome)}</span> <span className="break-words text-muted">· {o.skill_id} · {ASSISTANCE_LABEL[o.assistance as string] ?? String(o.assistance)}</span></p>
+                          <p className="ll-measure text-muted">{o.analysis}</p>
+                        </div>
+                      ))}
+                      {a.effective.conflict && <Callout tone="caution" title="Conflicting corrections">Two corrections branch from the same assessment. They need reconciliation; neither was chosen automatically.</Callout>}
+                    </div>
+                    {a.revisions.length > 0 && (
+                      <details className="text-ui">
+                        <summary className="cursor-pointer font-semibold">{a.revisions.length} correction{a.revisions.length === 1 ? "" : "s"} — the original assessment is kept</summary>
+                        <ul className="ll-measure mt-1 list-disc pl-5">
+                          <li>Original: {a.original_observations.map((o) => `${o.skill_id}: ${outcomeWords(o.outcome)}`).join("; ")}</li>
+                          {a.revisions.map((r) => <li key={r.event_id}>{formatWhen(r.recorded_at)} — {r.reason} <span className="text-muted">(a regrade of the same response, not a new answer)</span></li>)}
+                        </ul>
+                      </details>
+                    )}
+                    {a.question.question_id && <div><Link className="ll-btn ll-btn-sm" to={`/courses/${courseId}/questions/${encodeURIComponent(a.question.question_id)}`}>Try again (new answer)</Link></div>}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </TabPanel>
-        <TabPanel value="conversations" className="pt-3">
+        <TabPanel value="conversations" className="pt-4">
           {data.conversations.length === 0 ? <EmptyState title="No captured conversation yet">Questions and explanations you send from this app are kept here exactly as submitted, with the tutor's delivered replies.</EmptyState> : (
-            <ul className="flex flex-col gap-3">
+            <ul className="ll-region flex flex-col">
               {data.conversations.map((c) => (
-                <li key={c.run_id} className="ll-card p-3">
-                  <h2 className="mb-2 font-mono text-sm">{c.run_id}</h2>
-                  <ol className="flex flex-col gap-2 text-sm">
+                <li key={c.run_id} className="border-t border-hairline p-4 first:border-t-0 min-[900px]:px-5">
+                  <h2 className="mb-3 break-all text-ui text-muted">{c.run_id}</h2>
+                  <ol className="flex flex-col gap-3">
                     {c.entries.map((e, i) => (
-                      <li key={i} className={`rounded p-2 ${e.kind === "tutor" ? "border-l-2 border-accent-text bg-pad" : "border border-line/40"}`}>
-                        <span className="ll-label">{e.kind === "tutor" ? "Tutor reply (as delivered)" : e.kind === "submission" ? `Your ${e.interaction?.replace(/_/g, " ")}` : "Your question"} · {formatWhen(e.at)}</span>
-                        {e.prompt && <p className="text-muted">Asked: {e.prompt}</p>}
-                        <p className="whitespace-pre-wrap">{e.text}</p>
-                        {e.kind === "learner_question" && <span className="text-muted">Not assessed</span>}
+                      <li key={i} className={cn("flex flex-col gap-0.5", e.kind === "tutor" && "rounded-control bg-pad p-3")}>
+                        <span className={FIELD}>{e.kind === "tutor" ? "Tutor reply (as delivered)" : e.kind === "submission" ? `Your ${e.interaction?.replace(/_/g, " ")}` : "Your question"} · {formatWhen(e.at)}</span>
+                        {e.prompt && <p className="ll-measure text-ui text-muted">Asked: {e.prompt}</p>}
+                        <p className="ll-measure whitespace-pre-wrap">{e.text}</p>
+                        {e.kind === "learner_question" && <span className="text-ui text-muted">Not assessed</span>}
                       </li>
                     ))}
                   </ol>

@@ -2,11 +2,17 @@
 // what the native turn did, whether an answer is available, and whether anything was saved to the
 // course. These are never collapsed into a single "Saved" tick. A result is shown only after its
 // signature and file digests verify against the paired Brain key.
+//
+// Drawn as design specification 5.8 asks of the tutor thread: the learner's own words on a pad block under "You asked",
+// the reply as plain paragraphs under "Tutor, quick answer", its sources as citations, and one sentence that an answer
+// received is not an assessment. In a thread the exchange is unboxed; elsewhere (Activity, review, practice) it sits on
+// a surface of its own.
 import { useState } from "react";
 import { Link } from "react-router";
-import { Button, Callout, Dialog, Field, formatWhen, Markdown, OUTCOME_LABEL, StatusChip } from "@/components/ui";
+import { GraduationCap } from "lucide-react";
+import { Button, Callout, Dialog, Field, cn, formatWhen, Markdown, OUTCOME_LABEL, StatusChip } from "@/components/ui";
 import type { LocalRequest } from "@/lib/db";
-import { ASSISTANCE_LABEL, JOB_STATE, REFERENCE_LABEL } from "@/lib/labels";
+import { ASSISTANCE_LABEL, JOB_STATE, REFERENCE_LABEL, nb, pageRef, transcriptLinesRef } from "@/lib/labels";
 import { useRequestStatus } from "@/lib/queries";
 import type { Conditions } from "@/lib/requests";
 import type { QuestionRecord, ResultDetail } from "@/lib/types";
@@ -16,6 +22,18 @@ const ACTION_LABEL: Record<string, string> = {
   ask: "Question", explain: "Explain back", practice: "Practice answer", review_answer: "Review answer", diagnose: "Diagnostic answer", correct_assessment: "Assessment dispute",
   correct_source: "Link correction", select_review: "Review selection", edit_review: "Review item edit", save_note: "Note", resume: "Position checkpoint", cancel: "Cancel", source_hint: "Source hint",
 };
+
+/** Whose words the pad block holds, said above them. */
+const WHO: Record<string, string> = { ask: "You asked", explain: "You explained", practice: "You answered", review_answer: "You answered", diagnose: "You answered" };
+/** What the reply is, said above it: the kind of help that was asked for. */
+export function tutorHeading(request: Pick<LocalRequest, "action" | "depth">): string {
+  if (request.action === "ask") return request.depth === "quick" ? "Tutor, quick answer" : request.depth === "deep" ? "Tutor, going deeper" : "Tutor, explanation";
+  if (request.action === "diagnose") return "Tutor, diagnostic check";
+  return ["explain", "practice", "review_answer"].includes(request.action) ? "Tutor, feedback" : "Tutor";
+}
+/** The sentence under an answer that was only asked for (design specification 5.8). */
+export const NOT_ASSESSED_LEAD = "Not assessed in this exchange.";
+export const NOT_ASSESSED_SENTENCE = "Receiving an answer does not show what you can do on your own. Your earlier evidence is unchanged.";
 
 export interface FollowUp {
   kind: "deeper" | "explain" | "retry_answer" | "diagnose";
@@ -29,9 +47,9 @@ function DiagnosticBlock({ detail, request, onFollowUp }: { detail: ResultDetail
   if (!diagnostic || (diagnostic.hypotheses.length === 0 && !diagnostic.next_prompt)) return null;
   if (!open) return <Button size="sm" onClick={() => setOpen(true)}>Understand this gap</Button>;
   return (
-    <div className="ll-card flex w-full flex-col gap-2 p-3" data-testid="diagnostic">
+    <div className="flex w-full flex-col gap-2 rounded-control bg-pad p-3" data-testid="diagnostic">
       <p className="font-semibold">Possible causes (hypotheses, not conclusions)</p>
-      <ul className="list-disc space-y-1 pl-5 text-sm">
+      <ul className="list-disc space-y-1 pl-5 text-ui">
         {diagnostic.hypotheses.map((h, i) => (
           <li key={i}>
             {h.statement} <span className="text-muted">— {h.supporting}</span>
@@ -73,7 +91,15 @@ function ReplyBody({ text, detail }: { text: string; detail: ResultDetail | null
   );
 }
 
-export function RequestCard({ request, onFollowUp, showContext = true }: { request: LocalRequest; onFollowUp?: (f: FollowUp) => void; showContext?: boolean }) {
+interface RequestCardProps {
+  request: LocalRequest;
+  onFollowUp?: (f: FollowUp) => void;
+  showContext?: boolean;
+  /** "thread": unboxed, one exchange of the tutor thread. "card" (default): on a surface of its own, for the pages that list requests. */
+  variant?: "card" | "thread";
+}
+
+export function RequestCard({ request, onFollowUp, showContext = true, variant = "card" }: RequestCardProps) {
   const status = useRequestStatus(request.courseId, request.upload === "uploaded" ? request.requestId : null);
   const actions = useSubmitActions();
   const [busy, setBusy] = useState<string | null>(null);
@@ -111,15 +137,19 @@ export function RequestCard({ request, onFollowUp, showContext = true }: { reque
     : request.upload === "retained_locally" ? "Kept on this device · not sent yet" : "Not sent · not stored";
 
   return (
-    <article className="ll-card flex flex-col gap-2 p-3" aria-label={`${ACTION_LABEL[request.action] ?? request.action}: ${request.text.slice(0, 60)}`} data-testid="request-card" data-request-id={request.requestId} data-state={job?.state ?? request.upload}>
-      <header className="flex flex-wrap items-center gap-2 text-sm">
-        <StatusChip tone="accent">{ACTION_LABEL[request.action] ?? request.action}{request.action === "ask" ? ` · ${request.depth === "quick" ? "quick answer" : request.depth === "deep" ? "go deeper" : "understand"}` : ""}</StatusChip>
-        {showContext && <span className="ll-chip">{request.context.label}</span>}
-        <span className="text-muted">{formatWhen(request.createdAt)}</span>
-      </header>
-      <p className="whitespace-pre-wrap rounded bg-pad p-2 text-sm" data-testid="learner-text">{request.text}</p>
+    <article className={cn("flex flex-col gap-3", variant === "card" && "ll-card p-3")} aria-label={`${ACTION_LABEL[request.action] ?? request.action}: ${request.text.slice(0, 60)}`} data-testid="request-card"
+      data-request-id={request.requestId} data-state={job?.state ?? request.upload} data-variant={variant}>
+      <div className="rounded-control bg-pad px-4 py-3">
+        <header className="flex flex-wrap items-baseline gap-x-2 text-ui text-muted">
+          <span className="font-semibold">{WHO[request.action] ?? ACTION_LABEL[request.action] ?? request.action}</span>
+          {/* In the thread of one lecture the page says enough; elsewhere the request names its lecture too. */}
+          {variant === "thread" && request.context.page != null ? <span>· {nb(`page ${request.context.page}`)}</span> : showContext && request.context.label ? <span>· {request.context.label}</span> : null}
+          <span>· {formatWhen(request.createdAt)}</span>
+        </header>
+        <p className="ll-measure whitespace-pre-wrap text-read [overflow-wrap:anywhere]" data-testid="learner-text">{request.text}</p>
+      </div>
 
-      <ul className="flex flex-wrap gap-1.5 text-sm" aria-label="Request status">
+      <ul className={cn("flex flex-wrap gap-x-4 gap-y-1 text-ui", variant === "thread" && "[&_.ll-chip]:text-muted")} aria-label="Request status">
         <li><StatusChip tone={request.upload === "upload_failed" ? "danger" : "success"}>Your input: {request.upload === "upload_failed" ? "at risk — copy it" : request.upload === "uploaded" ? "captured" : "kept on this device"}</StatusChip></li>
         <li><StatusChip tone={request.upload === "uploaded" && job ? "success" : request.upload === "uploaded" ? "neutral" : "caution"}>{transportLabel}</StatusChip></li>
         {jobLabel && <li><StatusChip tone={jobLabel.tone}>{jobLabel.label}{job?.cancel_requested && job.state !== "CANCELLED" ? " · cancellation requested" : ""}</StatusChip></li>}
@@ -131,26 +161,30 @@ export function RequestCard({ request, onFollowUp, showContext = true }: { reque
       {status.isError && <Callout tone="caution" title="Status unavailable">{status.error.message}</Callout>}
 
       {verified?.message && (
-        <section aria-label="Tutor reply" className="border-l-2 border-accent-text pl-3" data-testid="tutor-reply">
-          <p className="ll-label mb-1">Tutor</p>
-          <ReplyBody text={verified.message.text} detail={detail} />
+        <section aria-label="Tutor reply" className="flex flex-col gap-2" data-testid="tutor-reply">
+          <p className="flex items-center gap-2 text-ui font-semibold text-muted"><GraduationCap aria-hidden className="size-4 flex-none text-accent-text" />{tutorHeading(request)}</p>
+          <div className="text-read"><ReplyBody text={verified.message.text} detail={detail} /></div>
           {verified.message.sources.length > 0 && (
-            <ul className="mt-1 flex flex-wrap gap-1.5" aria-label="Sources used">
-              {verified.message.sources.map((s, i) => {
-                const loc = s.locator as { kind: string; page?: number; start?: number; end?: number };
-                const label = loc.kind === "page" ? `Slide/page ${loc.page}` : loc.kind === "lines" ? `Lines ${loc.start}–${loc.end}` : loc.kind;
-                return <li key={i}>{request.context.lectureId && loc.kind === "page"
-                  ? <Link className="ll-chip hover:underline" to={`/courses/${request.courseId}/lectures/${request.context.lectureId}?page=${loc.page}`}>{label}</Link> : <span className="ll-chip">{label}</span>}</li>;
-              })}
-            </ul>
+            <div className="flex flex-wrap gap-x-3 text-ui leading-6">
+              <span className="text-muted">Sources</span>
+              <ul className="flex flex-wrap gap-x-3" aria-label="Sources used">
+                {verified.message.sources.map((s, i) => {
+                  const loc = s.locator as { kind: string; page?: number; start?: number; end?: number };
+                  const label = loc.kind === "page" && loc.page != null ? pageRef(loc.page) : loc.kind === "lines" && loc.start != null && loc.end != null ? transcriptLinesRef([[loc.start, loc.end]]) : loc.kind.replace(/_/g, " ");
+                  const to = !request.context.lectureId ? null : loc.kind === "page" ? `/courses/${request.courseId}/lectures/${request.context.lectureId}?page=${loc.page}`
+                    : loc.kind === "lines" ? `/courses/${request.courseId}/lectures/${request.context.lectureId}?panel=transcript&line=${loc.start}` : null;
+                  return <li key={i}>{to ? <Link className="ll-link ll-num" to={to}>{label}</Link> : <span className="ll-num">{label}</span>}</li>;
+                })}
+              </ul>
+            </div>
           )}
-          {detail?.uncertainty && <p className="mt-1 text-sm text-muted">Tutor's stated uncertainty: {detail.uncertainty}</p>}
-          {detail?.problems?.map((p) => <p key={p} className="text-sm text-caution">Note: {p}</p>)}
+          {detail?.uncertainty && <p className="text-ui text-muted">Tutor's stated uncertainty: {detail.uncertainty}</p>}
+          {detail?.problems?.map((p) => <p key={p} className="text-ui text-muted">Note: {p}</p>)}
         </section>
       )}
 
       {verified && isAsk && publication?.status === "not_requested" && (
-        <Callout tone="unassessed" title="Not assessed this exchange" role="note">Receiving an answer does not establish understanding. Your earlier evidence is unchanged.</Callout>
+        <p role="note" className="ll-measure text-ui text-muted" data-testid="not-assessed"><strong className="font-semibold text-ink">{NOT_ASSESSED_LEAD}</strong> {NOT_ASSESSED_SENTENCE}</p>
       )}
 
       {verified && isAnswer && (
@@ -167,8 +201,8 @@ export function RequestCard({ request, onFollowUp, showContext = true }: { reque
                 const label = OUTCOME_LABEL[o.outcome] ?? { label: o.outcome, tone: "neutral" as const };
                 const criterion = detail.criteria?.find((k) => k.skill_id === o.skill_id);
                 return (
-                  <li key={o.skill_id} className="rounded border border-line/40 p-2 text-sm">
-                    <div className="flex flex-wrap items-center gap-2"><StatusChip tone={label.tone}>{label.label}</StatusChip><span className="text-muted">confidence: {o.assessment_confidence}</span></div>
+                  <li key={o.skill_id} className="border-t border-hairline py-2 text-ui first:border-t-0 first:pt-0">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1"><StatusChip tone={label.tone}>{label.label}</StatusChip><span className="text-muted">confidence: {o.assessment_confidence}</span></div>
                     {criterion && <p className="mt-1"><span className="font-medium">Criterion:</span> {criterion.observable}</p>}
                     <p className="text-muted">{o.analysis}</p>
                     {o.missing_or_incorrect.length > 0 && <p>Missing or incorrect: {o.missing_or_incorrect.join("; ")}</p>}
@@ -207,7 +241,7 @@ export function RequestCard({ request, onFollowUp, showContext = true }: { reque
         {verified && isAsk && onFollowUp && (
           <>
             <Button size="sm" onClick={() => onFollowUp({ kind: "deeper", request })}>Go deeper</Button>
-            <Button size="sm" onClick={() => onFollowUp({ kind: "explain", request })}>Try explaining</Button>
+            <Button size="sm" onClick={() => onFollowUp({ kind: "explain", request })}>Try explaining it</Button>
             <Button size="sm" variant="quiet" busy={busy === "save"} onClick={() => act("save", () => actions.control(request.courseId, "save_note", { text: `Question saved for later: ${request.text}`, sources: request.context.source ? [request.context.source] : [], attachments: [] },
               { label: "Saved question", text: request.text, context: request.context }), "Saved to your notes for this course.")}>Save question for later</Button>
           </>
@@ -269,9 +303,9 @@ export function RequestCard({ request, onFollowUp, showContext = true }: { reque
               ["input", "My response was captured wrongly", "For example a transcription error. A linked correction is recorded; the original capture is not edited."],
               ["rubric", "The source or the criteria are wrong", "Goes to owner review; rubric changes are not applied automatically."],
               ["new_answer", "I understand it better now", "Write a new answer. It is a new attempt and never overwrites this one."]] as const).map(([value, label, hint]) => (
-              <label key={value} className="flex cursor-pointer items-start gap-2 rounded border border-line/40 p-2">
-                <input type="radio" name={`dispute-${request.requestId}`} className="mt-1 size-4" checked={kind === value} onChange={() => setKind(value)} />
-                <span><span className="font-medium">{label}</span><span className="block text-sm text-muted">{hint}</span></span>
+              <label key={value} className={cn("flex cursor-pointer items-start gap-2 rounded-row p-2 hover:bg-pad", kind === value && "bg-tint hover:bg-tint-strong")}>
+                <input type="radio" name={`dispute-${request.requestId}`} className="mt-1 size-4 accent-[var(--ll-accent-text)]" checked={kind === value} onChange={() => setKind(value)} />
+                <span><span className={cn("font-semibold", kind === value && "text-accent-text")}>{label}</span><span className="block text-ui text-muted">{hint}</span></span>
               </label>
             ))}
           </fieldset>

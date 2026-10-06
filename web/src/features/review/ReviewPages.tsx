@@ -4,17 +4,22 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useApp } from "@/app/state";
-import { Button, Callout, Dialog, EmptyState, ErrorState, Field, formatWhen, LoadingState, PageHeader, StatusChip } from "@/components/ui";
+import { Button, Dialog, EmptyState, ErrorState, Field, formatWhen, LoadingState, PageHeader } from "@/components/ui";
 import { newId } from "@/lib/bundle";
 import { useReview } from "@/lib/queries";
 import { reviewItemPayload, type Conditions } from "@/lib/requests";
 import type { QuestionRecord, ReviewRow } from "@/lib/types";
+import { Callout, Lead, Picker, StateWords } from "@/features/search/SearchOverlay";
 import { useLocalRequests, useSubmitActions } from "@/features/tutor/actions";
 import { RequestCard } from "@/features/tutor/RequestCard";
 
 const SELECTION: Record<string, { label: string; tone: "success" | "neutral" | "unassessed" | "caution" }> = {
   active: { label: "In review", tone: "success" }, saved_only: { label: "Saved only (not scheduled)", tone: "neutral" }, suspended: { label: "Suspended", tone: "caution" }, retired: { label: "Removed from review", tone: "unassessed" },
 };
+/** A list of entries on one surface, parted by hairlines: never a wall of boxes. */
+const ROWS = "ll-region flex flex-col";
+const ROW = "border-t border-hairline p-4 first:border-t-0 min-[900px]:px-5";
+const SECTION_HEAD = "text-head font-semibold";
 
 function sessionKey(id: string) {
   return `ll.review.${id}`;
@@ -78,45 +83,45 @@ export function ReviewHome() {
 
   return (
     <div className="ll-page">
-      <PageHeader title="Review" subtitle={data.note} actions={<Button onClick={() => { setPrompt(""); setCreateOpen(true); }}>Create my own question</Button>} />
-      {notice && <Callout tone="accent" role="status" className="mb-3" title="Review">{notice}</Callout>}
+      <PageHeader title="Review" subtitle={<Lead>{data.note}</Lead>} actions={<Button onClick={() => { setPrompt(""); setCreateOpen(true); }}>Create my own question</Button>} />
+      {notice && <Callout tone="accent" role="status" className="mb-4" title="Review">{notice}</Callout>}
 
-      <section aria-labelledby="due-h" className="ll-card mb-5 p-4">
-        <h2 id="due-h" className="text-lg font-semibold">Available now ({due.length})</h2>
-        {due.length === 0 ? <p className="text-muted">Nothing is due. A due date is only a scheduling suggestion; nothing here means you forgot or learned something.</p> : (
-          <div className="mt-2 flex flex-wrap items-end gap-3">
-            <label className="flex flex-col gap-1 text-sm">Session size
-              <select className="ll-input w-auto" value={sessionSize} onChange={(e) => setSize(Number(e.target.value))}>
-                {Array.from({ length: Math.min(due.length, 25) }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n} item{n === 1 ? "" : "s"}</option>)}
-              </select>
-            </label>
+      <section aria-labelledby="due-h" className="mb-8">
+        <h2 id="due-h" className={SECTION_HEAD}>Available now <span className="ll-sec-n">({due.length})</span></h2>
+        {due.length === 0 ? <p className="ll-measure mt-1 text-muted">Nothing is due. A due date is only a scheduling suggestion; nothing here means you forgot or learned something.</p> : (
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-3">
+            <span className="flex items-center gap-2 text-ui">Session size
+              <Picker label="Session size" value={String(sessionSize)} onChange={(value) => setSize(Number(value))}
+                options={Array.from({ length: Math.min(due.length, 25) }, (_, i) => i + 1).map((n) => ({ value: String(n), label: `${n} item${n === 1 ? "" : "s"}` }))} />
+            </span>
             <Button variant="primary" onClick={start} data-testid="start-review">Start review</Button>
-            <p className="text-sm text-muted">You can stop at any point; unanswered items are simply not reviewed.</p>
+            <p className="ll-measure text-ui text-muted">You can stop at any point; unanswered items are simply not reviewed.</p>
           </div>
         )}
       </section>
 
-      <section aria-labelledby="items-h" className="mb-5">
-        <h2 id="items-h" className="mb-2 text-lg font-semibold">Your selected and saved items ({data.items.length})</h2>
-        {data.items.length === 0 ? <p className="text-muted">You have not saved or selected any question yet. Nothing is added automatically.</p> : (
-          <ul className="flex flex-col gap-2">
+      <section aria-labelledby="items-h" className="mb-8">
+        <h2 id="items-h" className={`mb-3 ${SECTION_HEAD}`}>Your selected and saved items <span className="ll-sec-n">({data.items.length})</span></h2>
+        {data.items.length === 0 ? <p className="ll-measure text-muted">You have not saved or selected any question yet. Nothing is added automatically.</p> : (
+          <ul className={ROWS}>
             {data.items.map((row) => (
-              <li key={row.item_id} className="ll-card p-3">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <p className="min-w-0 flex-1 font-medium">{row.question.prompt}</p>
-                  <StatusChip tone={SELECTION[row.selection]!.tone}>{SELECTION[row.selection]!.label}</StatusChip>
+              <li key={row.item_id} className={ROW}>
+                <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-1">
+                  <p className="ll-measure min-w-0 flex-1 basis-80 font-semibold">{row.question.prompt}</p>
+                  <StateWords tone={SELECTION[row.selection]!.tone} className="flex-none">{SELECTION[row.selection]!.label}</StateWords>
                 </div>
-                <p className="mt-1 text-sm text-muted">
+                <p className="ll-measure mt-1 text-ui text-muted">
                   {row.question.question_id ?? "your own question"} · version {row.revision} · {row.performed_reviews} review{row.performed_reviews === 1 ? "" : "s"} done ({row.scheduled_reviews} scheduled, {row.practice_only_reviews} practice-only{row.pending_grades ? `, ${row.pending_grades} grade pending` : ""})
                   {row.due_at ? ` · next suggested ${formatWhen(row.due_at)}` : ""}. {row.schedule_note}
                 </p>
-                <div className="mt-2 flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-wrap gap-2">
                   {row.question.question_id && <Link className="ll-btn ll-btn-sm" to={`/courses/${courseId}/questions/${encodeURIComponent(row.question.question_id)}`}>Open question</Link>}
                   {row.selection !== "active" && <Button size="sm" busy={busy === `${row.item_id}-active`} disabled={!row.question.family_id} title={row.question.family_id ? undefined : "Needs a reviewed rubric before it can be scheduled"} onClick={() => change(row, "active")}>{row.selection === "suspended" ? "Resume" : "Add to review"}</Button>}
                   {row.selection === "active" && <Button size="sm" busy={busy === `${row.item_id}-suspended`} onClick={() => change(row, "suspended")}>Suspend</Button>}
                   {row.selection !== "retired" && <Button size="sm" variant="quiet" busy={busy === `${row.item_id}-retired`} onClick={() => window.confirm("Remove this item from review? Your past responses and reviews are kept.") && void change(row, "retired")}>Remove from review</Button>}
                   {!row.question.question_id && <Button size="sm" variant="quiet" onClick={() => { setEditing(row); setPrompt(row.question.prompt); }}>Edit my item</Button>}
                 </div>
+                {row.selection !== "active" && !row.question.family_id && <p className="mt-2 text-ui text-muted">It cannot be scheduled: a reviewed rubric is needed first.</p>}
               </li>
             ))}
           </ul>
@@ -124,24 +129,24 @@ export function ReviewHome() {
       </section>
 
       <section aria-labelledby="avail-h">
-        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-          <h2 id="avail-h" className="text-lg font-semibold">Course questions you can add ({data.available_total})</h2>
-          <Link className="text-accent-text hover:underline" to={`/courses/${courseId}/questions`}>Browse the question bank by lecture and collection</Link>
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+          <h2 id="avail-h" className={SECTION_HEAD}>Course questions you can add <span className="ll-sec-n">({data.available_total})</span></h2>
+          <Link className="ll-link text-ui" to={`/courses/${courseId}/questions`}>Browse the question bank by lecture and collection</Link>
         </div>
-        {data.available_questions.length === 0 ? <p className="text-muted">This course has no question catalog to choose from, or every question is already in your list.</p> : (
-          <ul className="flex flex-col gap-2">
+        {data.available_questions.length === 0 ? <p className="ll-measure text-muted">This course has no question catalog to choose from, or every question is already in your list.</p> : (
+          <ul className={ROWS}>
             {data.available_questions.slice(0, availableShown).map((q) => {
               const record: QuestionRecord = { question_id: q.question_id, family_id: q.family_id, family_revision: q.family_revision, prompt: q.prompt, sources: [], attachments: [] };
               const itemId = `item-${q.question_id.toLowerCase()}`;
               return (
-                <li key={q.question_id} className="ll-card flex flex-wrap items-center justify-between gap-2 p-3">
-                  <div className="min-w-0 flex-1">
-                    <Link className="font-medium hover:underline" to={`/courses/${courseId}/questions/${encodeURIComponent(q.question_id)}`}>{q.title ?? q.question_id}</Link>
-                    <p className="text-sm text-muted">{q.collection ? `${q.collection} · ` : ""}{q.origin === "course_source" ? "from course material" : "generated practice"} · {q.prompt_in_index ? `${q.prompt.slice(0, 120)}${q.prompt.length > 120 ? "…" : ""}` : "wording is in the original source"}</p>
+                <li key={q.question_id} className={`${ROW} flex flex-wrap items-center justify-between gap-x-6 gap-y-3`}>
+                  <div className="min-w-0 flex-1 basis-80">
+                    <Link className="font-semibold hover:underline" to={`/courses/${courseId}/questions/${encodeURIComponent(q.question_id)}`}>{q.title ?? q.question_id}</Link>
+                    <p className="ll-measure text-ui text-muted">{q.collection ? `${q.collection} · ` : ""}{q.origin === "course_source" ? "from course material" : "generated practice"} · {q.prompt_in_index ? `${q.prompt.slice(0, 120)}${q.prompt.length > 120 ? "…" : ""}` : "wording is in the original source"}</p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-none flex-wrap gap-2">
                     <Button size="sm" busy={busy === `${itemId}-saved_only`} onClick={() => add(record, "saved_only", itemId)}>Save only</Button>
-                    <Button size="sm" busy={busy === `${itemId}-active`} disabled={!q.family_id} onClick={() => add(record, "active", itemId)}>Add to review</Button>
+                    <Button size="sm" busy={busy === `${itemId}-active`} disabled={!q.family_id} title={q.family_id ? undefined : "Needs a reviewed rubric before it can be scheduled"} onClick={() => add(record, "active", itemId)}>Add to review</Button>
                   </div>
                 </li>
               );
@@ -149,7 +154,7 @@ export function ReviewHome() {
           </ul>
         )}
         {data.available_total > 0 && (
-          <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted" data-testid="available-count">
+          <p className="ll-num mt-3 flex flex-wrap items-center gap-3 text-ui text-muted" data-testid="available-count">
             Showing {Math.min(availableShown, data.available_total)} of {data.available_total}
             {availableShown < data.available_total && <Button size="sm" onClick={() => setAvailableShown((n) => n + 20)}>Show 20 more</Button>}
           </p>
@@ -208,19 +213,19 @@ export function ReviewSession() {
     return (
       <div className="ll-page ll-page-reading">
         <PageHeader title="Review session finished" subtitle="Only items you actually answered were recorded as reviews." />
-        <dl className="ll-card grid grid-cols-2 gap-2 p-4" data-testid="review-summary">
-          <dt>Answered</dt><dd className="font-semibold">{answered}</dd>
-          <dt>Skipped (nothing recorded)</dt><dd className="font-semibold">{skipped}</dd>
-          <dt>Not reached</dt><dd className="font-semibold">{items.length - answered - skipped}</dd>
+        <dl className="flex flex-wrap gap-x-12 gap-y-4" data-testid="review-summary">
+          <div><dt className="text-ui text-muted">Answered</dt><dd className="ll-num text-title font-semibold">{answered}</dd></div>
+          <div><dt className="text-ui text-muted">Skipped (nothing recorded)</dt><dd className="ll-num text-title font-semibold">{skipped}</dd></div>
+          <div><dt className="text-ui text-muted">Not reached</dt><dd className="ll-num text-title font-semibold">{items.length - answered - skipped}</dd></div>
         </dl>
-        <div className="mt-4 flex flex-col gap-3">
+        <div className="mt-6 flex flex-col gap-3">
           {Object.values(submitted).map((requestId) => {
             const request = requests.data?.find((r) => r.requestId === requestId);
             return request ? <RequestCard key={requestId} request={request} showContext={false} /> : null;
           })}
         </div>
-        <p className="mt-3 text-sm text-muted">Feedback that is still pending stays in Activity. A pending or uncertain grade is not treated as a wrong answer.</p>
-        <div className="mt-4 flex gap-2"><Link className="ll-btn ll-btn-primary" to="/review">Back to review</Link><Link className="ll-btn" to="/study">Back to study</Link></div>
+        <p className="ll-measure mt-4 text-ui text-muted">Feedback that is still pending stays in Activity. A pending or uncertain grade is not treated as a wrong answer.</p>
+        <div className="mt-5 flex flex-wrap gap-2"><Link className="ll-btn ll-btn-primary" to="/review">Back to review</Link><Link className="ll-btn" to="/study">Back to study</Link></div>
       </div>
     );
   }
@@ -252,8 +257,8 @@ export function ReviewSession() {
   return (
     <div className="ll-page ll-page-reading">
       <PageHeader title="Review session" subtitle={`Item ${index + 1} of ${items.length}`} actions={<Button onClick={() => setFinished(true)}>Stop here</Button>} />
-      <article className="ll-card flex flex-col gap-3 p-4" aria-label="Review item">
-        <p className="whitespace-pre-wrap text-lg" data-testid="review-prompt">{item.question.prompt}</p>
+      <article className="ll-region flex flex-col gap-4 p-4 min-[900px]:p-6" aria-label="Review item">
+        <p className="ll-measure whitespace-pre-wrap text-head" data-testid="review-prompt">{item.question.prompt}</p>
         {!currentRequest ? (
           <>
             <label className="sr-only" htmlFor="review-answer">Your answer</label>
@@ -265,7 +270,7 @@ export function ReviewSession() {
               <Button onClick={() => { setDone((d) => ({ ...d, [item.item_id]: "skipped" })); next(); }}>Skip</Button>
               <Button variant="primary" busy={busy} disabled={!text.trim()} onClick={submitAnswer} data-testid="submit-review">Submit</Button>
             </div>
-            <p className="text-sm text-muted">Skipping records nothing. With a hint, your answer is kept as practice and is not fed to the scheduler as a rating.</p>
+            <p className="ll-measure text-ui text-muted">Skipping records nothing. With a hint, your answer is kept as practice and is not fed to the scheduler as a rating.{!text.trim() ? " Submit is off until you have written an answer." : ""}</p>
           </>
         ) : (
           <>
@@ -275,7 +280,7 @@ export function ReviewSession() {
         )}
         {error && <Callout tone="danger" role="alert" title="Not sent">{error}</Callout>}
       </article>
-      <div className="mt-3"><Button variant="quiet" onClick={() => navigate("/review")}>Leave session</Button></div>
+      <div className="mt-4"><Button variant="quiet" onClick={() => navigate("/review")}>Leave session</Button></div>
     </div>
   );
 }

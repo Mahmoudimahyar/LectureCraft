@@ -36,6 +36,15 @@ export interface LectureWorkspaceState {
   player: RefObject<LecturePlayerHandle | null>;
   fit: SlideFit;
   setFit: (fit: SlideFit) => void;
+  /**
+   * Open the correction of this page's grouping (join with a neighbour, start a new slide here, ungroup): the More menu
+   * of the pager does, and any part inside the workspace may (the Sources tab's "Correct the grouping or the role").
+   * A correction is a source-map override: the learner's own, versioned record; the file is never changed.
+   */
+  correctGrouping: () => void;
+  /** The grouping correction is open (the composition draws the dialog). */
+  groupingOpen: boolean;
+  closeGrouping: () => void;
 }
 
 const StateContext = createContext<LectureWorkspaceState | null>(null);
@@ -77,6 +86,7 @@ export function LectureWorkspaceProvider({ courseId, lectureId, lecture, page, t
   const [lastTab, setLastTab] = useState<string | null>(() => stored(LECTURE_TAB_STORAGE_KEY));
   const [chosen, setChosen] = useState<{ key: string; selection: RangeSelection } | null>(null);
   const [fit, setFit] = useState<SlideFit>("page");
+  const [groupingOpen, setGroupingOpen] = useState(false);
   const [position, setPosition] = useState<PlaybackPosition>({ ms: 0, playing: false });
 
   const tab = resolveTab(panel, lastTab);
@@ -108,9 +118,12 @@ export function LectureWorkspaceProvider({ courseId, lectureId, lecture, page, t
   }, [onPanel]);
   const selectRange = useCallback((next: RangeSelection) => setChosen({ key, selection: next }), [key]);
   const report = useCallback((ms: number, playing: boolean) => setPosition((current) => (current.ms === ms && current.playing === playing ? current : { ms, playing })), []);
+  const correctGrouping = useCallback(() => setGroupingOpen(true), []);
+  const closeGrouping = useCallback(() => setGroupingOpen(false), []);
 
-  const state = useMemo<LectureWorkspaceState>(() => ({ courseId, lectureId, lecture, page, total, slide, goTo, tab, pane, showTab, showPane, selection, selectedRange, selectRange, player, fit, setFit }),
-    [courseId, lectureId, lecture, page, total, slide, goTo, tab, pane, showTab, showPane, selection, selectedRange, selectRange, fit]);
+  const state = useMemo<LectureWorkspaceState>(() => ({ courseId, lectureId, lecture, page, total, slide, goTo, tab, pane, showTab, showPane, selection, selectedRange, selectRange, player, fit, setFit,
+    correctGrouping, groupingOpen, closeGrouping }),
+    [courseId, lectureId, lecture, page, total, slide, goTo, tab, pane, showTab, showPane, selection, selectedRange, selectRange, fit, correctGrouping, groupingOpen, closeGrouping]);
 
   return (
     <StateContext.Provider value={state}>

@@ -66,8 +66,12 @@ export interface PlaybackPosition {
   playing: boolean;
 }
 
-/** How the page is fitted to the stage ("Fit page" menu, 5.3). "100 %" joins when the canvas can show an unscaled page. */
-export type SlideFit = "page" | "width";
+/**
+ * How the page is sized ("Fit page" menu, 5.3). `page`: the whole page in the stage, by the stage rule of 5.4. `width`:
+ * as wide as the stage; it scrolls inside its own place. `100`, `150`, `200`: that many percent of the page's own size
+ * (a PDF point is 1/72 in), panned inside its own place; the two magnifications keep the contained zoom the slide had.
+ */
+export type SlideFit = "page" | "width" | "100" | "150" | "200";
 
 // ---- parts -------------------------------------------------------------------------------------------------------------
 /** 5.2. The outline of the deck: one row per logical slide (lib/r2 `logicalSlides`), plain pages when no source map came. */
@@ -104,10 +108,12 @@ export interface PagerProps {
   onReadable?: (shown: boolean) => void;
   /** Offered when the learner chose this file among several; returns to the choice. */
   onChooseAnotherFile?: () => void;
-  /** Opens where the grouping and the role of the page are corrected (the Sources tab, 5.12). */
+  /** Opens the correction of this page's grouping (the dialog of the composition; `useLectureWorkspace().correctGrouping`). Absent without a source map. */
   onCorrectPage?: () => void;
   /** Records a new role for the page (a source-map override). Absent when corrections cannot be made (no source map). */
   onSetRole?: (role: SlideRoleValue) => Promise<void>;
+  /** Undoes the learner's own correction of this page's role (a further revision); offered while the role is human-confirmed. */
+  onTakeBackRole?: () => Promise<void>;
 }
 
 /** 5.7. The context panel: five text tabs in the band, one region under them. Tab contents stay mounted once shown. */
@@ -134,6 +140,11 @@ export interface QuestionsTabProps {
   onGoToPage: (page: number) => void;
   /** The next page whose role forces something, for the button a structural page offers; null when there is none. */
   nextContentPage: number | null;
+  /**
+   * Opens the Transcript tab at these lines (a "transcript lines 120–164" citation). Optional: without it the tab
+   * writes `panel=transcript&line=<start>` to the address itself, which is the same thing.
+   */
+  onOpenTranscriptLines?: (start: number, end: number) => void;
 }
 
 /** 5.10. Concepts of this slide, with the ways into the concept map. */
@@ -165,6 +176,11 @@ export interface TransportProps {
   onAddMatch?: (startMs?: number) => void;
   onNextContent?: () => void;
   announce?: (message: string) => void;
+  /**
+   * Opens the Transcript tab at these lines (the evidence of a range, in Qualities). Optional: without it the link
+   * writes `panel=transcript&line=<start>` to the address itself, which is the same thing.
+   */
+  onOpenTranscriptLines?: (start: number, end: number) => void;
 }
 
 /** 5.6. Every range of the page as a radio row, opened from the bar over the stage. */
@@ -172,13 +188,31 @@ export interface RangeListProps {
   /** The pages the list is about (the page, or the pages of its group). */
   pages: number[];
   ranges: TimingRange[];
+  /** The candidates of an ambiguous page ("Show candidates"): listed when the page has no range, each worded as a candidate. */
+  candidates?: import("@/lib/types").NoRangeCandidate[];
+  /** A `range_id`, the id of a candidate (RangeList `candidateId`), or the whole recording. */
   selection: RangeSelection;
+  /** Also called for the row that is already chosen: pressing it again goes back to its start. */
   onSelect: (selection: RangeSelection) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** The disclosure button in the bar. */
   trigger: ReactNode;
+  /** The bar: the list opens from its top edge and is as wide as it. A press on the bar does not close the list. */
+  anchor: RefObject<HTMLElement | null>;
+  /** The height the list may take, in px: the room over the bar that the slide fills (never more than 440). Without it, what the window leaves. */
+  room?: number | null;
+  /** The lecture's recordings, to name the one a range belongs to. */
+  recordings: RecordingView[];
+  /** The word for a member of the page's group ("build", "step"), when the page is in one. */
+  groupKind?: import("@/lib/types").GroupPositionKind | null;
+  /** The page is structural: a range over it is discussion of the topic, not evidence of what was displayed. */
+  structural?: boolean;
+  /** "Mark a range yourself" at the foot. */
   onMarkRange?: () => void;
+  /** "Correct this range" in a row's Qualities. */
+  onCorrectRange?: (range: TimingRange) => void;
+  onOpenTranscriptLines?: (start: number, end: number) => void;
 }
 
 /** 4.4. The strip that keeps the one transport reachable from every pane but Slide. */
@@ -192,6 +226,12 @@ export interface DockedTransportProps {
   onToggle: () => void;
   /** Pressing the strip anywhere but the disc opens the Slide pane. */
   onOpenSlide: () => void;
+  /** The page on screen, for the second line ("Suggestion for page 23"). Read from the workspace when absent. */
+  page?: number;
+  /** The second line when no range is selected (the name of the page's no-range state). Read from the workspace when absent. */
+  note?: string | null;
+  /** Length of the loaded recording, for the line of progress in the whole recording. Read from the one player when absent. */
+  durationMs?: number | null;
 }
 
 /** A source the learner attached to the next tutor message. */

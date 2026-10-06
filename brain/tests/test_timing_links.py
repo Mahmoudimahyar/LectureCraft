@@ -1365,3 +1365,14 @@ def test_the_queue_row_carries_what_the_speech_runner_reports_and_no_invented_po
     rows = {r["source_id"]: r["queue"] for lecture in tl.status(local, "be505")["lectures"] for r in lecture["recordings"]}
     assert rows[source_id] == {"state": "queued", "chunks_done": 0, "chunks_total": 3, "seconds_covered": 0.0}
     assert rows[other] == {"state": "complete", "chunks_done": 2, "chunks_total": 2, "seconds_covered": 60.0}, "a finished recording has no place in a queue"
+
+
+def test_a_page_cut_free_by_a_learner_and_by_an_agent_is_only_agent_reviewed_as_the_map_itself_says():
+    """The weakest author decides, exactly as ``slide_identity.grouping_state`` words the map: a correction an agent
+    took part in was not confirmed by a person, and an author nobody recorded confirms nothing."""
+    learner, agent = {"author": {"kind": "learner", "ref": None}}, {"author": {"kind": "agent", "ref": "review"}}
+    slide = {"grouping": "override", "overrides": [1, 2], "pages": [4], "kind": "single"}
+    assert tl._grouping_state(slide, {1: learner, 2: agent}) == "agent_reviewed"
+    assert tl._grouping_state(slide, {1: learner, 2: learner}) == "human_confirmed"
+    assert tl._grouping_state(slide, {1: learner, 2: {"author": None}}) == "generated"
+    assert tl._grouping_state(dict(slide, overrides=[]), {}) == "generated"

@@ -35,8 +35,10 @@ def test_the_concept_graph_is_served_for_each_scope_and_refuses_what_does_not_ex
     concept = next(n["id"] for n in course["nodes"] if n["kind"] == "concept")
     focused = client.get(f"/api/courses/{COURSE}/concept-graph", params={"focus": concept, "depth": 2}).json()
     assert focused["focus"] == concept and any(n["id"] == concept for n in focused["nodes"])
-    assert client.get(f"/api/courses/{COURSE}/concept-graph", params={"scope": "lecture:no-such-lecture"}).status_code == 404
-    assert client.get(f"/api/courses/{COURSE}/concept-graph", params={"focus": "no-such-node"}).status_code == 404
+    unknown_scope = client.get(f"/api/courses/{COURSE}/concept-graph", params={"scope": "lecture:no-such-lecture"})
+    unknown_focus = client.get(f"/api/courses/{COURSE}/concept-graph", params={"focus": "no-such-node"})
+    assert unknown_scope.status_code == 404 and unknown_scope.json()["error"]["code"] == "unknown_scope"
+    assert unknown_focus.status_code == 404 and unknown_focus.json()["error"]["code"] == "unknown_focus"
     assert client.get("/api/courses/unknown/concept-graph").status_code == 404
 
 

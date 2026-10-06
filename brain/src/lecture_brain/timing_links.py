@@ -202,7 +202,9 @@ def _grouping_state(slide: dict, history: dict[Any, Any]) -> str:
     if len(pages) > 1:
         revisions = [revision for revision in revisions if _joins(history.get(revision), pages[0], pages[-1])]
     who = {_correction_author(history.get(revision)) for revision in revisions}
-    return "human_confirmed" if "learner" in who else "agent_reviewed" if "agent" in who else "generated"
+    if not who or who - {"learner", "agent"}:  # nobody, or somebody whose authorship is not recorded: nothing is confirmed
+        return "generated"
+    return "agent_reviewed" if "agent" in who else "human_confirmed"  # the weakest author decides
 
 
 def _group_mapping(slide: dict, history: dict[Any, Any]) -> dict[str, str]:

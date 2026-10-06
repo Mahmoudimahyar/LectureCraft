@@ -373,7 +373,7 @@ def enrich(view: dict, *, bank: dict, index: dict | None, source_map: dict | Non
 
     # ---- the lecture's question lists --------------------------------------------------------------------------
     block = view.setdefault("questions", {})
-    counts = {"all": 0, "course_anchor": 0, "agent_inferred": 0, "without_link": 0, "course_section": 0}
+    counts = {"all": 0, "course_anchor": 0, "agent_inferred": 0, "without_link": 0, "course_section": 0, "course_anchor_with_suggestion": 0}
     nothing = {"ties": [], "no_link": {"state": "no_suggestion", "reason": "no_item"}, "suggestion_history": {"stale": 0, "rejected_by_verifier": 0, "rejected_by_learner": [], "decisions_not_shown": []}}
     for name in ("all", "related_by_relationship"):
         for row in block.get(name) or []:
@@ -386,7 +386,10 @@ def enrich(view: dict, *, bank: dict, index: dict | None, source_map: dict | Non
             if name == "all":
                 page_ties = [t for t in row["ties"] if t["granularity"] == "page"]
                 counts["all"] += 1
-                counts["course_anchor" if any(t["tie"] in COURSE_TIES for t in page_ties) else "agent_inferred" if page_ties else "without_link"] += 1
+                anchored = any(t["tie"] in COURSE_TIES for t in page_ties)
+                counts["course_anchor" if anchored else "agent_inferred" if page_ties else "without_link"] += 1
+                # A part of course_anchor, never a fourth kind: the course anchors it (to whatever file) AND a suggestion names pages for it.
+                counts["course_anchor_with_suggestion"] += anchored and any(t["tie"] == "agent_inferred" for t in page_ties)
                 counts["course_section"] += any(t["granularity"] == "section" for t in row["ties"])  # counted beside the three kinds above, never as one of them
     block["counts"] = counts
     block["ties_version"] = TIES_VERSION

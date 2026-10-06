@@ -180,7 +180,7 @@ def test_before_the_state_is_installed_the_unit_has_no_timing_and_no_suggestion(
     assert not [tie for slide in view["slides"] for tie in slide["question_ties"] if tie["tie"] == "agent_inferred"]
     rows = {row["question_id"]: row for row in view["questions"]["all"]}
     assert all(rows[q]["no_link"] == {"state": "no_suggestion", "reason": "no_file"} for q in (Q2, Q3, Q4, CLASS))
-    assert view["questions"]["counts"] == {"all": 6, "course_anchor": 2, "agent_inferred": 0, "without_link": 4, "course_section": 3}
+    assert view["questions"]["counts"] == {"all": 6, "course_anchor": 2, "agent_inferred": 0, "without_link": 4, "course_section": 3, "course_anchor_with_suggestion": 0}
 
 
 # ---- R2-S: identity and role of every page ---------------------------------------------------------------------------------
@@ -260,7 +260,7 @@ def test_exact_stated_section_and_suggested_ties_are_kept_apart_on_the_pages(sho
 def test_the_lecture_question_list_says_what_was_inspected_and_found_without_support(showcase):
     block = showcase.view["questions"]
     rows = {row["question_id"]: row for row in block["all"]}
-    assert block["counts"] == {"all": 6, "course_anchor": 2, "agent_inferred": 3, "without_link": 1, "course_section": 3}
+    assert block["counts"] == {"all": 6, "course_anchor": 2, "agent_inferred": 3, "without_link": 1, "course_section": 3, "course_anchor_with_suggestion": 0}
     assert rows[CLASS]["no_link"] == {"state": "inspected_no_support", "reason": content.SHOWCASE_NO_CANDIDATE[0]["why"]} and rows[CLASS]["ties"] == []
     # Its wording lives only in the original sheet: the row says where to read it and carries no question text of its own.
     assert rows[CLASS]["prompt_in_index"] is False and "original source (05 - Fixture in-class questions.pdf)" in rows[CLASS]["prompt"]

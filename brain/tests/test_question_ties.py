@@ -425,7 +425,7 @@ def test_no_link_is_inspected_no_support_or_no_suggestion_with_its_recorded_reas
 def test_the_counts_partition_the_lectures_catalogued_questions(lecture):
     view = lecture.enriched()
     counts = view["questions"]["counts"]
-    assert counts == {"all": 14, "course_anchor": 6, "agent_inferred": 3, "without_link": 5, "course_section": 0}
+    assert counts == {"all": 14, "course_anchor": 6, "agent_inferred": 3, "without_link": 5, "course_section": 0, "course_anchor_with_suggestion": 1}
     assert counts["all"] == len(view["questions"]["all"]) == counts["course_anchor"] + counts["agent_inferred"] + counts["without_link"]
     assert counts["without_link"] == sum(1 for q in view["questions"]["all"] if q["no_link"] is not None)
     assert counts["course_anchor"] == sum(1 for q in view["questions"]["all"] if any(t["tie"] in {"exact", "stated"} for t in q["ties"]))
@@ -493,14 +493,27 @@ def test_evidence_comes_from_the_injected_reader_and_is_unknown_without_one(lect
     assert row(view, "T-L01-Q06")["evidence"]["state"] == "assisted" and set(asked) >= {q["question_id"] for q in view["questions"]["all"]}
 
 
+def test_an_anchored_question_that_also_carries_a_suggestion_is_counted_as_both_things_it_is(lecture):
+    """A question the course anchors (to a question sheet, say) may also carry a suggested link to pages of the slides. It is
+    one of the anchored questions, and the count beside them says how many of those also carry a suggestion: a list that
+    reads "0 with a suggested link" above cards that offer Accept and Reject would be untrue."""
+    view = lecture.enriched()
+    counts = view["questions"]["counts"]
+    both = [q["question_id"] for q in view["questions"]["all"]
+            if any(t["tie"] in {"exact", "stated"} and t["granularity"] == "page" for t in q["ties"]) and any(t["tie"] == "agent_inferred" and t["granularity"] == "page" for t in q["ties"])]
+    assert both, "the synthetic lecture holds such a question"
+    assert counts["course_anchor_with_suggestion"] == len(both) <= counts["course_anchor"]
+    assert counts["all"] == counts["course_anchor"] + counts["agent_inferred"] + counts["without_link"], "the three kinds still partition the list; the new figure is a part of the first"
+
+
 def test_a_lecture_without_a_deck_or_without_a_catalog_is_enriched_without_inventing_anything(lecture, tmp_path):
     view = lecture.view(deck=None)
     qt.enrich(view, bank=lecture.bank, index=lecture.index, source_map=None, inferred=lecture.inferred, decisions=lecture.decisions)
-    assert view["slides"] == [] and view["questions"]["counts"] == {"all": 14, "course_anchor": 6, "agent_inferred": 3, "without_link": 5, "course_section": 0}
+    assert view["slides"] == [] and view["questions"]["counts"] == {"all": 14, "course_anchor": 6, "agent_inferred": 3, "without_link": 5, "course_section": 0, "course_anchor_with_suggestion": 1}
     assert not [t for q in view["questions"]["all"] for t in q["ties"] if t["on_displayed_deck"]]
     empty = {"course_id": COURSE, "lecture_id": "lecture-09", "deck": None, "slides": [], "questions": {"all": [], "related_by_relationship": [], "gap": "none"}}
     qt.enrich(empty, bank={"questions": {}, "lectures": {}, "collections": []}, index=None, source_map=None, inferred=None, decisions=None)
-    assert empty["questions"]["counts"] == {"all": 0, "course_anchor": 0, "agent_inferred": 0, "without_link": 0, "course_section": 0}
+    assert empty["questions"]["counts"] == {"all": 0, "course_anchor": 0, "agent_inferred": 0, "without_link": 0, "course_section": 0, "course_anchor_with_suggestion": 0}
 
 
 def test_questions_related_by_a_catalog_relationship_carry_the_same_three_fields(lecture):
@@ -605,7 +618,7 @@ def test_a_study_map_row_is_a_section_tie_listed_apart_and_never_a_page_tie(lect
     # nothing about pages changed: an eight-page section adds no row to any page's own list and no course anchor
     assert [s["question_ties"] for s in view["slides"]] == [s["question_ties"] for s in plain["slides"]]
     assert [(s["related_questions"], s["related_questions_total"]) for s in view["slides"]] == [(s["related_questions"], s["related_questions_total"]) for s in plain["slides"]]
-    assert view["questions"]["counts"] == {"all": 14, "course_anchor": 6, "agent_inferred": 3, "without_link": 5, "course_section": 4}
+    assert view["questions"]["counts"] == {"all": 14, "course_anchor": 6, "agent_inferred": 3, "without_link": 5, "course_section": 4, "course_anchor_with_suggestion": 1}
     assert {q["question_id"]: q["no_link"] for q in view["questions"]["all"]} == {q["question_id"]: q["no_link"] for q in plain["questions"]["all"]}
     # its own list per page: the pages inside the stated range, in catalog order, a question once per row that names the page
     assert {s["page"]: [(t["question_id"], t["section"]["row"]) for t in s["section_ties"]] for s in view["slides"]} == {
@@ -665,7 +678,7 @@ def test_section_ties_do_not_move_a_question_between_the_three_counted_kinds(lec
     """course_anchor + agent_inferred + without_link stays the partition of the lecture's rows; course_section is counted beside it."""
     everything = {q: [section(((1, 12),))] for q in lecture.bank["lectures"]["lecture-01"]["question_ids"]}
     counts = lecture.enriched(section_ties=everything)["questions"]["counts"]
-    assert counts == {"all": 14, "course_anchor": 6, "agent_inferred": 3, "without_link": 5, "course_section": 14}
+    assert counts == {"all": 14, "course_anchor": 6, "agent_inferred": 3, "without_link": 5, "course_section": 14, "course_anchor_with_suggestion": 1}
     assert counts["all"] == counts["course_anchor"] + counts["agent_inferred"] + counts["without_link"]
 
 
@@ -691,7 +704,7 @@ def test_a_link_the_learner_confirmed_stays_when_a_later_checking_pass_rejects_i
     assert (kept["tie"], kept["state"], kept["verdict"], kept["verdict_note"], kept["learner_decision"], kept["suggestion_id"]) == ("agent_inferred", "agent_reviewed", "rejected", note, "confirmed", confirmed_id)
     assert "rejected" in kept["why"] and "You confirmed" in kept["why"] and "checked by a second agent pass." not in kept["why"]  # both facts are said; it is not worded as endorsed
     assert [(t["tie"], t["verdict"], t["learner_decision"]) for t in row(view, "T-L01-Q13")["ties"]] == [("agent_inferred", "rejected", "confirmed")] and row(view, "T-L01-Q13")["no_link"] is None
-    assert view["questions"]["counts"] == {"all": 14, "course_anchor": 6, "agent_inferred": 3, "without_link": 5, "course_section": 0}
+    assert view["questions"]["counts"] == {"all": 14, "course_anchor": 6, "agent_inferred": 3, "without_link": 5, "course_section": 0, "course_anchor_with_suggestion": 1}
     # an item the checking pass rejected and the learner never confirmed is no link, exactly as before
     assert "T-L01-Q05" not in [t["question_id"] for s in view["slides"] for t in s["question_ties"]] and row(view, "T-L01-Q05")["ties"] == []
     assert not [t for s in view["slides"] for t in s["question_ties"] if t["verdict"] == "rejected" and t["learner_decision"] != "confirmed"]
@@ -839,7 +852,7 @@ def test_the_fixture_lecture_view_is_enriched_as_the_lead_will_wire_it(settings,
         four = enriched("lecture-04")  # "Slides 1, 3; transcript 4-9": a reviewed page list and a separate line map
         per_page = {s["page"]: [(t["question_id"], t["tie"], t["where"], t["transcript_lines"]) for t in s["question_ties"]] for s in four["slides"]}
         assert per_page == {1: [("BE505-L04-Q01", "exact", "on_this_page", [[4, 9]])], 2: [], 3: [("BE505-L04-Q01", "exact", "on_this_page", [[4, 9]])]}
-        assert four["questions"]["counts"] == {"all": 3, "course_anchor": 3, "agent_inferred": 0, "without_link": 0, "course_section": 0}
+        assert four["questions"]["counts"] == {"all": 3, "course_anchor": 3, "agent_inferred": 0, "without_link": 0, "course_section": 0, "course_anchor_with_suggestion": 0}
         one = enriched("lecture-01")
         coarse = next(q for q in one["questions"]["all"] if q["question_id"] == "BE505-L01-Q04")
         assert [(t["tie"], t["pages"], t["criteria_supported"], t["criteria_total"], t["on_displayed_deck"]) for t in coarse["ties"]] == [("agent_inferred", [2, 3], 1, 1, True)] and coarse["no_link"] is None

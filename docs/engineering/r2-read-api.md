@@ -121,7 +121,7 @@ compatibility; `ranges` is the list the UI plays from and already includes confi
                      "on_displayed_deck": true}],
            "no_link": null,                // or {"state": "inspected_no_support" | "no_suggestion", "reason": "…"}
            "evidence": {"state": "unknown", "assistance": null, "prior_exposure": "unknown", "attempts": 0, "last_at": null}}],
-  "counts": {"all": 20, "course_anchor": 12, "agent_inferred": 6, "without_link": 2, "course_section": 20}
+  "counts": {"all": 20, "course_anchor": 12, "agent_inferred": 6, "without_link": 2, "course_section": 20, "course_anchor_with_suggestion": 1}
 },
 "timing": {
   "stage": "associated",                   // "no_recording" | "audio_unprocessed" | "partly_processed" | "processed" | "associated"
@@ -142,6 +142,11 @@ compatibility; `ranges` is the list the UI plays from and already includes confi
 "revisions": {"deck_sha256": "…", "map_revision": "…", "question_index_sha256": "…", "inferred_anchors_sha256": null,
               "timing_links": [{"recording_source_id": "src-rec-03", "links_revision": "…"}], "evidence_revision": "…"}
 ```
+
+`course_anchor + agent_inferred + without_link = all`: each question is counted once, by the strongest link it carries.
+`course_anchor_with_suggestion` is a part of `course_anchor`, not a fourth kind: the questions the course anchors (to
+whatever file, a question sheet included) that ALSO carry a current suggested link to pages. A list is never worded
+"0 with a suggested link" while such questions are in it.
 
 `no_link.state` is `inspected_no_support` when every item for the question version was rejected by the verifying pass,
 or when the file's optional top-level list `no_candidate` holds a record for that question version (`{question_id,

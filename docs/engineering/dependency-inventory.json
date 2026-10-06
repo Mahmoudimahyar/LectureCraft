@@ -88,13 +88,6 @@
         "version": "26.3"
       },
       {
-        "declared_license": "MIT-CMU",
-        "direct": false,
-        "lock_sha256_hashes": 87,
-        "name": "pillow",
-        "version": "12.3.0"
-      },
-      {
         "declared_license": "MIT",
         "direct": false,
         "lock_sha256_hashes": 2,
@@ -153,8 +146,8 @@
     ],
     "interpreter_requirement": ">=3.13",
     "lock_files": {
-      "brain/requirements-dev.lock": "caa035e10f394ddac33a71b309b1ea60bc99fdb6a75a961042a057f11b1ba62c",
-      "brain/requirements.lock": "a7863a315f7174f62151347e25324539bf8833674080d1230e7d89608e63afdc"
+      "brain/requirements-dev.lock": "4b9ee984e8336689f1e7cee1a3be6cb12b9e8b4906a669f2abe63e66f7f045bf",
+      "brain/requirements.lock": "fcfe9fabe8485e58fac973588a04aa73a1a83b5d71c23c9a6cf819e89f5086c1"
     },
     "registry": "https://pypi.org/simple (pip-compile --generate-hashes)",
     "runtime": [
@@ -257,6 +250,13 @@
         "version": "2025.9.1"
       },
       {
+        "declared_license": "BSD-3-Clause",
+        "direct": false,
+        "lock_sha256_hashes": 176,
+        "name": "lxml",
+        "version": "6.1.3"
+      },
+      {
         "declared_license": "MIT",
         "direct": false,
         "lock_sha256_hashes": 2,
@@ -276,6 +276,13 @@
         "lock_sha256_hashes": 2,
         "name": "opentelemetry-api",
         "version": "1.45.0"
+      },
+      {
+        "declared_license": "MIT-CMU",
+        "direct": false,
+        "lock_sha256_hashes": 87,
+        "name": "pillow",
+        "version": "12.3.0"
       },
       {
         "declared_license": "BSD-3-Clause",
@@ -304,6 +311,13 @@
         "lock_sha256_hashes": 2,
         "name": "pypdf",
         "version": "6.19.0"
+      },
+      {
+        "declared_license": "MIT License",
+        "direct": true,
+        "lock_sha256_hashes": 2,
+        "name": "python-pptx",
+        "version": "1.0.2"
       },
       {
         "declared_license": "MIT License",
@@ -374,6 +388,13 @@
         "lock_sha256_hashes": 2,
         "name": "uvicorn",
         "version": "0.54.0"
+      },
+      {
+        "declared_license": "BSD License",
+        "direct": false,
+        "lock_sha256_hashes": 2,
+        "name": "xlsxwriter",
+        "version": "3.2.9"
       }
     ]
   },
@@ -387,6 +408,13 @@
         "integrity": "sha512-6YLx+kxXu5GJceG4ozFg+33a2EMTdjYwWGloJ3sb9Kta5pp+ZNS53uxGVog5JetIY8s++P5UrtX+cri+u0VAVg==",
         "name": "@axe-core/playwright",
         "version": "4.13.0"
+      },
+      {
+        "declared_license": "MIT",
+        "dev": false,
+        "integrity": "sha512-zroZB1dFOFiGgv4Xcrn1DckB1o4aOikPqD2NDQPV0WM//CXGcS6xiD0rNkqHmw6FEg4tabt4nxPLwgCWT+Vb2A==",
+        "name": "@dagrejs/dagre",
+        "version": "3.1.1"
       },
       {
         "declared_license": "Apache-2.0",
@@ -464,6 +492,13 @@
         "integrity": "sha512-yxLaQV9gkhS8ezJqCM6+ndU7mDY6gqAg75NQ+0IjwEI8IYOmQCgkRwHKVSfWXW076DsqMo0Dk+0FK1U+M5RgFw==",
         "name": "@vitejs/plugin-react",
         "version": "6.1.1"
+      },
+      {
+        "declared_license": "MIT",
+        "dev": false,
+        "integrity": "sha512-74oXI0Rgm1Eu33cHQAd74J6oVgCH9mbFyTVQbsGgp2kmWwh0HdtBr2VP04z8mbPD+M/xO69nqG5dDEt7/EN2rQ==",
+        "name": "@xyflow/react",
+        "version": "12.12.0"
       },
       {
         "declared_license": "MIT",
@@ -587,6 +622,13 @@
       {
         "declared_license": "MIT",
         "dev": false,
+        "integrity": "sha512-s35mfXhwpPEPnB+BKPCZJ9VZU0CHb1I9trm9tijEGBNv1Srl0HzIweENeXnsQvd0Xm9BeOBkEzDGVJOZM2mkEQ==",
+        "name": "react-resizable-panels",
+        "version": "4.14.2"
+      },
+      {
+        "declared_license": "MIT",
+        "dev": false,
         "integrity": "sha512-PUPQcMhMGRAslLcvtlPz/kmzBEWPhLdgLFrL7pLNepBL6dX0lWj4WD2cUYVgYCuT3jxvghYFg81cDTj44DhetQ==",
         "name": "react-router",
         "version": "7.18.4"
@@ -659,21 +701,21 @@
       "0BSD": 1,
       "Apache-2.0": 33,
       "BSD-2-Clause": 5,
-      "BSD-3-Clause": 5,
+      "BSD-3-Clause": 6,
       "BlueOak-1.0.0": 5,
       "CC-BY-4.0": 1,
       "CC0-1.0": 1,
-      "ISC": 12,
-      "MIT": 523,
+      "ISC": 20,
+      "MIT": 536,
       "MIT-0": 2,
       "MPL-2.0": 26,
       "Python-2.0": 1
     },
     "lock_files": {
-      "web/package-lock.json": "af90bd9476f4db483a7b11347ba390b100580da4643a7bb4a03fdaf83c45d9b4"
+      "web/package-lock.json": "a422dde2a29547d108fd66fcbf7ecccd61dc2654b0989df16eafa61ee423e286"
     },
     "packages_without_integrity": 0,
     "registry": "https://registry.npmjs.org (npm lockfileVersion 3)",
-    "total_locked_packages": 615
+    "total_locked_packages": 637
   }
 }

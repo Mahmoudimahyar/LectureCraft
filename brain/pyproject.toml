@@ -10,7 +10,7 @@ requires-python = ">=3.13"
 # Exact runtime pins live in requirements.lock (pip-compile with hashes); this list names direct dependencies.
 dependencies = [
   "fastapi", "uvicorn", "sqlalchemy", "alembic", "jsonschema", "referencing",
-  "rfc3339-validator", "cryptography", "fsrs", "pyyaml", "pypdf",
+  "rfc3339-validator", "cryptography", "fsrs", "pyyaml", "pypdf", "python-pptx",
 ]
 
 [project.scripts]

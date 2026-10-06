@@ -10,3 +10,6 @@ cryptography
 fsrs
 pyyaml
 pypdf
+# Parser for .pptx sources (slide ids, order, titles, text, hidden flag). Never a renderer and never a writer of course
+# files; the synthetic fixture builder writes its own small test deck with it.
+python-pptx

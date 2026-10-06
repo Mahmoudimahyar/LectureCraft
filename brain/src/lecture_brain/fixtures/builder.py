@@ -138,6 +138,183 @@ def write_pdf(path: Path, pages: list[dict]) -> None:
     pdf.output(str(path))
 
 
+def synthetic_image_png(seed: int, size: tuple[int, int] = (64, 48)) -> bytes:
+    """A small deterministic picture (flat colour with seed-dependent stripes). Synthetic; the same seed gives the same bytes."""
+    import io
+
+    from PIL import Image, ImageDraw
+
+    palette = list(_COLORS.values())
+    image = Image.new("RGB", size, palette[seed % len(palette)])
+    draw = ImageDraw.Draw(image)
+    for i in range(0, size[0], 8):
+        draw.line([(i, 0), ((i + seed * 5) % size[0], size[1])], fill=palette[(seed + 1 + i // 8) % len(palette)], width=2)
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def write_slide_pdf(path: Path, pages: list[dict], *, page_labels: dict[int, tuple[str | None, str | None, int | None]] | None = None,
+                    page_format: tuple[float, float] = (190.5, 254.0), orientation: str = "landscape") -> None:
+    """A synthetic slide or handout PDF for source-map cases. ``build_fixture_workspace`` does not use it.
+
+    Unlike :func:`write_pdf` nothing is drawn unless the page asks for it, so a page can be blank, picture-only or
+    carry no printed number. Every key of a page is optional:
+
+    ``title``    heading text                      ``bullets``  body lines drawn as ``- text``
+    ``lines``    body lines drawn as written       ``figure``   a vector figure name of :func:`_figure`
+    ``images``   ``[{"seed": int, "box": (x, y, w, h)}]`` raster pictures, positions in millimetres
+    ``printed``  a slide number drawn bottom-right ``footer``   a line drawn bottom-left
+    ``title_parts``  ``[(text, point size), ...]`` drawn on one line instead of ``title`` (a heading set in two sizes)
+    ``texts``    ``[(x, y, text)]`` body text drawn at a position, in the order given (millimetres)
+    ``strokes``  ``[(x1, y1, x2, y2)]`` straight lines ``polylines``  ``[[(x, y), ...]]`` open curves
+    ``boxes``    ``[(x, y, w, h, colour)]`` filled rectangles, drawn after the text (so a box can cover text);
+                 a sixth element is the colour of an outline drawn with the fill
+    ``background``  a colour: one fill over the whole page, drawn before anything else
+    ``polygons`` ``[([(x, y), ...], colour)]`` filled polygons, drawn before the text (after the background)
+    ``text_colour``  a colour for the body text (``bullets``, ``lines``, ``texts``) instead of the ink of the heading
+    ``printed_xy``  ``(x, y)`` where the printed number is drawn instead of bottom-right
+
+    A colour is a name of the fixture palette or an ``(r, g, b)`` triple.
+
+    ``page_labels`` maps a 1-based page number to ``(style, prefix, start)``: the PDF page-label range that begins on
+    that page (style ``"D"`` decimal, ``"r"``/``"R"`` roman, ``"a"``/``"A"`` letters).
+    """
+    import io
+
+    width, height = (max(page_format), min(page_format)) if orientation == "landscape" else (min(page_format), max(page_format))
+    pdf = FPDF(orientation=orientation, unit="mm", format=page_format)
+    pdf.set_creation_date(_PDF_DATE)
+    pdf.set_title(path.stem)
+    pdf.set_author("Lecture Learning synthetic fixture")
+    pdf.set_auto_page_break(False)
+    def rgb(colour: str | tuple[int, int, int]) -> tuple[int, int, int]:
+        return _COLORS[colour] if isinstance(colour, str) else tuple(colour)
+
+    for number, page in enumerate(pages, start=1):
+        pdf.add_page()
+        if page_labels and number in page_labels:
+            style, prefix, start = page_labels[number]
+            pdf.set_page_label(label_style=style, label_prefix=prefix, label_start=start)
+        if page.get("background") is not None:
+            pdf.set_fill_color(*rgb(page["background"]))
+            pdf.rect(0, 0, width, height, style="F")
+        for points, colour in page.get("polygons", []):
+            pdf.set_fill_color(*rgb(colour))
+            pdf.polygon(list(points), style="F")
+        pdf.set_text_color(*_COLORS["ink"])
+        if page.get("title"):
+            pdf.set_font("helvetica", "B", 26)
+            pdf.set_xy(16, 18)
+            pdf.cell(0, 12, page["title"])
+        elif page.get("title_parts"):
+            pdf.set_xy(16, 18)
+            for text, points in page["title_parts"]:
+                pdf.set_font("helvetica", "B", points)
+                pdf.cell(pdf.get_string_width(text) + 2, 12, text)
+        pdf.set_font("helvetica", "", 15)
+        if page.get("text_colour") is not None:
+            pdf.set_text_color(*rgb(page["text_colour"]))
+        y = 52.0
+        for text in [*("- " + bullet for bullet in page.get("bullets", [])), *page.get("lines", [])]:
+            pdf.set_xy(20, y)
+            pdf.multi_cell(120, 8, text)
+            y = pdf.get_y() + 5
+        for x, top, text in page.get("texts", []):
+            pdf.set_xy(x, top)
+            pdf.cell(0, 8, text)
+        if page.get("figure"):
+            _figure(pdf, page["figure"])
+        if page.get("strokes") or page.get("polylines"):
+            pdf.set_line_width(1.0)
+            pdf.set_draw_color(*_COLORS["slate"])
+            for x1, y1, x2, y2 in page.get("strokes", []):
+                pdf.line(x1, y1, x2, y2)
+            for points in page.get("polylines", []):
+                pdf.polyline(list(points))
+            pdf.set_line_width(0.2)
+            pdf.set_draw_color(0, 0, 0)
+        for x, top, w, h, colour, *outline in page.get("boxes", []):
+            pdf.set_fill_color(*rgb(colour))
+            if outline:
+                pdf.set_draw_color(*rgb(outline[0]))
+            pdf.rect(x, top, w, h, style="DF" if outline else "F")
+            pdf.set_draw_color(0, 0, 0)
+        for image in page.get("images", []):
+            x, top, w, h = image["box"]
+            pdf.image(io.BytesIO(synthetic_image_png(image["seed"])), x=x, y=top, w=w, h=h)
+        if page.get("footer") or page.get("printed") is not None:
+            pdf.set_font("helvetica", "I", 9)
+            pdf.set_text_color(110, 110, 110)
+            if page.get("footer"):
+                pdf.set_xy(16, height - 14)
+                pdf.cell(0, 6, page["footer"])
+            if page.get("printed") is not None:
+                pdf.set_xy(*page.get("printed_xy", (width - 30, height - 14)))
+                pdf.cell(0, 6, str(page["printed"]))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pdf.output(str(path))
+
+
+def add_inline_image(path: Path, page: int, *, seed: int = 1, box_pt: tuple[float, float, float, float] = (100.0, 100.0, 400.0, 300.0)) -> None:
+    """Replace the content of one page (1-based) of a synthetic PDF with a single inline image (``BI ... ID ... EI``).
+
+    An inline image lives in the page's content stream, not among its picture objects. ``box_pt`` is
+    ``(left, bottom, width, height)`` in points. For source-map cases only; ``build_fixture_workspace`` does not use it.
+    """
+    from pypdf import PdfReader, PdfWriter
+    from pypdf.generic import DecodedStreamObject, NameObject
+
+    writer = PdfWriter()
+    for source_page in PdfReader(str(path)).pages:
+        writer.add_page(source_page)
+    left, bottom, width, height = box_pt
+    pixels = bytes((x * 16 + y * 3 + seed * 29) % 256 for y in range(16) for x in range(16))
+    stream = DecodedStreamObject()
+    stream.set_data(f"q {width} 0 0 {height} {left} {bottom} cm BI /W 16 /H 16 /CS /G /BPC 8 ID ".encode("ascii") + pixels + b" EI Q")
+    writer.pages[page - 1][NameObject("/Contents")] = writer._add_object(stream)
+    with open(path, "wb") as handle:
+        writer.write(handle)
+
+
+def write_synthetic_pptx(path: Path, slides: list[dict]) -> None:
+    """A tiny synthetic presentation file for source-map cases. ``build_fixture_workspace`` does not use it.
+
+    Each slide: ``title`` (optional), ``bullets`` (optional body lines), ``hidden`` (bool) and ``layout`` — one of
+    ``"title"``, ``"content"`` (default), ``"title_only"``, ``"blank"``. The same input gives the same bytes: document
+    dates and archive timestamps are fixed. It is written with the parser library and never opened by an Office program here.
+    """
+    import io
+    import zipfile
+
+    from pptx import Presentation
+
+    layouts = {"title": 0, "content": 1, "title_only": 5, "blank": 6}
+    deck = Presentation()
+    for spec in slides:
+        slide = deck.slides.add_slide(deck.slide_layouts[layouts[spec.get("layout", "content")]])
+        if spec.get("title") is not None and slide.shapes.title is not None:
+            slide.shapes.title.text = spec["title"]
+        bullets = spec.get("bullets") or []
+        if bullets and len(slide.placeholders) > 1:
+            frame = slide.placeholders[1].text_frame
+            frame.text = bullets[0]
+            for bullet in bullets[1:]:
+                frame.add_paragraph().text = bullet
+        if spec.get("hidden"):
+            slide._element.set("show", "0")
+    properties = deck.core_properties
+    properties.author = properties.last_modified_by = "Lecture Learning synthetic fixture"
+    properties.title = path.stem
+    properties.created = properties.modified = _PDF_DATE.replace(tzinfo=None)
+    buffer = io.BytesIO()
+    deck.save(buffer)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(io.BytesIO(buffer.getvalue())) as source, zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as target:
+        for name in source.namelist():  # same order, fixed timestamps: the same bytes on every build
+            target.writestr(zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0)), source.read(name), compress_type=zipfile.ZIP_DEFLATED)
+
+
 def write_docx(path: Path, paragraphs: list[str]) -> None:
     """A minimal word-processing file (a zip with one document part). Synthetic text only; it is never opened by an Office program here."""
     import zipfile

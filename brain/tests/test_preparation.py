@@ -216,7 +216,7 @@ def test_every_unit_gets_an_honest_disposition(prep, settings):
     for course, data in coverage["courses"].items():
         for row in data["lectures"]:
             states[(course, row["lecture_id"])] = row
-    assert coverage["totals"]["lecture_units"] == 11 and len(states) == 11  # the denominator never shrinks
+    assert coverage["totals"]["lecture_units"] == 12 and len(states) == 12  # the denominator never shrinks
     assert states[("be562", "lecture-01")]["disposition"] == "not_processed"  # not run yet: visible, not hidden
     assert states[("be505", "lecture-01")]["disposition"] == "links_reviewed" and states[("be505", "lecture-01")]["pages_confirmed"] == 4
     assert states[("be505", "lecture-02")]["disposition"] == "links_pending_review" and states[("be505", "lecture-02")]["pages_suggested"] >= 2
@@ -229,9 +229,9 @@ def test_every_unit_gets_an_honest_disposition(prep, settings):
 
 def test_batches_are_bounded_and_the_rest_stays_counted(prep):
     report = prep.prepare_course("be505", max_units=1)
-    assert report["processed"] == ["lecture-01"] and report["remaining_unprepared"] == 3 and report["lecture_units"] == 4
+    assert report["processed"] == ["lecture-01"] and report["remaining_unprepared"] == 4 and report["lecture_units"] == 5
     report = prep.prepare_course("be505", max_units=5)
-    assert report["processed"] == ["lecture-02", "lecture-03", "lecture-04"] and report["unchanged"] == 1 and report["remaining_unprepared"] == 0
+    assert report["processed"] == ["lecture-02", "lecture-03", "lecture-04", "lecture-05"] and report["unchanged"] == 1 and report["remaining_unprepared"] == 0
 
 
 def test_office_deck_rendition_is_versioned_and_never_touches_the_original(settings, tmp_path):

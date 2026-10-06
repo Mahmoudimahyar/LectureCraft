@@ -878,7 +878,9 @@ def test_rows_of_the_study_map_reader_reach_the_lecture_view_as_section_ties(set
         catalogs = projector._catalogs("be505")
         bank = projector._bank("be505", catalogs, inventory)
         sections = study_maps.section_ties(study_maps.read_study_maps(root, inventory), bank)
-        assert sorted(sections) == ["BE505-L01-Q01", "BE505-L01-Q04"] and all(row_["deck_state"] == "current" for rows_ in sections.values() for row_ in rows_)
+        # The two questions of the note written here, and the three the showcase unit's own note (lecture-05, shipped with the fixture) names.
+        assert sorted(sections) == ["BE505-L01-Q01", "BE505-L01-Q04", "BE505-L05-Q01", "BE505-L05-Q02", "BE505-L05-Q03"]
+        assert all(row_["deck_state"] == "current" for rows_ in sections.values() for row_ in rows_)
         view = projector.lecture_view("be505", "lecture-01")
         plain = qt.enrich(copy.deepcopy(view), bank=bank, index=catalogs["questions"], source_map=view.get("source_map"), inferred=None, decisions=None)
         qt.enrich(view, bank=bank, index=catalogs["questions"], source_map=view.get("source_map"), inferred=None, decisions=None, section_ties=sections)

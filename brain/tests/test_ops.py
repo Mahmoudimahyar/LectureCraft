@@ -293,7 +293,7 @@ def test_live_profile_reports_blocked_gates_and_real_backlog_instead_of_mocked_s
         report = run_acceptance(settings, journal, reports_dir=reports, preparation=Preparation(settings, converter=None))
         by_id = {x["id"]: x for x in report["checks"]}
         assert report["overall"] == "NOT_READY_FAILED"
-        assert by_id["inventory-denominator"]["status"] == "PASS" and by_id["inventory-denominator"]["evidence"]["lecture_units"] == 11
+        assert by_id["inventory-denominator"]["status"] == "PASS" and by_id["inventory-denominator"]["evidence"]["lecture_units"] == 12
         assert by_id["preparation-complete"]["status"] == "FAIL" and "not processed" in by_id["preparation-complete"]["detail"]
         for gate in ("native-roundtrip", "drive-oauth", "device-pairing", "device-acceptance", "static-deployment", "canonical-writer", "quality-evaluation"):
             assert by_id[gate]["status"] == "BLOCKED", gate

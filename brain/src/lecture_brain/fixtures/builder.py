@@ -26,8 +26,14 @@ from ..ownerio.inventory import disk_version_id, unregistered_source_id
 from ..tutoring import policy as tp
 from . import content as c
 
-FIXTURE_VERSION = "11"
+FIXTURE_VERSION = "12"
 MARKER = ".ll-synthetic-fixture"
+# Where the synthetic "speech tool" of the fixture leaves its output for the showcase recording: beside the course and
+# planner folders, never inside one (an output root inside a course folder is refused by the importer).
+SPEECH_OUTPUT_DIR = "speech-output"
+SHOWCASE_COURSE = "be505"
+SHOWCASE_RECORDING_ID = "src-lecture-05-recording"
+SHOWCASE_GENERATED_AT = "2026-09-15T18:00:00Z"  # a fixed synthetic time, so the same build gives the same bytes
 TERM = "2026-fall"
 FIXED_TIME = "2026-09-12T12:00:00Z"
 _PDF_DATE = datetime(2026, 9, 1, 12, 0, 0, tzinfo=timezone.utc)
@@ -571,6 +577,7 @@ def _build_be505(root: Path) -> None:
         if lecture["indexed"]["slides"]:
             sources.append(_entry(root, f"src-lecture-{nn}-slides", "lecture_slides", deck_rel, date=lecture["session"], related=related))
     (root / "materials/sessions/2026-09-10-lecture").mkdir(parents=True, exist_ok=True)  # session folder with nothing recorded
+    _build_showcase_unit(root, sources)
 
     write_pdf(root / "materials/assignments/ps-01/Fixture PS01.pdf", c.PS01_PAGES)
     write_pdf(root / "materials/assignments/ps-01/Fixture PS01 solutions.pdf", c.PS01_SOLUTION_PAGES)
@@ -607,7 +614,7 @@ def _build_be505(root: Path) -> None:
                           "criteria": [{"criterion_id": f"{q['question_id']}.C{i:02d}", "tag": "core", "action": crit[3][0], "observable": crit[2], "concept_id": crit[1], "skill_id": crit[0], "action_types": crit[3]}
                                        for i, crit in enumerate(q["criteria"], start=1)],
                           "origin": q["origin"], "source_refs": [ref], "source_note": c.FIXTURE_NOTE, "bank_path": q.get("bank_path", "work/lecture-review/fixture-question-bank.md"), "input_files": {},
-                          "topic": "be505.topic.plasmids", "family_id": q["family_id"], "family_revision": 1, "page": q["page"],
+                          "topic": q.get("topic", "be505.topic.plasmids"), "family_id": q["family_id"], "family_revision": 1, "page": q["page"],
                           "assessor_path": "work/lecture-review/lecture-01-assessor-guide-v1.md",
                           **({"prompt_status": q["prompt_status"]} if q["prompt"] is None else {}), **({"source_path": q["source_path"]} if q.get("source_path") else {})})
     families.append({"family_id": "be505.family.slide-teach-back-unrubriced", "revision": 1, "format": "open teach-back", "skill_ids": ["be505.skill.selection.interpret"],
@@ -623,10 +630,14 @@ def _build_be505(root: Path) -> None:
                    "future_attempts": "Synthetic: new attempts carry question_id and question_version.", "coverage": c.FIXTURE_NOTE}, "source_index_digest": sha256_hex((root / ".agent/source-index.json").read_bytes()), "unassessed_artifacts": []}))
     # Answer guidance stays in a separate restricted file, as in the real course.
     # Answer guidance stays in a separate restricted file, shaped as in the real course: entries keyed ``id``, a version on the file and on most entries.
-    _write(root / "work/lecture-review/lecture-01-question-map-v1.json", _json({"version": 1, "questions": [
-        {"id": q["question_id"], **({"version": "1"} if q["number"] % 2 else {}), "title": q["title"], "prompt": q["prompt"], "criteria": [crit[2] for crit in q["criteria"]],
-         "answer": q["answer"], "source": q["source"][1], "summary_page": "1"} for q in c.BE505_QUESTIONS], "strict_containment": []}))
+    # A question is kept in ONE map: the first map of the fixture holds every question that names no map of its own;
+    # the showcase unit has its own companion map, which lists the ids of its collection L05 and nothing else.
+    for name in sorted({q.get("guidance_map", "lecture-01") for q in c.BE505_QUESTIONS}):
+        _write(root / f"work/lecture-review/{name}-question-map-v1.json", _json({"version": 1, "questions": [
+            {"id": q["question_id"], **({"version": "1"} if q["number"] % 2 else {}), "title": q["title"], "prompt": q["prompt"], "criteria": [crit[2] for crit in q["criteria"]],
+             "answer": q["answer"], "source": q["source"][1], "summary_page": "1"} for q in c.BE505_QUESTIONS if q.get("guidance_map", "lecture-01") == name], "strict_containment": []}))
     _write(root / "work/lecture-review/lecture-01-assessor-guide-v1.md", "# Fixture assessor guide (restricted)\n\n" + "\n".join(f"- {q['question_id']}: {q['answer']}" for q in c.BE505_QUESTIONS) + "\n")
+    _write_showcase_study_map(root)
 
     q1, q3, ps1 = c.BE505_QUESTIONS[0], c.BE505_QUESTIONS[2], c.BE505_QUESTIONS[3]
     _save_record(root, _attempt(cid, "be505-20260905-l01-q01-teachback-01", "2026-09-05T15:00:00+00:00", (q1["family_id"], 1), q1["prompt"],
@@ -679,6 +690,95 @@ def _build_be505(root: Path) -> None:
                 state="confirmed", basis="manual_review", support=support, reviewer="fixture-reviewer")
     # Lecture 02 carries no seeded links: its suggestions are produced by the preparation pipeline from the cue file.
     del l2
+
+
+# ---- be505 lecture-05: the R2 showcase unit -------------------------------------------------------------------------
+def _build_showcase_unit(root: Path, sources: list[dict]) -> None:
+    """The files of the showcase unit and their index entries: a deck with builds, steps and every kind of page, an
+    in-class sheet, and one session with a recording and ONE untimed plain-text transcript. Lectures 01 to 04 are not touched."""
+    show = c.SHOWCASE
+    unit_dir = f"materials/lectures/{show['unit']}"
+    deck_rel = f"{unit_dir}/{show['deck']}"
+    write_slide_pdf(root / deck_rel, [dict(page, footer=c.FIXTURE_NOTE) for page in show["pages"]])  # every page is labelled synthetic
+    sheet_rel = f"{unit_dir}/{show['sheet']['file']}"
+    write_pdf(root / sheet_rel, show["sheet"]["pages"])
+    session_dir = f"materials/sessions/{show['session']}-lecture"
+    schedule = c.showcase_schedule()
+    tones: list[tuple[float, float]] = []  # one pitch per stretch of the talk; silence where nothing is said
+    for row in schedule:
+        if tones and row["about"] == tones[-1][2] and row["revisit"] == tones[-1][3]:
+            tones[-1] = (tones[-1][0], row["end_ms"] / 1000, row["about"], row["revisit"])
+        else:
+            tones.append((row["start_ms"] / 1000, row["end_ms"] / 1000, row["about"], row["revisit"]))
+    length = float(show["recording_seconds"])
+    if tones[-1][1] > length:
+        raise RuntimeError("The showcase talk is longer than its recording; shorten SHOWCASE_TALK or raise recording_seconds")
+    write_wav(root / session_dir / show["recording"], [(start, end) for start, end, _, _ in tones] + [(length, length)])
+    _write(root / session_dir / show["transcript"], "\n".join(row["text"] for row in schedule) + "\n")  # no times: as most real transcripts
+    related = ["src-lecture-05-transcript", "src-lecture-05-recording", "src-lecture-05-in-class-questions"]
+    sources.append(_entry(root, "src-lecture-05-transcript", "lecture_transcript", f"{session_dir}/{show['transcript']}", date=show["session"], related=["src-lecture-05-slides"],
+                          origin=f"session:be505:{show['session']}-lecture"))
+    sources.append(_entry(root, SHOWCASE_RECORDING_ID, "lecture_recording", f"{session_dir}/{show['recording']}", role="reference", date=show["session"],
+                          related=["src-lecture-05-slides"], review="not_needed"))
+    sources.append(_entry(root, "src-lecture-05-in-class-questions", "in_class_question_sheet", sheet_rel, related=["src-lecture-05-slides"]))
+    sources.append(_entry(root, "src-lecture-05-slides", "lecture_slides", deck_rel, date=show["session"], related=related))
+
+
+def _write_showcase_study_map(root: Path) -> None:
+    """The course's own study note of the showcase unit, as a real course keeps one: the input files with their hashes
+    and a table of content | slide pages | transcript lines | questions. Synthetic rows."""
+    show = c.SHOWCASE
+
+    def digest(rel: str) -> str:
+        return hashlib.sha256((root / rel).read_bytes()).hexdigest()
+
+    deck = digest(f"materials/lectures/{show['unit']}/{show['deck']}")
+    transcript = digest(f"materials/sessions/{show['session']}-lecture/{show['transcript']}")
+    rows = "\n".join(f"| {label} | {pages} | {lines} | {questions} |" for label, pages, lines, questions in c.SHOWCASE_STUDY_MAP_ROWS)
+    _write(root / "work/lecture-review/lecture-05-source-map.md",
+           f"# Fixture lecture 05 - study map\n\n> {c.FIXTURE_NOTE}\n\n## Inputs\n\n| Input file | SHA256 |\n|---|---|\n| {show['deck']} | {deck} |\n| {show['transcript']} | {transcript} |\n\n"
+           f"## Where things are\n\n| Content | Slide pages | Transcript lines | Questions |\n|---|---|---|---|\n{rows}\n")
+
+
+def showcase_speech_root(fixture_root: Path) -> Path:
+    """The output root the fixture's synthetic speech tool wrote for the showcase recording (``build_fixture_workspace``)."""
+    return fixture_root / SPEECH_OUTPUT_DIR / f"{SHOWCASE_COURSE}-{c.SHOWCASE['unit']}"
+
+
+def _write_showcase_speech_output(fixture_root: Path, course_root: Path) -> None:
+    """What a speech tool would leave for the showcase recording, in the app's manifest contract: outputs first, the
+    manifest last. LABELLED SYNTHETIC: no audio was decoded and no speech was recognised — the words are the invented
+    talk of ``content.showcase_schedule`` with invented times, two lines replaced by other words and one stretch stated
+    as unresolved. It is only ever read by the app's own importer (``fixtures/state.py``)."""
+    from ..derived import assemble_generation  # imported here: building a workspace must not need the consumer at import time
+
+    show = c.SHOWCASE
+    recording = course_root / f"materials/sessions/{show['session']}-lecture/{show['recording']}"
+    data = recording.read_bytes()
+    sha256 = hashlib.sha256(data).hexdigest()
+    with wave.open(str(recording), "rb") as audio:
+        duration_ms = int(round(audio.getnframes() * 1000 / audio.getframerate()))
+    segments = []
+    for row in c.showcase_schedule():
+        if row["generated"] is None:
+            continue
+        words = row["generated"].split()
+        slot = (row["end_ms"] - row["start_ms"]) // len(words)
+        segments.append({"index": len(segments), "clip_start_ms": row["start_ms"], "clip_end_ms": row["end_ms"], "text": row["generated"],
+                         "words": [{"clip_start_ms": row["start_ms"] + i * slot, "clip_end_ms": row["start_ms"] + (i + 1) * slot, "text": word} for i, word in enumerate(words)]})
+    start, end = c.showcase_unresolved()
+    producer = {"tool": "synthetic-fixture-speech-double", "tool_version": FIXTURE_VERSION, "model": "none-synthetic-no-recognition", "language": "en",
+                "parameters_sha256": sha256_hex(dump_json({"word_ms": show["word_ms"], "pause_ms": show["pause_ms"]}))}
+    provenance = {"origin": "synthetic_fixture", "note": f"{c.FIXTURE_NOTE}. No audio was decoded and no speech was recognised: invented words with invented times.",
+                  "unresolved_intervals": [{"start_ms": start, "end_ms": end, "reason": "synthetic_fixture_text_withheld"}], "covers_whole_recording": False,
+                  "counts": {"segments": len(segments), "words": sum(len(segment["words"]) for segment in segments)}}
+    manifest, outputs = assemble_generation(course_id=SHOWCASE_COURSE, source_id=SHOWCASE_RECORDING_ID, generation=f"fx-showcase-{sha256[:12]}", created_at=SHOWCASE_GENERATED_AT,
+                                            recording_sha256=sha256, recording_bytes=len(data), declared_duration_ms=duration_ms, producer=producer,
+                                            window={"start_ms": 0, "end_ms": duration_ms}, clip_offset_ms=0, segments=segments, provenance=provenance)
+    out = showcase_speech_root(fixture_root)
+    for name, content in outputs.items():
+        _write(out / name, content)
+    _write(out / "manifest.json", manifest)
 
 
 # ---- lighter courses ----------------------------------------------------------------------------
@@ -744,7 +844,7 @@ def _build_planner(planner: Path, roots: dict[str, Path]) -> Path:
               "planning_policy": {"external_writes_enabled": False}}
     _write(planner / "planner-config.yaml", _yaml(config))
     # App-side read configuration of the fixture (the real one lives in the private binding): the page basis of one collection is "reviewed".
-    _write(planner / "app-read-overrides.json", _json({"reviewed_page_basis": {"be505": ["L04"]}, "deck_overrides": {
+    _write(planner / "app-read-overrides.json", _json({"reviewed_page_basis": {"be505": ["L04", "L05"]}, "deck_overrides": {
         "be562": {"lecture-02": unregistered_source_id("materials/lectures/lecture-02/Fixture 562 Lecture 02.pdf")}}}))
     _write(planner / "AGENTS.md", f"# Fixture planner instructions\n\n{c.FIXTURE_NOTE}. Each course owns its records; a plan or file is not learning evidence.\n")
     _write(planner / "protocols/tutoring-policy.md", _policy_text())
@@ -783,6 +883,7 @@ def build_fixture_workspace(root: Path) -> Path:
     names = {"be505": "BE 505", "be562": "BE 562", "be572": "BE 572", "cs542": "CS 542", "ds551": "DS 551"}
     roots = {cid: root / "University" / name for cid, name in names.items()}
     _build_be505(roots["be505"])
+    _write_showcase_speech_output(root, roots["be505"])
     for cid, spec in c.OTHER_COURSES.items():
         _build_other(roots[cid], cid, spec)
     return _build_planner(root / "University" / "Fixture Brain", roots)

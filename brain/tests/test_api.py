@@ -73,7 +73,7 @@ def test_views_are_served_and_unknown_ids_are_404_not_guessed(client):
     assert unprepared["page_count"] == 4 and {s["text_status"] for s in unprepared["slides"]} == {"not_prepared"} and unprepared["slides"][1]["occurrences"]
     assert client.get("/api/courses/be505/lectures/nope").status_code == 404 and client.get("/api/courses/zz999").status_code == 404
     assert client.get("/api/courses/be505/concepts/be505.concept.promoter").json()["center"] == "be505.concept.promoter"
-    assert client.get("/api/courses/be505/progress").json()["summary"]["skills"] == 5
+    assert client.get("/api/courses/be505/progress").json()["summary"]["skills"] == 10  # five skills of lectures 01-04 and five of the showcase unit (lecture-05)
     assert client.get("/api/courses/be505/review").json()["available_questions"] and client.get("/api/activity").json()["jobs"]
 
 
@@ -174,7 +174,7 @@ def test_startup_queues_preparation_from_updater_receipts_and_the_loop_runs_it(c
     for _ in range(3):
         client.post("/api/supervisor/tick")
     coverage = client.get("/api/coverage").json()
-    assert coverage["totals"].get("not_processed", 0) == 0 and coverage["totals"]["lecture_units"] == 11
+    assert coverage["totals"].get("not_processed", 0) == 0 and coverage["totals"]["lecture_units"] == 12
     l2 = client.get("/api/courses/be505/lectures/lecture-02").json()
     assert any(o["review_state"] == "suggested" for s in l2["slides"] for o in s["occurrences"])
     assert runtime.adapter.calls == 0  # preparation never calls the tutor

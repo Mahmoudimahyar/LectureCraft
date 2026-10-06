@@ -207,7 +207,8 @@ def test_guidance_resolves_for_every_entry_and_never_reaches_a_question_view(pro
     from lecture_brain.ownerio.catalogs import read_answer_guidance
 
     bank = projector.questions_view("be505", limit=200)
-    assert bank["guidance"] == {"adapter": "question-map-guidance/2", "files": 1, "resolved": len(content.BE505_QUESTIONS), "errors": []}
+    # Two map files: the first holds every question that names no map of its own, the showcase unit (lecture-05) has its companion map. No question is in both.
+    assert bank["guidance"] == {"adapter": "question-map-guidance/2", "files": 2, "resolved": len(content.BE505_QUESTIONS), "errors": []}
     root = settings.course("be505").root
     assert all(read_answer_guidance(root, q["question_id"]) == q["answer"] for q in content.BE505_QUESTIONS)
     payloads = [bank, projector.lecture_view("be505", "lecture-01"), projector.lecture_view("be505", "lecture-04"), projector.review_view("be505"), projector.search_index("be505"),

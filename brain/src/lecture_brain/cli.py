@@ -91,7 +91,12 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
             static = args.static or (settings.repo / "web" / "dist")
             app = create_app(runtime, static_dir=static if static.is_dir() else None)
-            print(json.dumps({"startup": runtime.startup(), "profile": settings.profile, "label": settings.fixture_label, "url": f"http://{host}:{args.port}/"}))
+            startup = runtime.startup()
+            if settings.profile == "fixture":  # synthetic showcase unit (be505 lecture-05): generated speech text, suggestions, timing links; nothing to do when already in place
+                from .fixtures import state as fixture_state
+
+                startup["fixture_state"] = fixture_state.install(settings, now=runtime.now, journal=runtime.journal, preparation=runtime.preparation)["status"]
+            print(json.dumps({"startup": startup, "profile": settings.profile, "label": settings.fixture_label, "url": f"http://{host}:{args.port}/"}))
             if not args.no_supervisor:
                 runtime.start_supervisor()
             uvicorn.run(app, host=host, port=args.port, log_level="warning")

@@ -34,14 +34,14 @@ def test_workspace_lists_all_courses_and_calls_zero_attempts_not_assessed(projec
     courses = {c_["course_id"]: c_ for c_ in view["courses"]}
     assert sorted(courses) == ["be505", "be562", "be572", "cs542", "ds551"] and view["fixture_label"].startswith("FIXTURE PROFILE")
     assert courses["cs542"]["assessed_label"] == "Not assessed" and courses["be505"]["assessed_label"] == "4 recorded attempts"
-    assert courses["be505"]["lecture_units"] == 4 and view["coverage_totals"]["lecture_units"] == 11
+    assert courses["be505"]["lecture_units"] == 5 and view["coverage_totals"]["lecture_units"] == 12
     _no_invented_measures(view)
 
 
 def test_course_view_keeps_every_unit_and_separates_preparation_from_learning(projector):
     view = projector.course_view("be505")
     lectures = {l["lecture_id"]: l for l in view["lectures"]}
-    assert sorted(lectures) == ["lecture-01", "lecture-02", "lecture-03", "lecture-04"]
+    assert sorted(lectures) == ["lecture-01", "lecture-02", "lecture-03", "lecture-04", "lecture-05"]
     assert lectures["lecture-01"]["disposition"] == "links_reviewed" and lectures["lecture-03"]["session_link"] == "none_recorded"
     assert [s["state"] for s in view["unlinked_sessions"]] == ["empty_unrecorded"]
     assert any(s["state"] == "registered_unavailable" for s in view["other_sources"])
@@ -127,7 +127,7 @@ def test_gap_view_uses_effective_corrections_and_keeps_counterevidence(projector
     assert rows["be505.skill.selection.interpret"]["status"] == "uncertain"
     assert rows["be505.skill.inducible-control.explain"]["status"] == "not_assessed" and rows["be505.skill.inducible-control.explain"]["latest"] is None
     assert integrate["study"]["priority"] == "high" and "not competence" in integrate["study"]["note"]
-    assert view["summary"]["skills"] == 5 and view["recorded_attempts"] == 4 and view["assessment_revisions"] == 1
+    assert view["summary"]["skills"] == 10 and view["recorded_attempts"] == 4 and view["assessment_revisions"] == 1  # 10: five skills of lectures 01-04, five of the showcase unit
     _no_invented_measures(view)
     empty = projector.gaps_view("cs542")
     assert {r["status"] for r in empty["skills"]} == {"not_assessed"} and empty["recorded_attempts"] == 0
@@ -229,13 +229,13 @@ def test_unit_with_several_files_offers_its_readable_candidates_and_lists_every_
     assert other_deck["media_type"] == "application/pdf" and other_deck["source_id"]
     assert all(set(m) == {"source_id", "filename", "role", "kind", "state", "registration", "rendition", "media_type", "bytes", "available"} for m in view["other_materials"])
     # The unit keeps one identity and is counted once in the all-lecture denominator.
-    assert sum(1 for l in prep.coverage()["courses"]["be505"]["lectures"]) == 4
+    assert sum(1 for l in prep.coverage()["courses"]["be505"]["lectures"]) == 5
 
 
 def test_single_file_units_list_no_other_files(projector):
     view = projector.lecture_view("be505", "lecture-01")
     assert view["other_materials"] == []
-    assert {l["lecture_id"]: l["other_materials_count"] for l in projector.course_view("be505")["lectures"]} == {"lecture-01": 0, "lecture-02": 0, "lecture-03": 0, "lecture-04": 1}
+    assert {l["lecture_id"]: l["other_materials_count"] for l in projector.course_view("be505")["lectures"]} == {"lecture-01": 0, "lecture-02": 0, "lecture-03": 0, "lecture-04": 1, "lecture-05": 1}  # the two units that hold an in-class sheet beside the deck
 
 
 def test_files_the_course_index_has_not_registered_are_identified_by_their_content(projector, settings):

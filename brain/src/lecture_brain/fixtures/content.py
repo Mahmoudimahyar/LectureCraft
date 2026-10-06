@@ -165,9 +165,136 @@ BE505_LECTURES = [
     },
 ]
 
+# ---------------------------------------------------------------------------------------------
+# be505 lecture-05: ONE showcase unit for amendment R2 (invented wording; nothing is course material)
+# ---------------------------------------------------------------------------------------------
+# The deck is written with ``builder.write_slide_pdf`` so that the source map finds every kind of page it words
+# differently: a cover, an agenda, a three-page build, a two-page step group, pages with a figure and with a formula,
+# an administrative page, a worked example and a summary. Each page has words of its own so that speech can be told
+# apart. ``about`` in SHOWCASE_TALK names the page(s) a stretch of the talk follows; it is the design of the fixture,
+# not something the app reads.
+_PLATE = [(150, 70, 230, 70), (230, 70, 230, 110), (230, 110, 150, 110), (150, 110, 150, 70)]  # the outline of a plate, in millimetres
+_BUILD_TITLE = "Building the reporter construct"
+_BUILD_BULLETS = ["Start with the promoter fragment you want to test.", "Fuse the fluorescent coding sequence downstream of it.", "Add a ribosome binding site and a terminator."]
+_STEP_PAGE = {"title": "Reading the plate", "bullets": ["Excite each well with blue light.", "Collect the green emission through a filter.", "Subtract the reading of an empty well."]}
+
+SHOWCASE = {
+    "unit": "lecture-05",
+    "deck": "Fixture Lecture 05 - R2 showcase.pdf",
+    "title": "Fixture Lecture 05 - R2 showcase",
+    "session": "2026-09-15",
+    "recording": "Fixture Lec 5 Sep 15.wav",
+    "transcript": "Fixture Lec 5 Sep 15.txt",
+    "recording_seconds": 150,
+    "word_ms": 320,   # every spoken word of the synthetic talk takes this long …
+    "pause_ms": 320,  # … and every line is followed by this pause
+    "sheet": {"file": "05 - Fixture in-class questions.pdf",
+              "pages": [{"title": "Fixture in-class questions", "bullets": ["Question 1. Sketch the reporter construct.", "Mark the three parts and the direction of reading."], "figure": "ring"}]},
+    "pages": [
+        {"title": "Reporter assays", "lines": ["Fixture lecture 5 - measuring expression with light"]},                                         # 1 cover
+        {"title": "Agenda", "bullets": ["What a reporter gene reports", "Building the reporter construct", "Reading the plate", "Calibration and a worked example"]},  # 2
+        {"title": "What a reporter gene reports", "bullets": ["A reporter gene makes a product that is easy to measure.", "Fluorescent protein: brightness follows promoter activity.",
+                                                              "The reporter stands in for a gene that is hard to see."], "figure": "ring"},  # 3 figure
+        {"title": _BUILD_TITLE, "bullets": _BUILD_BULLETS[:1]},                                                                                  # 4 build 1 of 3
+        {"title": _BUILD_TITLE, "bullets": _BUILD_BULLETS[:2]},                                                                                  # 5 build 2 of 3
+        {"title": _BUILD_TITLE, "bullets": _BUILD_BULLETS[:3]},                                                                                  # 6 build 3 of 3
+        dict(_STEP_PAGE, strokes=[*_PLATE, (165, 58, 165, 68)]),                                                                                 # 7 step 1 of 2
+        dict(_STEP_PAGE, strokes=[*_PLATE, (195, 58, 195, 68)]),                                                                                 # 8 step 2 of 2: same text, the pointer moved
+        {"title": "Background and blank wells", "bullets": ["Medium alone glows a little: autofluorescence.", "A blank well measures that background.",
+                                                            "Cells without the reporter set the floor."], "figure": "marker"},              # 9 figure; never spoken about
+        {"title": "Calibration line", "lines": ["F = k * c + b", "slope k from standards, blank b"]},                                           # 10 sparse, formula
+        {"title": "Announcements", "bullets": ["Problem set 5 is due on Friday.", "Office hours move to Thursday afternoon."]},                  # 11 administrative
+        {"title": "Worked example: reading to amount", "bullets": ["A well reads 840 units; the blank reads 40.", "The slope from the standards is 20 units per nanomole.",
+                                                                   "Amount = (840 - 40) / 20 = 40 nanomoles."]},                           # 12 worked example
+        {"title": "Dynamic range and saturation", "bullets": ["Above the linear range the detector saturates.", "Dilute the sample and measure again.",
+                                                              "Report readings only inside the range of the standards."], "figure": "ori"},  # 13 not reached in the talk
+        {"title": "Summary", "bullets": ["A reporter turns promoter activity into light.", "Subtract the blank before comparing wells.", "Use the calibration line to report amounts."]},  # 14
+    ],
+}
+
+# The talk, in the order it is spoken. Page 9 is skipped, page 3 is come back to once, one stretch is about nothing on
+# the slides, and the talk stops before pages 13 and 14.
+SHOWCASE_TALK = [
+    {"about": [2], "lines": ["Welcome back everyone, here is the agenda for today.", "Four items on the agenda."]},
+    {"about": [3], "lines": [
+        "A reporter gene makes a product that we can measure easily.",
+        "Here the product is a fluorescent protein.",
+        "Its brightness follows the activity of the promoter in front of it.",
+        "So the reporter stands in for a gene that is hard to see.",
+        "We measure brightness, and we read it as promoter activity.",
+        "Keep in mind what the reporter gene reports and what it does not."]},
+    {"about": [4, 5, 6], "lines": [
+        "Now we build the reporter construct step by step.",
+        "Start with the promoter fragment you want to test.",
+        "That fragment is the only part that changes between constructs.",
+        "Next, fuse the fluorescent coding sequence downstream of the fragment.",
+        "The coding sequence is the same in every construct we build.",
+        "Then add a ribosome binding site so the message is translated.",
+        "Finally add a terminator so transcription stops cleanly.",
+        "Promoter fragment, coding sequence, binding site, terminator: that is the construct.",
+        "Any questions on how the construct is put together?"]},
+    {"about": [7, 8], "lines": [
+        "Now to reading the plate, one well at a time.",
+        "The reader excites each well with blue light.",
+        "Then it collects the green emission through a filter.",
+        "The second step moves the light to the next well.",
+        "At the end we subtract the reading of an empty well.",
+        "So reading the plate is excite, collect, subtract."]},
+    {"about": [10], "lines": [
+        "A reading alone is not an amount, so we need a calibration line.",
+        "The calibration line comes from standards of known amount.",
+        "Its slope is k, and the blank reading is b.",
+        "You fit the calibration line once for every single plate reader.",
+        "Write the slope and the blank down in your own notebook today."]},
+    {"about": [], "lines": [
+        "By the way, can everyone at the back hear me?",
+        "Somebody left an umbrella here on Tuesday.",
+        "It is the red one by the door.",
+        "Okay, thank you, let us carry on."]},
+    {"about": [3], "revisit": True, "lines": [
+        "Let me go back to the reporter gene slide for a moment.",
+        "Remember, the reporter gene only reports promoter activity.",
+        "Brightness is promoter activity, not the health of the cell.",
+        "That is what the fluorescent protein can and cannot tell you."]},
+    {"about": [12], "lines": [
+        "Let us finish with a worked example.",
+        "A well reads 840 units and the blank reads 40.",
+        "The slope from the standards is 20 units per nanomole.",
+        "So the amount is 800 divided by 20, which is 40 nanomoles.",
+        "That is the whole worked example; we stop here for today."]},
+]
+# What the synthetic generated speech text says in place of two transcript lines (misheard: nothing of the line survives).
+SHOWCASE_GARBLED = {14: "Tan ladder rival zone fine dings sight sold mess edge trance.", 21: "Sack hand stub moose alley tooth annex swell mint grove."}
+# Two transcript lines whose time the synthetic generation states as unresolved: text withheld, 8 seconds.
+SHOWCASE_WITHHELD = (27, 28)
+
+
+def showcase_schedule() -> list[dict]:
+    """Every transcript line of the showcase talk with the time the synthetic recording gives it, in whole milliseconds:
+    ``{line, about, revisit, text, start_ms, end_ms, generated}``. ``generated`` is what the synthetic generated speech
+    text holds for the line: the line itself, other words (a garbled line) or ``None`` (withheld). All of it is invented."""
+    rows: list[dict] = []
+    clock = 0
+    for block in SHOWCASE_TALK:
+        for text in block["lines"]:
+            number = len(rows) + 1
+            end = clock + len(text.split()) * SHOWCASE["word_ms"]
+            rows.append({"line": number, "about": list(block["about"]), "revisit": bool(block.get("revisit")), "text": text, "start_ms": clock, "end_ms": end,
+                         "generated": None if number in SHOWCASE_WITHHELD else SHOWCASE_GARBLED.get(number, text)})
+            clock = end + SHOWCASE["pause_ms"]
+    return rows
+
+
+def showcase_unresolved() -> tuple[int, int]:
+    """The withheld stretch of the synthetic generation: from the start of the first withheld line to the start of the line after the last."""
+    rows = {row["line"]: row for row in showcase_schedule()}
+    return rows[SHOWCASE_WITHHELD[0]]["start_ms"], rows[SHOWCASE_WITHHELD[-1] + 1]["start_ms"]
+
+
 BE505_TOPICS = [
     {"topic_id": "be505.topic.plasmids", "label": "Plasmid structure", "aliases": ["vectors"]},
     {"topic_id": "be505.topic.expression-control", "label": "Expression control", "aliases": []},
+    {"topic_id": "be505.topic.reporter-assays", "label": "Reporter assays", "aliases": []},
 ]
 
 BE505_CONCEPTS = [
@@ -176,6 +303,10 @@ BE505_CONCEPTS = [
     {"concept_id": "be505.concept.selectable-marker", "label": "Selectable marker", "topic_ids": ["be505.topic.plasmids"], "aliases": ["resistance marker"]},
     {"concept_id": "be505.concept.replication-vs-transcription", "label": "Replication versus transcription", "topic_ids": ["be505.topic.plasmids"], "aliases": []},
     {"concept_id": "be505.concept.inducible-promoter", "label": "Inducible promoter", "topic_ids": ["be505.topic.expression-control"], "aliases": []},
+    {"concept_id": "be505.concept.reporter-gene", "label": "Reporter gene", "topic_ids": ["be505.topic.reporter-assays"], "aliases": ["reporter construct"]},
+    {"concept_id": "be505.concept.ribosome-binding-site", "label": "Ribosome binding site", "topic_ids": ["be505.topic.reporter-assays"], "aliases": []},
+    {"concept_id": "be505.concept.blank-subtraction", "label": "Blank subtraction", "topic_ids": ["be505.topic.reporter-assays"], "aliases": []},
+    {"concept_id": "be505.concept.calibration-line", "label": "Calibration line", "topic_ids": ["be505.topic.reporter-assays"], "aliases": ["standard curve"]},
 ]
 
 BE505_SKILLS = [
@@ -189,6 +320,17 @@ BE505_SKILLS = [
      "target": "Distinguish plasmid replication from gene transcription in a new situation.", "source": ("src-lecture-01-slides", "slides 2-3"), "priority": "high", "decision": "develop"},
     {"skill_id": "be505.skill.inducible-control.explain", "topic": "be505.topic.expression-control", "ability": "explain", "concept": "be505.concept.inducible-promoter",
      "target": "Explain how an inducer switches on an inducible promoter.", "source": ("src-lecture-02-slides", "slides 1-2"), "priority": "unknown", "decision": "undecided"},
+    {"skill_id": "be505.skill.reporter.explain", "topic": "be505.topic.reporter-assays", "ability": "explain", "concept": "be505.concept.reporter-gene",
+     "target": "Explain what a reporter gene reports and how the reporter construct is put together.", "source": ("src-lecture-05-slides", "slides 3-6"), "priority": "medium", "decision": "undecided"},
+    {"skill_id": "be505.skill.binding-site.explain", "topic": "be505.topic.reporter-assays", "ability": "explain", "concept": "be505.concept.ribosome-binding-site",
+     "target": "Explain why a reporter construct carries a ribosome binding site.", "source": ("src-lecture-05-slides", "slide 6"), "priority": "unknown", "decision": "undecided"},
+    {"skill_id": "be505.skill.blank.interpret", "topic": "be505.topic.reporter-assays", "ability": "interpret", "concept": "be505.concept.blank-subtraction",
+     "target": "Interpret a plate reading once the blank has been subtracted.", "source": ("src-lecture-05-slides", "slides 7-9"), "priority": "medium", "decision": "undecided"},
+    # Two skills of one concept, with different actions: computing with the line and saying what its slope stands for.
+    {"skill_id": "be505.skill.calibration.calculate", "topic": "be505.topic.reporter-assays", "ability": "calculate", "concept": "be505.concept.calibration-line",
+     "target": "Convert a reading into an amount with the calibration line.", "source": ("src-lecture-05-slides", "slides 10, 12"), "priority": "unknown", "decision": "undecided"},
+    {"skill_id": "be505.skill.calibration.explain", "topic": "be505.topic.reporter-assays", "ability": "explain", "concept": "be505.concept.calibration-line",
+     "target": "Explain what the slope and the blank of the calibration line stand for.", "source": ("src-lecture-05-slides", "slide 10"), "priority": "unknown", "decision": "undecided"},
 ]
 
 BE505_QUESTIONS = [
@@ -259,6 +401,52 @@ BE505_QUESTIONS = [
      "family_id": "be505.family.question.ps03-q01", "origin": "course_source", "source": ("src-ps-03-brief", "Question 1, including all subparts, supplied figures and numerical givens"), "page": 1,
      "criteria": [("be505.skill.inducible-control.explain", "be505.concept.inducible-promoter", "States one design change that lowers leaky expression.", ["explain"])],
      "answer": "For example a tighter operator or a lower-copy origin."},
+    # ---- lecture-05, the R2 showcase unit. "guidance_map" names the unit's own companion question map (ids of collection L05 only). ----
+    # Collection L05 has a reviewed page basis (app-read-overrides.json), so a page its locator names is an EXACT anchor; pages and
+    # transcript lines stay separate anchor types.
+    {"question_id": "BE505-L05-Q01", "collection": "L05", "number": 1, "title": "Order of the reporter construct", "topic": "be505.topic.reporter-assays", "guidance_map": "lecture-05",
+     "prompt": "List the parts of the reporter construct in the order they are added, and say what the terminator is for.",
+     "family_id": "be505.family.question.l05-q01", "origin": "generated_practice", "source": ("src-lecture-05-slides", "Slides 4-6; transcript 9-17"), "page": None,
+     "criteria": [("be505.skill.reporter.explain", "be505.concept.reporter-gene", "Names promoter fragment, coding sequence, binding site and terminator in that order and ties the terminator to the end of transcription.", ["explain"])],
+     "answer": "Promoter fragment, then the fluorescent coding sequence, then the ribosome binding site and the terminator; the terminator ends transcription."},
+    # Three questions whose locator names no page: the lecture owns them all the same, and a suggestions file may propose pages.
+    {"question_id": "BE505-L05-Q02", "collection": "L05", "number": 2, "title": "Why the construct is built this way", "topic": "be505.topic.reporter-assays", "guidance_map": "lecture-05",
+     "prompt": "Explain why the fluorescent coding sequence sits downstream of the promoter fragment, why a ribosome binding site is added, and what you would measure to compare two fragments.",
+     "family_id": "be505.family.question.l05-q02", "origin": "generated_practice",
+     "source": ("src-lecture-05-slides", "lecture scientific content; exact mapping in companion hierarchy/source map"), "page": None,
+     "criteria": [
+         ("be505.skill.reporter.explain", "be505.concept.reporter-gene", "Links the downstream position of the coding sequence to being transcribed from the tested fragment.", ["explain"]),
+         ("be505.skill.binding-site.explain", "be505.concept.ribosome-binding-site", "Links the ribosome binding site to translation of the message.", ["explain"]),
+         ("be505.skill.blank.interpret", "be505.concept.blank-subtraction", "Names brightness after blank subtraction as the quantity compared between fragments.", ["interpret"]),
+     ],
+     "answer": "Downstream so the tested fragment drives its transcription; the binding site so the message is translated; compare blank-corrected brightness."},
+    {"question_id": "BE505-L05-Q03", "collection": "L05", "number": 3, "title": "Steps of a plate reading", "topic": "be505.topic.reporter-assays", "guidance_map": "lecture-05",
+     "prompt": "Describe the steps of reading one well of the plate, in order.",
+     "family_id": "be505.family.question.l05-q03", "origin": "generated_practice",
+     "source": ("src-lecture-05-slides", "lecture scientific content; exact mapping in companion hierarchy/source map"), "page": None,
+     "criteria": [("be505.skill.blank.interpret", "be505.concept.blank-subtraction", "Gives excitation, collection of emission and subtraction of the empty-well value, in order.", ["interpret"])],
+     "answer": "Excite with blue light, collect the green emission through the filter, subtract the empty-well reading."},
+    {"question_id": "BE505-L05-Q04", "collection": "L05", "number": 4, "title": "From reading to amount", "topic": "be505.topic.reporter-assays", "guidance_map": "lecture-05",
+     "prompt": "A well reads 500 units and the blank reads 20. With a slope of 12 units per nanomole, compute the amount and say what the slope stands for.",
+     "family_id": "be505.family.question.l05-q04", "origin": "generated_practice",
+     "source": ("src-lecture-05-slides", "lecture scientific content; exact mapping in companion hierarchy/source map"), "page": None,
+     "criteria": [
+         ("be505.skill.calibration.calculate", "be505.concept.calibration-line", "Subtracts the blank, divides by the slope and reaches 40 nanomoles.", ["calculate"]),
+         ("be505.skill.calibration.explain", "be505.concept.calibration-line", "Describes the slope as reading per unit amount, obtained from the standards.", ["explain"]),
+     ],
+     "answer": "(500 - 20) / 12 = 40 nanomoles; the slope is the reading gained per nanomole, fitted from the standards."},
+    # A collection without a reviewed page basis: the page its locator names is a STATED anchor.
+    {"question_id": "BE505-L05-PRACTICE-Q01", "collection": "L05-practice", "number": 1, "title": "What is subtracted first", "topic": "be505.topic.reporter-assays",
+     "prompt": "In the worked example, which number is taken away first, and why?",
+     "family_id": "be505.family.question.l05-practice-q01", "origin": "generated_practice", "source": ("src-lecture-05-slides", "Slide 12"), "page": None,
+     "criteria": [("be505.skill.blank.interpret", "be505.concept.blank-subtraction", "Says the blank reading goes first because that signal does not come from the reporter.", ["interpret"])],
+     "answer": "The blank, 40 units: it is background that the reporter did not produce."},
+    # The instructor's own sheet of the unit: no wording in the catalog and no page of the deck named.
+    {"question_id": "BE505-L05-CLASS-Q01", "collection": "L05-class", "number": 1, "title": "In-class question 1", "prompt": None, "topic": "be505.topic.reporter-assays",
+     "prompt_status": "Read the original question and diagram (synthetic fixture).", "bank_path": "materials/lectures/lecture-05/05 - Fixture in-class questions.pdf",
+     "family_id": "be505.family.question.l05-class-q01", "origin": "course_source", "source": ("src-lecture-05-in-class-questions", "Question 1 with its diagram; read the original sheet"), "page": None,
+     "criteria": [("be505.skill.reporter.explain", "be505.concept.reporter-gene", "Sketch labels fragment, coding sequence and terminator and shows which way the construct is read.", ["explain"])],
+     "answer": "A line with three labelled boxes in the order fragment, coding sequence, terminator, and an arrow pointing from the fragment."},
 ]
 
 PS03_QUESTION_LINES = ["Fixture Problem Set 03", "Question 1. A culture shows product before any inducer is added.",
@@ -274,6 +462,39 @@ BE505_RELATIONSHIPS = [
      "rationale": "Both require reasoning about when transcription happens."},
     {"from_question": "BE505-L04-Q01", "to_question": "BE505-PS03-Q01", "relation": "diagnostic_prerequisite",
      "rationale": "Explaining induction timing is a narrower step used when the leaky-expression design question fails."},
+    {"from_question": "BE505-L05-Q01", "to_question": "BE505-L05-Q02", "relation": "diagnostic_prerequisite",
+     "rationale": "Listing the parts in order is a narrower step used when the reasons for that order are not given."},
+]
+
+# The course's own study map of lecture-05 (work/lecture-review/lecture-05-source-map.md): content | slide pages | transcript lines | questions.
+# Three rows a reader can take and one it must skip (its pages cell is not a list of numbers). The first row is a section in
+# the proper sense: four pages and seventeen lines, with no page of its own; the second has the very lines the talk spends on
+# its pages; the third names a few lines inside a longer stretch.
+SHOWCASE_STUDY_MAP_ROWS = [
+    ("The reporter gene and its construct", "3-6", "3-17", "Q1 all, Q2 part"),
+    ("Reading the plate", "7-8", "18-23", "Q3"),
+    ("Worked example, the numbers", "12", "38-40", ""),
+    ("Calibration line", "see the handout", "24-26", "Q4"),
+]
+
+# Synthetic suggestions for the questions whose locator names no page (app-private state, never a course file; see fixtures/state.py).
+# No agent pass produced them: they are written out here so that every state of a suggested link can be seen.
+SHOWCASE_SUGGESTIONS = [
+    {"question_id": "BE505-L05-Q02", "pages": [5, 6], "criteria": [1, 2], "per_page": {5: [1], 6: [1, 2]}, "coverage": "partial", "state": "agent_inferred", "verifier": None,
+     "rationale": "Synthetic fixture: the second build adds the coding sequence after the fragment and the third adds the binding site. Neither page says what is measured."},
+    {"question_id": "BE505-L05-Q03", "pages": [7, 8], "criteria": [1], "per_page": None, "coverage": "main", "state": "agent_reviewed",
+     "verifier": {"verdict": "upheld", "note": "Synthetic fixture: both steps of the page list the three actions in order."},
+     "rationale": "Synthetic fixture: the page lists excite, collect and subtract as its three bullets."},
+    {"question_id": "BE505-L05-Q04", "pages": [10], "criteria": [2], "per_page": None, "coverage": "partial", "state": "agent_reviewed",
+     "verifier": {"verdict": "narrowed", "note": "Synthetic fixture: narrowed to the page that defines the line; the page with the worked numbers was dropped and only the slope criterion kept."},
+     "rationale": "Synthetic fixture: the page writes the line and names its slope and blank."},
+    {"question_id": "BE505-L05-Q04", "pages": [13], "criteria": [1], "per_page": None, "coverage": "partial", "state": "agent_reviewed",
+     "verifier": {"verdict": "rejected", "note": "Synthetic fixture: the page is about where the line stops holding; it shares words with the question and supports none of its steps."},
+     "rationale": "Synthetic fixture: the page mentions readings and the standards."},
+]
+SHOWCASE_NO_CANDIDATE = [
+    {"question_id": "BE505-L05-CLASS-Q01", "why": "Synthetic fixture: no page of the deck shows the sketch this question asks for; it is answered on the in-class sheet.",
+     "verifier": {"confirmed": True, "note": "Synthetic fixture: checked against all fourteen pages."}},
 ]
 
 PS01_PAGES = [

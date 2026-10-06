@@ -35,6 +35,8 @@ HEADERS = [
     (["Summary location", "Concepts", "Slide pages", "Transcript lines", "Diagnostic coverage"], 1, 2, 3, 4),
 ]
 PLAIN = ["Concept", "Slide pages", "Transcript lines", "Diagnostic", "Summary"]
+# What the generated fixture course itself keeps for its showcase unit (fixtures/builder.py): a study note and the unit's companion question map.
+SHOWCASE_NOTES = ("lecture-05-source-map.md", "lecture-05-question-map-v1.json")
 
 
 def table(header: list[str], *rows: list[str]) -> str:
@@ -306,7 +308,15 @@ def test_a_question_reference_that_cannot_be_read_gives_no_question_and_the_row_
 # ---- the files that are read -------------------------------------------------------------------------
 @pytest.fixture()
 def root(settings) -> Path:
-    return settings.course("be505").root
+    """The synthetic course with no study note of its own: every case below writes the notes it reads.
+
+    The fixture's showcase unit (lecture-05) ships a note and a companion question map; they are taken out of this
+    copy first. That note is read where it belongs: ``test_the_showcase_note_of_the_fixture_is_read_as_written``
+    below, and through the lecture view in ``test_fixture_showcase.py``."""
+    course = settings.course("be505").root
+    for name in SHOWCASE_NOTES:
+        (course / "work" / "lecture-review" / name).unlink()
+    return course
 
 
 @pytest.fixture()
@@ -882,3 +892,24 @@ def test_reading_and_resolving_write_nothing_anywhere(workspace, settings, root,
     assert sm.section_ties(maps, bank) and sm.resolve_section_ties(maps, bank)["unresolved"] and sm.timing_hints(maps, "lecture-01")
     assert tree(workspace) == before and settings.state_dir.exists() == state_before
     assert not list(workspace.rglob("__pycache__")) and not [p for p in workspace.rglob("*") if p.name.endswith((".tmp", ".lock", ".bak"))]
+
+
+def test_the_showcase_note_of_the_fixture_is_read_as_written(settings):
+    """The one study note the generated course ships (lecture-05, synthetic rows): three rows taken, one skipped, both
+    files bound by their bytes, and question numbers settled by the unit's own companion question map."""
+    course = settings.course("be505").root
+    assert all((course / "work" / "lecture-review" / name).is_file() for name in SHOWCASE_NOTES)
+    inv = build_inventory(settings.course("be505"))
+    maps = sm.read_study_maps(course, inv)
+    assert list(maps["lectures"]) == ["lecture-05"] and maps["problems"] == []
+    record = maps["lectures"]["lecture-05"]
+    assert [(r["row"], r["pages"], r["transcript_ranges"], asked(r)) for r in record["rows"]] == [
+        (1, [3, 4, 5, 6], [[3, 17]], [(1, "all"), (2, "part")]), (2, [7, 8], [[18, 23]], [(3, None)]), (3, [12], [[38, 40]], [])]
+    assert [(s["row"], s["reason"], s["column"], s["text"]) for s in record["skipped"]] == [(4, "pages_cell_not_numeric", "pages", "see the handout")]
+    assert (record["deck"]["state"], record["deck"]["basis"], record["deck"]["bytes_verified"], record["deck"]["on_displayed_deck"]) == ("current", "listed_sha256_match", True, True)
+    assert (record["transcript"]["state"], record["transcript"]["bytes_verified"]) == ("current", True)
+    bank = build_question_bank(read_question_index(course, "be505"), inv)
+    resolved = sm.resolve_section_ties(maps, bank)
+    assert sorted(resolved["ties"]) == ["BE505-L05-Q01", "BE505-L05-Q02", "BE505-L05-Q03"] and resolved["unresolved"] == []
+    assert {tie["number_basis"] for rows in resolved["ties"].values() for tie in rows} == {"companion_question_map"}, "three collections of the unit have a question 1"
+    assert [(h["pages"], h["transcript_ranges"], h["bytes_verified"]) for h in sm.timing_hints(maps, "lecture-05")] == [([3, 4, 5, 6], [[3, 17]], True), ([7, 8], [[18, 23]], True), ([12], [[38, 40]], True)]

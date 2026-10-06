@@ -16,10 +16,11 @@ from typing import Any
 
 import yaml
 
+from . import concept_graph
 from . import contracts as c
 from .annotations import AnnotationStore, media_duration_ms, precision_of
 from .config import Settings
-from .evidence import CONDITIONS, CONDITIONS_VERSION, condition_of, facet_of, facet_summary, load_facet_mapping
+from .evidence import EvidenceReader, CONDITIONS, CONDITIONS_VERSION, condition_of, facet_of, facet_summary, load_facet_mapping
 from .outline import OUTLINE_VERSION, OutlineModel
 from .fsutil import replace_atomic
 from .journal import Journal, JobState as S, TERMINAL
@@ -492,23 +493,29 @@ class Projector:
     def outline_view(self, course_id: str, *, scope: str = "course", parent: str | None = None, limit: int = 200) -> dict[str, Any]:
         """One level of the typed outline for a scope (R1-G1…G4). Raises ``ValueError`` for a scope that does not exist."""
         model, bank, decks, catalogs = self._outline(course_id)
-        resolved = model.scope(scope, decks.get)
+        support = None
+        parts = scope.split(":")
+        if parts[0] == "slide" and len(parts) == 3 and parts[1] in bank["lectures"] and parts[2].isdigit():
+            # What the page's logical slide supports comes from the same enriched lecture view the workspace shows (R2-C8).
+            support = concept_graph.slide_support_from_lecture_view(self.lecture_view(course_id, parts[1]) or {}, int(parts[2]))
+        resolved = concept_graph.resolve_scope(model, scope, decks.get, support)
         skills = {r["skill_id"]: r for r in self.gaps_view(course_id)["skills"]}
+        reader = EvidenceReader(self._records(course_id), model)
 
         def decorate(node_id: str, kind: str | None) -> dict:
+            extra = {"evidence": reader.compact(node_id), **concept_graph.node_support(resolved, node_id)}
             if kind == "skill":
                 row = skills[node_id]
-                return {"status": row["status"], "facet": row["facet"]["facet"] or row["facet"]["state"], "episodes": row["episodes"]}
+                return {"status": row["status"], "facet": row["facet"]["facet"] or row["facet"]["state"], "episodes": row["episodes"], **extra}
             if kind == "question":
                 link = bank["questions"][node_id]
-                return {"collection": link["collection"], "slide_anchor": link["slide_anchor"], "prompt_in_index": link["prompt_in_index"]}
+                return {"collection": link["collection"], "slide_anchor": link["slide_anchor"], "prompt_in_index": link["prompt_in_index"], **extra}
             if kind in {"topic", "concept"}:
-                return {"questions": len(set(model.questions_of(node_id)) & resolved["question_ids"]) if resolved["question_ids"] is not None else len(model.questions_of(node_id)),
-                        "skills": len(model.skills_of(node_id))}
-            return {}
+                return {**concept_graph.node_counts(model, resolved, node_id), **extra}
+            return extra
 
         page = model.rows(resolved, parent, limit=limit, decorate=decorate)
-        public = {k: v for k, v in resolved.items() if k != "question_ids"}
+        public = concept_graph.public_scope(resolved)
         public["questions_in_scope"] = len(resolved["question_ids"]) if resolved["question_ids"] is not None else model.canonical_counts["question"]
         return {"course_id": course_id, "outline_version": OUTLINE_VERSION, "scope": public, "canonical_counts": model.canonical_counts, **page, "catalog_problems": catalogs["problems"],
                 "note": "An outline of the course's own catalogs. One object can appear on several branches; it is counted once. Relations between questions are links, not branches, and grant no credit."}
@@ -545,9 +552,20 @@ class Projector:
         evidence: dict[str, Any] = {"unit": "skill", "rules": gaps["rules"], "skills": evidence_skills[:60], "skills_total": len(evidence_skills)}
         if kind == "criterion":
             evidence.update(criterion_observations=0, note="No attempt records an observation for this criterion itself. Evidence is recorded on its skill, shown here.")
-        return {"course_id": course_id, "outline_version": OUTLINE_VERSION, "node": node, "parents": model.parents(node_id), "sources": sources[:80], "sources_total": len(sources),
-                "questions": [self._question_row(bank["questions"][q], index[q]) for q in question_ids[:50]], "questions_total": len(question_ids), "evidence": evidence,
-                "links": model.links(node_id)}
+        out = {"course_id": course_id, "outline_version": OUTLINE_VERSION, "node": node, "parents": model.parents(node_id), "sources": sources[:80], "sources_total": len(sources),
+               "questions": [self._question_row(bank["questions"][q], index[q]) for q in question_ids[:50]], "questions_total": len(question_ids), "evidence": evidence,
+               "links": model.links(node_id)}
+        # R2: openable source pages, the evidence state of every observation, and the questions with their own evidence.
+        inventory = build_inventory(self.settings.course(course_id))
+        unit_of = {item["source_id"]: lecture["lecture_id"] for lecture in inventory["lectures"] for item in [*lecture["decks"], *lecture["extra_materials"]]}
+        detail = concept_graph.node_detail(model, node_id, course_id=course_id, evidence=EvidenceReader(self._records(course_id), model),
+                                           sources_of=concept_graph.catalog_sources(model, deck_source_id_of=_decks.get, lecture_of_source=unit_of.get))
+        if detail is not None:
+            r1_rows = {row["question_id"]: row for row in out["questions"]}
+            out.update(sources=[{"kind": "pages", **row} for row in detail["sources"]], sources_total=detail["sources_total"],
+                       questions=[{**r1_rows.get(row["question_id"], {}), **row} for row in detail["questions"]], questions_total=detail["questions_total"],
+                       evidence={**out["evidence"], **detail["evidence"]}, definition=detail["definition"])
+        return out
 
     def _shared_links(self, course_id: str) -> list[dict]:
         path = self.settings.planner_root / "shared-learning" / "concepts.yaml"

@@ -33,6 +33,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from . import __version__ as APP_VERSION
+from . import concept_graph, inferred_anchors
 from . import contracts as c
 from .acceptance import run_acceptance
 from .fsutil import ExclusiveConflict, publish_exclusive
@@ -504,6 +505,10 @@ def create_app(runtime: Runtime, *, extra_hosts: set[str] | None = None, static_
     @app.post("/api/acceptance/run")
     def acceptance():
         return locked(lambda: run_acceptance(settings, runtime.journal, reports_dir=settings.state_dir / "reports", preparation=runtime.preparation))
+
+    # ---- amendment R2 read side: each module registers its own routes (docs/engineering/r2-read-api.md, section 4) ----
+    concept_graph.register(app, runtime, locked)
+    inferred_anchors.register(app, runtime, locked)
 
     # ---- build identity: which code, profile, built app and preparation state this process serves -------------------
     # The code identity is resolved once, here, at process start; the built app and the preparation state are read per request.

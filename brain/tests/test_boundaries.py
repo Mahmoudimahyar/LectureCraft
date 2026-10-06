@@ -89,6 +89,7 @@ STATE_CHANGING_ROUTES = {
     ("POST", "/api/fixture/native-mode"), ("POST", "/api/probe-native"), ("POST", "/api/maintenance/apply"), ("POST", "/api/prepare/{course_id}"),
     ("POST", "/api/export"), ("POST", "/api/cleanup/{course_id}/apply"), ("POST", "/api/evidence-deletion"), ("POST", "/api/acceptance/run"),
     ("POST", "/api/courses/{course_id}/questions/{question_id}/verify-rendition"),
+    ("POST", "/api/courses/{course_id}/suggestions/{suggestion_id}/decision"),
 }
 
 
@@ -161,6 +162,21 @@ def test_every_state_changing_route_of_the_read_only_profile_leaves_course_and_p
         call("POST", "/api/courses/{course_id}/resume/resolve", "/api/courses/be505/resume/resolve", {400}, json={"chosen": "none", "set_aside": []})
         call("POST", "/api/fixture/native-mode", "/api/fixture/native-mode", {404}, json={"mode": "normal"})
         call("POST", "/api/pairing/{key_id}/revoke", f"/api/pairing/{device.key_id}/revoke", {200})
+        # A learner's decision on a suggested question link is a local record in the app's own state (R2-Q5).
+        from lecture_brain import inferred_anchors
+
+        context = inferred_anchors.course_context(settings, "be505")
+        slides = next(d for l in context["inventory"]["lectures"] if l["lecture_id"] == "lecture-01" for d in l["decks"] if d["source_id"] == "src-lecture-01-slides")
+        deck_sha = context["deck_sha256_of"](slides)
+        inferred_anchors.store(settings, "be505", {
+            "contract": "ll.inferred-anchors/1", "course_id": "be505", "produced_at": "2026-10-05T12:00:00Z", "producer": "claude-session",
+            "question_index_sha256": context["index"]["sha256"],
+            "items": [{"question_id": "BE505-L01-Q04", "question_version": 1, "lecture_id": "lecture-01", "source_id": "src-lecture-01-slides", "source_sha256": deck_sha,
+                       "pages": [2, 3], "regions": None, "criteria": ["BE505-L01-Q04.C01"], "coverage": "partial",
+                       "rationale": "Synthetic: the named pages show the parts this criterion asks about.", "state": "agent_inferred", "verifier": None}]})
+        suggestion = inferred_anchors.suggestion_id("BE505-L01-Q04", 1, deck_sha, [2, 3])
+        call("POST", "/api/courses/{course_id}/suggestions/{suggestion_id}/decision", f"/api/courses/be505/suggestions/{suggestion}/decision", {200}, json={"decision": "confirmed"})
+        assert (tmp_path / "private-state" / "inferred-anchors" / "decisions" / "be505" / f"{suggestion}.r1.json").is_file()
         assert used == STATE_CHANGING_ROUTES
 
         assert {cid: _tree(root) for cid, root in roots.items()} == before

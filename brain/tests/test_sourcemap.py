@@ -15,7 +15,7 @@ import pytest
 
 from lecture_brain import sourcemap as sm
 from lecture_brain.config import TERM, CourseBinding, Settings
-from lecture_brain.fixtures.builder import add_inline_image, write_slide_pdf, write_synthetic_pptx
+from lecture_brain.fixtures.builder import add_inline_image, set_picture_decode, write_slide_pdf, write_synthetic_pptx
 from lecture_brain.ownerio.inventory import build_inventory
 
 COURSE = "be505"
@@ -498,14 +498,45 @@ def test_what_carries_a_join_when_most_of_the_drawing_reads_as_different(tmp_pat
     assert pair["relation"] == "text_superset_visual_change" and pair["measures"]["drawing"] == {"shapes": [5, 5], "common": 4}
 
 
-def test_a_filled_box_added_in_the_paint_of_the_paper_does_not_stop_a_build(tmp_path):
-    # Slides are full of boxes filled in the paper's paint (a framed formula on a white page): adding one with the new text is still a build.
+def test_a_cover_laid_while_something_is_added_makes_a_step_not_a_build(tmp_path):
+    # A fill in the paper's paint that the earlier page does not have may hide something of the earlier page. The later page is then
+    # not known to show all that the earlier page shows — which is what "build" and "cumulative" say — so the pair is one slide in two states.
+    white = (255, 255, 255)
     first = {"title": "Cell volume", "lines": ["Given the dimensions of the cell from the figure", "The volume is about one cubic micron"]}
-    second = {**first, "lines": [*first["lines"], "The mass follows from the density of water"], "boxes": [(20, 110, 100, 12, (255, 255, 255))], "strokes": [(20, 110, 120, 110)]}
-    source_map = sm.build_source_map(_deck(tmp_path, [OPENING, first, second, CLOSING]))
+    grown = {**first, "lines": [*first["lines"], "The mass follows from the density of water"], "strokes": [(20, 110, 120, 110)]}
+    source_map = sm.build_source_map(_deck(tmp_path, [OPENING, first, {**grown, "boxes": [(20, 110, 100, 12, white)]}, CLOSING]))
     pair = _pair(source_map, 2)
-    assert pair["relation"] == "text_superset" and pair["kind"] == "incremental_build" and pair["confidence"] == "high"
-    assert "cover_added" in pair["signals"] and pair["measures"]["covers"] == [0, 1] and _slide_of(source_map, 2)["cumulative"] is True
+    assert pair["relation"] == "text_superset_visual_change" and pair["kind"] == "animation_steps" and pair["confidence"] == "medium"
+    assert "cover_added" in pair["signals"] and pair["measures"]["covers"] == [0, 1] and _slide_of(source_map, 2)["cumulative"] is False
+    assert sm.describe_page(source_map, 3)["label"] == "PDF page 3 of 4 · step 2 of 2"
+    # The same text, a box in the paper's paint laid over the old curve, and a new curve drawn: not a build either.
+    curve = {**PLOT, "strokes": AXES + RISING}
+    redrawn = sm.build_source_map(_deck(tmp_path, [OPENING, curve, {**curve, "strokes": AXES + RISING + FALLING[:1], "boxes": [(150, 60, 95, 95, white)]}, CLOSING], name="redrawn.pdf"))
+    pair = _pair(redrawn, 2)
+    assert pair["relation"] == "identical_text_visual_change" and pair["kind"] == "animation_steps" and pair["confidence"] == "medium" and "cover_added" in pair["signals"]
+    assert _slide_of(redrawn, 2)["cumulative"] is False
+    # Without the cover both are builds: everything of the earlier page is on the later page, and more.
+    plain = sm.build_source_map(_deck(tmp_path, [OPENING, first, grown, CLOSING], name="plain.pdf"))
+    assert _pair(plain, 2)["relation"] == "text_superset" and _pair(plain, 2)["kind"] == "incremental_build" and _pair(plain, 2)["confidence"] == "high"
+    added = sm.build_source_map(_deck(tmp_path, [OPENING, curve, {**curve, "strokes": AXES + RISING + FALLING[:1]}, CLOSING], name="added.pdf"))
+    assert _pair(added, 2)["relation"] == "identical_text_drawing_grows" and _slide_of(added, 2)["cumulative"] is True
+    # A box with an outline somebody drew is a shape, not a cover: adding a framed formula is still a build.
+    framed = sm.build_source_map(_deck(tmp_path, [OPENING, first, {**grown, "boxes": [(20, 110, 100, 12, white, "red")]}, CLOSING], name="framed.pdf"))
+    assert _pair(framed, 2)["relation"] == "text_superset" and _pair(framed, 2)["kind"] == "incremental_build" and "cover_added" not in _pair(framed, 2)["signals"]
+
+
+def test_growing_text_whose_drawing_could_not_be_compared_is_a_step_never_a_firm_build(tmp_path):
+    first = {**PROSE, "strokes": AXES + RISING}
+    second = {**PROSE, "lines": [*PROSE["lines"], "The insert runs in the fourth lane"], "strokes": AXES + FALLING}  # the text grows, the figure is another one
+    path = _deck(tmp_path, [OPENING, first, second, CLOSING])
+    compared = _pair(sm.build_source_map(path), 2)
+    assert compared["relation"] == "text_superset_visual_change" and compared["kind"] == "animation_steps" and compared["confidence"] == "medium"
+    limited = sm.build_source_map(path, limits=sm.Limits(max_marks_per_page=3))  # the marks of a page are not all kept: the drawings are not compared
+    pair = _pair(limited, 2)
+    # Knowing less never gives the stronger claim: not a build, not high, and the last page is not said to show everything.
+    assert "drawing_not_compared" in pair["signals"] and pair["relation"] == "text_superset_drawing_not_compared"
+    assert pair["kind"] == "animation_steps" and pair["confidence"] == "medium" and _slide_of(limited, 2)["cumulative"] is False
+    assert sm.describe_page(limited, 3)["label"] == "PDF page 3 of 4 · step 2 of 2"
 
 
 def test_pages_on_which_the_deck_prints_different_slide_numbers_are_not_joined_when_its_numbers_count_slides(tmp_path):
@@ -739,6 +770,56 @@ def test_a_number_printed_at_one_place_in_the_page_margin_is_established_whereve
     assert [page["printed_number"] for page in source_map["pages"]] == [4, 5, 6, 7, 8, 9]
     assert sm.describe_page(source_map, 2)["label"] == "PDF page 2 of 6 · Slide 5"
     assert _page(source_map, 2)["title"] == "Concept 2"  # the number is not taken for the heading
+
+
+def test_a_counter_that_repeats_over_different_slides_is_not_a_slide_number(tmp_path):
+    # A section or part counter printed alone in the corner: it stands at one place, never runs backwards and never leaps —
+    # but where it repeats, the pages are different slides, so it does not count slides.
+    sections = [_topic(n, printed=(n - 1) // 5 + 1) for n in range(1, 16)]  # 1 on five slides, 2 on five, 3 on five
+    shared = ["Shared words that every page of this part carries along with it"]
+    similar = [{"title": f"Heading {'ABCDEFGHIJKLMNO'[n]}", "lines": [*shared, f"and a few words of page {'abcdefghijklmno'[n]} alone"], "printed": n // 5 + 1} for n in range(15)]
+    for name, pages in (("sections", sections), ("similar", similar)):
+        source_map = sm.build_source_map(_deck(tmp_path, pages, name=f"{name}.pdf"))
+        assert source_map["printed_numbers"]["established"] is False and source_map["printed_numbers"]["numbers_count_slides"] is False, (name, source_map["printed_numbers"])
+        assert all(page["printed_number"] is None for page in source_map["pages"]), name
+        assert sm.describe_page(source_map, 8)["label"] == "PDF page 8 of 15", name
+        assert all(len(group) == 1 for group in _groups(source_map)), (name, _groups(source_map))  # and it joins nothing
+        assert not any("printed_number_repeat" in pair["signals"] for pair in source_map["pairs"]), name
+
+
+def test_two_values_in_the_corner_do_not_establish_printed_numbers(tmp_path):
+    def build(title: str, lines: int, printed: int) -> dict:
+        return {"title": title, "bullets": [f"Statement {'abc'[i]} about {title.lower()} and nothing else" for i in range(lines)], "printed": printed}
+
+    # Two slides of three builds each, numbered 1 and 2: the repeats are those of a slide number, yet two values are not a sequence.
+    source_map = sm.build_source_map(_deck(tmp_path, [build("Membranes", n, 1) for n in (1, 2, 3)] + [build("Channels", n, 2) for n in (1, 2, 3)]))
+    assert source_map["printed_numbers"]["established"] is False and all(page["printed_number"] is None for page in source_map["pages"])
+    assert "Slide" not in sm.describe_page(source_map, 5)["label"]
+    assert _groups(source_map) == [[1, 2, 3], [4, 5, 6]]  # the builds are found by their text all the same
+    # With a third slide the same numbers are a sequence.
+    three = sm.build_source_map(_deck(tmp_path, [build("Membranes", n, 1) for n in (1, 2, 3)] + [build("Channels", n, 2) for n in (1, 2, 3)] + [build("Pumps", 1, 3)], name="three.pdf"))
+    assert three["printed_numbers"]["established"] is True and three["printed_numbers"]["evidence"]["repeats_under_one_heading"] == 4
+    assert sm.describe_page(three, 5)["label"] == "PDF page 5 of 7 · build 2 of 3 · Slide 2"
+
+
+def test_pdf_labels_are_a_grouping_signal_only_when_several_of_them_count(tmp_path):
+    def labelled(numbers: list[int] | None = None, prefix: str | None = None) -> dict:
+        return {n: ("D", prefix, value) for n, value in enumerate(numbers or [1, 1, 2, 2, 3, 3], start=1)}
+
+    # Six different steps under one heading: a label that names the author's frame would make each pair of them one slide.
+    pages = [{"title": "Deriving the result", "lines": [f"Step {'abcdef'[n]}: {words}"]} for n, words in enumerate(
+        ["write the balance of forces", "divide by the mass", "integrate over time", "insert the initial speed", "solve for the height", "check the units"])]
+    cases = {
+        "counting": (labelled(), True, [[1, 2], [3, 4], [5, 6]]),  # three numbers that never run backwards: the frames of an overlay deck
+        "two_values": (labelled([1, 1, 1, 2, 2, 2]), False, [[n] for n in range(1, 7)]),  # two distinct labels are not a count
+        "backwards": (labelled([3, 3, 2, 2, 1, 1]), False, [[n] for n in range(1, 7)]),  # numbers that run backwards do not count frames
+        "prefixed": (labelled(prefix="A-"), False, [[n] for n in range(1, 7)]),  # "A-1", "A-1", "A-2": not plain numbers
+    }
+    for name, (labels, signal, groups) in cases.items():
+        source_map = sm.build_source_map(_deck(tmp_path, pages, name=f"{name}.pdf", page_labels=labels))
+        assert source_map["pdf_labels"]["repeat"] is True and source_map["pdf_labels"]["repeat_is_a_signal"] is signal, (name, source_map["pdf_labels"])
+        assert _groups(source_map) == groups, (name, _groups(source_map))
+        assert any("pdf_label_repeat" in pair["signals"] for pair in source_map["pairs"]) is signal, name
 
 
 def test_a_constant_pdf_page_label_is_not_a_grouping_signal(tmp_path):
@@ -1004,6 +1085,143 @@ def test_a_small_diagram_or_an_inline_image_counts_as_content(tmp_path):
     assert _roles(source_map)[5:7] == ["structural_title_or_section", "blank"]
 
 
+def test_expressions_without_a_sign_of_their_own_are_read_as_formulas_too(tmp_path):
+    formulas = ["P(A | B)", "O(n log n)", "dN/dt", "X ~ N(0, 1)", "f(x)", "E[X]", "k_cat / K_m", "argmax L(theta)", "Var(X) Cov(X, Y)"]
+    source_map = sm.build_source_map(_deck(tmp_path, [ROLE_DECK[0], *({"lines": [formula]} for formula in formulas), ROLE_DECK[2]]))
+    for number, formula in enumerate(formulas, start=2):
+        role = _page(source_map, number)["role"]
+        assert role["role"] == "instructional" and role["forced_requirements"] is True and role["uncertain"] is True, (formula, role)
+        assert any("equation" in line for line in role["evidence"]), (formula, role)
+    # A bracket after a word and a space, a slash between words, an abbreviation: headings, not formulas.
+    headings = ["Hepatitis B (HBV)", "Part 2 (continued)", "Type I (fast) fibres", "Day and night", "Input / output", "Vitamin D", "RNA polymerase II"]
+    plain = sm.build_source_map(_deck(tmp_path, [ROLE_DECK[0], *({"title": heading} for heading in headings), ROLE_DECK[2]], name="plain.pdf"))
+    assert _roles(plain)[1:-1] == ["structural_title_or_section"] * len(headings)
+
+
+def test_a_first_page_that_shows_a_drawing_is_a_cover_only_on_a_course_header_and_then_as_an_uncertain_reading(tmp_path):
+    arrow = [(150, 60, 150, 150), (140, 140, 150, 150), (160, 140, 150, 150)]
+    rest = [{"title": "Second", "bullets": ["Some unrelated text that follows the first page"]}, CLOSING]
+    # A deck that starts with content: a word that also occurs on covers (a season, a year, "unit 1") is no evidence of a cover.
+    content = [{"title": "Free fall", "lines": ["A ball dropped from rest"]}, {"title": "Spring and mass", "lines": ["Restoring force grows with stretch"]},
+               {"title": "The 1953 double helix"}, {"title": "Motor unit 1 recruitment"}]
+    for n, first in enumerate(content):
+        role = _page(sm.build_source_map(_deck(tmp_path, [{**first, "strokes": arrow}, *rest], name=f"content-{n}.pdf")), 1)["role"]
+        assert role["role"] == "instructional" and role["forced_requirements"] is True and role["uncertain"] is True, (first, role)
+    # A course header beside a drawing reads as a cover, but as an uncertain one: it is counted among the readings that deserve a look.
+    covers = [{"title": "Systems Biology", "lines": ["Lecture 4", "Fall 2026"]}, {"title": "Signals and Systems", "lines": ["Department of Biomedical Engineering"]}]
+    for n, first in enumerate(covers):
+        source_map = sm.build_source_map(_deck(tmp_path, [{**first, "strokes": arrow}, *rest], name=f"cover-{n}.pdf"))
+        role = _page(source_map, 1)["role"]
+        assert role["role"] == "structural_title_or_section" and role["uncertain"] is True and any("drawing" in line for line in role["evidence"]), (first, role)
+        assert sm.summary(source_map)["denominators"]["no_forced_requirement_uncertain_logical_slides"] == 1
+        # Without the drawing the same page is a plain cover.
+        plain = _page(sm.build_source_map(_deck(tmp_path, [first, *rest], name=f"plain-{n}.pdf")), 1)["role"]
+        assert plain["role"] == "structural_title_or_section" and plain["uncertain"] is False
+
+
+def test_text_painted_in_the_paint_of_the_paper_is_counted_because_the_page_does_not_show_it(tmp_path):
+    white = (255, 255, 255)
+    source_map = sm.build_source_map(_deck(tmp_path, [OPENING, {**PROSE, "text_colour": white}, PROSE, CLOSING]))
+    unseen, shown = _page(source_map, 2), _page(source_map, 3)
+    assert unseen["word_count"] == shown["word_count"]  # the file holds the same words on both pages ...
+    assert unseen["drawing"]["text_runs_in_background_paint"] >= 2 and shown["drawing"]["text_runs_in_background_paint"] == 0  # ... and says where they are not seen
+    assert "text_runs_in_background_paint" in source_map["text_basis"]["note"] and source_map["text_basis"]["visible_text_established"] is False
+    # The reveal is one slide in two states; the note on the relation says that a difference on screen was not established by reading the file.
+    pair = _pair(source_map, 2)
+    assert pair["relation"] == "identical_text_visual_change" and pair["kind"] == "animation_steps" and any("not established" in note for note in pair["notes"])
+    # On a picture, white text is seen: nothing is counted there. Nor on a page that paints a dark background.
+    dark = sm.build_source_map(_deck(tmp_path, [{**PROSE, "background_image": 2, "title_colour": white, "text_colour": white},
+                                                {**PROSE, "background": "ink", "title_colour": white, "text_colour": white}], name="dark.pdf"))
+    assert [_page(dark, n)["drawing"]["text_runs_in_background_paint"] for n in (1, 2)] == [0, 0]
+    # Text in the paint of a background the page itself paints is counted like white on paper: here the body lines, and on the
+    # second page the heading alone (ink on an ink background).
+    same = sm.build_source_map(_deck(tmp_path, [{**PROSE, "background": "teal", "text_colour": "teal"}, {**PROSE, "background": "ink", "text_colour": white}], name="same.pdf"))
+    assert _page(same, 1)["drawing"]["text_runs_in_background_paint"] >= 2 and _page(same, 2)["drawing"]["text_runs_in_background_paint"] == 1
+
+
+def test_the_same_picture_bytes_shown_another_way_are_another_picture(tmp_path):
+    same = {"title": "Stained section", "lines": ["The same words on both pages"], "images": [{"seed": 3, "box": (150, 60, 60, 45)}]}
+    path = _deck(tmp_path, [OPENING, same, dict(same), CLOSING])
+    assert _pair(sm.build_source_map(path), 2)["kind"] == "duplicate"
+    set_picture_decode(path, 3, (1, 0, 1, 0, 1, 0))  # page 3 now shows the picture inverted: the stored bytes are the same, the picture is not
+    source_map = sm.build_source_map(path)
+    first, second = _page(source_map, 2)["images"][0], _page(source_map, 3)["images"][0]
+    assert first["bytes"] == second["bytes"] and first["sha256"] != second["sha256"] and second["digest_basis"] == "stream_bytes"
+    pair = _pair(source_map, 2)
+    assert pair["kind"] != "duplicate" and "page_identical" not in pair["signals"] and "images_identical" not in pair["signals"]
+    assert pair["decision"] == "uncertain" and any("picture" in reason for reason in pair["reasons"])
+    assert "copy" not in sm.describe_page(source_map, 3)["label"]
+
+
+def _topic(n: int, **extra) -> dict:
+    letter = "abcdefghijklmnop"[n - 1]
+    return {"title": f"Topic {letter.upper()}", "bullets": [f"A statement for page {letter} only, with enough further words that the page is plainly content"], **extra}
+
+
+def test_a_figure_that_most_pages_show_in_the_body_of_the_page_is_not_taken_for_the_template(tmp_path):
+    cover = {"title": "Walking through the pathway", "lines": ["Synthetic course notes"]}
+    figures = {
+        "picture": {"images": [{"seed": 4, "box": (40, 50, 170, 120)}]},  # one figure the deck walks through, on five of six pages
+        "drawing": {"strokes": [(60, 150, 200, 150), (60, 150, 60, 60), (60, 150, 200, 70), (110, 150, 110, 118), (160, 150, 160, 92)]},
+        "grid": {"strokes": [(60, y, 200, y) for y in (70, 100, 130)] + [(x, 60, x, 150) for x in (90, 130, 170)]},  # nothing but straight lines along the axes
+    }
+    for name, figure in figures.items():
+        for steps in (4, 10):  # a short deck, and a longer one in which the figure is on eleven of twelve pages
+            pages = [cover, *({"title": f"Step {n}", **figure} for n in range(1, steps + 1)), dict(figure)]
+            source_map = sm.build_source_map(_deck(tmp_path, pages, name=f"{name}-{steps}.pdf"))
+            for number in range(2, steps + 2):
+                role = _page(source_map, number)["role"]
+                assert role["role"] == "instructional" and role["forced_requirements"] is True and role["uncertain"] is True, (name, steps, number, role)
+                assert any(("picture" if name == "picture" else "drawing") in line for line in role["evidence"]) and not any("no picture" in line for line in role["evidence"])
+            alone = _page(source_map, steps + 2)["role"]
+            assert alone["role"] == "unknown" and alone["forced_requirements"] is True, (name, steps, alone)
+            assert source_map["template"]["template_images"] == 0 and source_map["template"]["template_marks"] == 0, (name, steps, source_map["template"])
+            assert sm.summary(source_map)["denominators"]["no_forced_requirement_logical_slides"] == 1, (name, steps)  # the cover only
+
+
+def test_what_most_pages_carry_in_their_margins_or_as_their_background_is_still_the_template(tmp_path):
+    logo = {"seed": 9, "box": (226, 5, 20, 15)}  # a small picture in the top right corner
+    furniture = {"images": [logo], "strokes": [(16, 34, 238, 34), (16, 178, 238, 178)], "boxes": [(0, 182, 254, 8.5, "teal")]}  # a rule under the heading, a footer rule and band
+    panel = {"boxes": [(20, 45, 214, 125, (240, 240, 240), "slate"), *furniture["boxes"]]}  # ... and a framed panel behind the body of every page
+    for name, extra in (("margins", furniture), ("panel", {**furniture, **panel})):
+        pages = [*(_topic(n, **extra) for n in range(1, 8)), {"title": "Part 2", **extra}, dict(extra)]
+        source_map = sm.build_source_map(_deck(tmp_path, pages, name=f"{name}.pdf"))
+        assert source_map["template"]["template_images"] == 1 and source_map["template"]["template_marks"] >= 4, (name, source_map["template"])
+        divider, empty = _page(source_map, 8), _page(source_map, 9)
+        assert divider["role"]["role"] == "structural_title_or_section" and divider["drawing"]["shapes_beyond_template"] == 0, (name, divider["role"])
+        assert empty["role"]["role"] == "blank" and empty["image_count"] == 1, (name, empty["role"])
+        assert _page(source_map, 2)["role"]["role"] == "instructional"
+    # A figure in the body of one page of such a deck is content like anywhere else.
+    pages = [*(_topic(n, **furniture) for n in range(1, 8)), {"title": "Force balance", **furniture, "strokes": [*furniture["strokes"], (150, 100, 220, 100), (150, 100, 150, 60)]}]
+    one = _page(sm.build_source_map(_deck(tmp_path, pages, name="one.pdf")), 8)
+    assert one["role"]["role"] == "instructional" and one["drawing"]["shapes_beyond_template"] == 2
+
+
+def test_white_lines_over_a_background_that_is_a_picture_are_a_drawing_not_a_cover(tmp_path):
+    white = (255, 255, 255)
+    diagram = [(150, 100, 220, 100), (150, 100, 150, 60), (150, 100, 200, 140)]
+    dark = {"background_image": 2, "title_colour": white, "text_colour": white}  # a dark theme whose background is one picture over the whole page
+    pages = [
+        _topic(1, **dark),
+        {"title": "Free body diagram", **dark, "strokes": diagram, "stroke_colour": white},  # 2 a heading and a diagram in white lines
+        {**dark, "strokes": diagram, "stroke_colour": white},  # 3 only the diagram
+        {"title": "Part 2", **dark},  # 4 a divider
+        dict(dark),  # 5 nothing but the background
+        *(_topic(n, **dark) for n in range(6, 10)),
+    ]
+    source_map = sm.build_source_map(_deck(tmp_path, pages))
+    assert source_map["template"]["template_images"] == 1  # the background picture is on every page and covers it: template
+    heading, alone, divider, empty = (_page(source_map, n) for n in (2, 3, 4, 5))
+    assert heading["role"]["role"] == "instructional" and heading["role"]["forced_requirements"] is True and any("drawing" in line for line in heading["role"]["evidence"])
+    assert alone["role"]["role"] == "unknown" and alone["role"]["forced_requirements"] is True
+    for page in (heading, alone):  # what lies under the white paint is a picture, not paper: the lines are seen, they hide nothing
+        assert page["drawing"]["shapes_beyond_template"] == 3 and page["drawing"]["fills_in_background_paint"] == 0
+    assert divider["role"]["role"] == "structural_title_or_section" and empty["role"]["role"] == "blank"
+    # On bare paper the same white lines show nothing: such a page is still blank, and they are counted as fills in the paper's paint.
+    bare = sm.build_source_map(_deck(tmp_path, [OPENING, {"strokes": diagram, "stroke_colour": white}, CLOSING], name="bare-lines.pdf"))
+    assert _page(bare, 2)["role"]["role"] == "blank" and _page(bare, 2)["drawing"]["fills_in_background_paint"] == 3
+
+
 def test_a_plain_cover_is_structural_and_carries_no_forced_requirement(tmp_path):
     source_map = sm.build_source_map(_deck(tmp_path, ROLE_DECK))
     cover = _page(source_map, 1)["role"]
@@ -1093,16 +1311,20 @@ def test_a_transient_inspection_failure_is_retried_and_does_not_become_the_map_o
     first = sm.load_or_build(settings, COURSE, item)
     assert [page["status"] for page in first["pages"]] == ["ok", "ok", "unknown", "unknown", "unknown"] and first["pages"][2]["reason"] == "read_error"
     assert first["inspection"]["status"] == "partial" and first["inspection"]["transient"] is True and first["inspection"]["retry"] == "automatic"
+    assert first["cache"] is None and not list((settings.app_area(COURSE) / "source-map").rglob("map-o*.json"))  # nothing of it is kept
+    assert sm.summary(first)["inspection_transient"] is True
     monkeypatch.setattr(sm, "_inspect_page", real_page)
     second = sm.load_or_build(settings, COURSE, item)
     assert second["inspection"]["status"] == "complete" and second["inspection"]["transient"] is False and _groups(second) == healthy_groups
+    assert second["inspection"]["retry"] == "on_request" and second["cache"] is not None
     assert sm.load_or_build(settings, COURSE, item) == second
 
-    # (b) the clock runs past the time bound once (a busy machine)
-    limited =sm.load_or_build(settings, COURSE, item, refresh=True, clock=iter(float(n) for n in range(0, 10**6, 1000)).__next__)
+    # (b) the clock runs past the time bound once (a busy machine), on a call that asked for a fresh inspection: the settled map is left as it was
+    limited = sm.load_or_build(settings, COURSE, item, refresh=True, clock=iter(float(n) for n in range(0, 10**6, 1000)).__next__)
     assert limited["inspection"]["status"] == "partial" and {page["reason"] for page in limited["pages"]} == {"time_limit"} and limited["inspection"]["transient"] is True
+    assert limited["cache"] is None
     again = sm.load_or_build(settings, COURSE, item)
-    assert again["inspection"]["status"] == "complete" and _groups(again) == healthy_groups
+    assert again == second and _groups(again) == healthy_groups
 
     # (c) the file cannot be opened once (locked, or a hiccup of a streamed folder): nothing is kept, corrections still work afterwards
     monkeypatch.setattr(sm, "PdfReader", lambda *args, **kwargs: (_ for _ in ()).throw(PermissionError("synthetic: the file is locked")))
@@ -1115,13 +1337,14 @@ def test_a_transient_inspection_failure_is_retried_and_does_not_become_the_map_o
     assert corrected["overrides"]["revision"] == 1 and _groups(corrected) == healthy_groups
 
 
-def test_a_failure_that_persists_is_retried_a_bounded_number_of_times_and_then_only_on_request(course, monkeypatch):
+def test_a_passing_failure_is_never_kept_however_often_it_happens(course, monkeypatch):
     settings, root = course
     write_slide_pdf(root / "materials/lectures/lecture-01/Deck.pdf", REVEAL)
     item = _item(settings)
     opened = []
-    real_reader = sm.PdfReader
+    real_reader, real_page = sm.PdfReader, sm._inspect_page
     monkeypatch.setattr(sm, "PdfReader", lambda *args, **kwargs: opened.append(1) or real_reader(*args, **kwargs))
+    stored = settings.app_area(COURSE) / "source-map"
 
     def slow() -> float:  # every look at the clock is a long time after the last one
         slow.now += 1000.0
@@ -1129,16 +1352,74 @@ def test_a_failure_that_persists_is_retried_a_bounded_number_of_times_and_then_o
 
     slow.now = 0.0
     maps = [sm.load_or_build(settings, COURSE, item, clock=slow) for _ in range(6)]
-    assert len(opened) == 3  # three attempts, then the partial map is kept as it is
-    assert [m["inspection"]["attempts"] for m in maps] == [1, 2, 3, 3, 3, 3]
-    assert [m["inspection"]["retry"] for m in maps] == ["automatic", "automatic", "on_request", "on_request", "on_request", "on_request"]
-    assert all(len(m["pages"]) == 5 and m["inspection"]["status"] == "partial" for m in maps)
+    assert len(opened) == 6  # every call looked at the file again: a map cut short is not the map of the source, however often that happens
+    assert [m["inspection"]["attempts"] for m in maps] == [1, 2, 3, 4, 5, 6]  # counted for the caller, who decides how often to ask
+    assert all(m["inspection"]["retry"] == "automatic" and m["inspection"]["transient"] is True and m["cache"] is None for m in maps)
+    assert all(len(m["pages"]) == 5 and m["inspection"]["status"] == "partial" and sm.summary(m)["pages_unknown"] == 5 for m in maps)
+    assert not list(stored.rglob("map-o*.json"))
 
-    rebuilt = sm.load_or_build(settings, COURSE, item, refresh=True)  # asked for: inspected again, this time in good time
-    assert len(opened) == 4 and rebuilt["inspection"]["status"] == "complete" and rebuilt["inspection"]["attempts"] == 1
+    # A correction made meanwhile belongs to the bytes: it is recorded, and still no map is kept.
+    def flaky(page, number, *args, **kwargs):
+        raise OSError("synthetic transient read failure")
+
+    monkeypatch.setattr(sm, "_inspect_page", flaky)
+    corrected = sm.apply_override(settings, COURSE, item, {"type": "split", "before_page": 4}, author="learner", reason="Page 4 is a new slide")
+    assert corrected["overrides"]["revision"] == 1 and corrected["inspection"]["transient"] is True and corrected["cache"] is None
+    assert not list(stored.rglob("map-o*.json")) and len(list(stored.rglob("r0001.json"))) == 1
+    monkeypatch.setattr(sm, "_inspect_page", real_page)
+
+    before = len(opened)
+    healthy = sm.load_or_build(settings, COURSE, item)  # the next call on a healthy machine gives the map; nobody has to ask for a rebuild
+    assert len(opened) == before + 1 and healthy["inspection"]["status"] == "complete" and healthy["inspection"]["transient"] is False
+    assert healthy["inspection"]["attempts"] == 1 and healthy["inspection"]["retry"] == "on_request" and healthy["cache"] is not None
+    assert _groups(healthy) == [[1], [2, 3], [4], [5]] and healthy["overrides"]["revision"] == 1
     # A complete map is inspected again only when that is asked for, and the result is the same map.
-    assert sm.load_or_build(settings, COURSE, item) == rebuilt and len(opened) == 4
-    assert sm.load_or_build(settings, COURSE, item, refresh=True)["map_revision"] == rebuilt["map_revision"] and len(opened) == 5
+    assert sm.load_or_build(settings, COURSE, item) == healthy and len(opened) == before + 1
+    assert sm.load_or_build(settings, COURSE, item, refresh=True)["map_revision"] == healthy["map_revision"] and len(opened) == before + 2
+
+
+def test_a_presentation_that_cannot_be_read_just_now_does_not_settle_the_map_without_it(course, monkeypatch):
+    import pptx
+    from pptx.exc import PackageNotFoundError
+
+    settings, root = course
+    unit = root / "materials/lectures/lecture-01"
+    (unit / "Deck.pdf").write_bytes(_signalling_pdf(root.parent).read_bytes())
+    write_synthetic_pptx(unit / "Deck.pptx", PPTX_SLIDES)
+    lecture, item = _lecture(settings), _item(settings)
+    stored = settings.app_area(COURSE) / "source-map"
+    real_presentation = pptx.Presentation
+
+    # (a) the presentation is locked, or goes away for a moment, while the PDF is read without trouble
+    for error in (PermissionError("synthetic: the file is locked"), PackageNotFoundError("synthetic: the package is not there just now")):
+        monkeypatch.setattr(pptx, "Presentation", lambda *args, error=error, **kwargs: (_ for _ in ()).throw(error))
+        first = sm.load_or_build(settings, COURSE, item, lecture=lecture)
+        assert first["inspection"]["status"] == "complete" and all(page["status"] == "ok" for page in first["pages"])  # the pages were read
+        assert first["pptx"]["status"] == "unavailable" and first["pptx"]["reason"] == "read_error" and first["pptx"]["transient"] is True
+        assert all(page["pptx"] is None for page in first["pages"])
+        # ... but the map is not settled: slide identity may come with the next call, so nothing is kept
+        assert first["inspection"]["transient"] is True and first["inspection"]["retry"] == "automatic" and first["cache"] is None
+        assert sm.summary(first)["inspection_transient"] is True and not list(stored.rglob("map-o*.json"))
+    monkeypatch.setattr(pptx, "Presentation", real_presentation)
+    second = sm.load_or_build(settings, COURSE, item, lecture=lecture)
+    assert second["pptx"]["alignment"]["status"] == "supported" and second["pptx"]["transient"] is False
+    assert second["inspection"]["transient"] is False and second["cache"] is not None and sum(1 for page in second["pages"] if page["pptx"]) == 6
+
+    # (b) the clock runs out after the pages were read, before the presentation is opened
+    state = {"late": False}
+    real_numbers = sm._detect_printed_numbers
+    monkeypatch.setattr(sm, "_detect_printed_numbers", lambda pages: (state.update(late=True), real_numbers(pages))[1])
+    late = sm.load_or_build(settings, COURSE, item, lecture=lecture, refresh=True, clock=lambda: 10.0**6 if state["late"] else 0.0)
+    assert late["inspection"]["status"] == "complete" and late["pptx"]["status"] == "not_inspected" and late["pptx"]["reason"] == "time_limit"
+    assert late["inspection"]["transient"] is True and late["cache"] is None and all(page["pptx"] is None for page in late["pages"])
+    monkeypatch.setattr(sm, "_detect_printed_numbers", real_numbers)
+    assert sm.load_or_build(settings, COURSE, item, lecture=lecture) == second  # the settled map was left as it was
+
+    # (c) a presentation that is not one is a property of its bytes: that map is settled
+    (unit / "Deck.pptx").write_bytes(b"PK\x03\x04 synthetic placeholder: not a real presentation\n")
+    damaged = sm.load_or_build(settings, COURSE, _item(settings), lecture=_lecture(settings))
+    assert damaged["pptx"]["status"] == "unreadable" and damaged["pptx"]["transient"] is False
+    assert damaged["inspection"]["transient"] is False and damaged["cache"] is not None
 
 
 def test_a_page_the_parser_cannot_read_is_a_property_of_the_bytes_and_is_cached(course, monkeypatch):
@@ -1209,6 +1490,8 @@ def test_an_oversized_file_is_refused_before_it_is_read_and_the_time_bound_cover
     assert source_map["inspection"]["status"] == "complete" and all(page["status"] == "ok" for page in source_map["pages"])
     assert source_map["pptx"]["status"] == "not_inspected" and source_map["pptx"]["reason"] == "time_limit" and source_map["pptx"]["alignment"]["status"] == "not_attempted"
     assert all(page["pptx"] is None for page in source_map["pages"])
+    # The pages are all read, yet the map says that another attempt may give more (slide identity): it is not a settled map.
+    assert source_map["inspection"]["transient"] is True and source_map["pptx"]["transient"] is True
 
 
 def test_a_replaced_source_gets_a_new_map_and_reports_what_no_longer_applies(course):
@@ -1394,6 +1677,146 @@ def test_an_agent_may_record_a_correction_over_the_learners_only_on_the_learners
         sm.apply_override(settings, COURSE, item, {"type": "split", "before_page": 4}, author="agent", reason="Page 4 looks different")
     assert error.value.code == "learner_correction_in_force" and "r2" in error.value.message
     assert sm.load_or_build(settings, COURSE, item)["overrides"]["revision"] == 2
+
+
+SEPARATE = [OPENING, {"title": "Alpha", "bullets": ["First statement of the alpha page only"]}, {"title": "Beta", "bullets": ["Another statement for the beta page"]}, CLOSING]
+
+
+def _statuses(source_map: dict) -> list[tuple]:
+    return [(entry["revision"], entry["type"], entry["status"]) for entry in source_map["overrides"]["history"]]
+
+
+def _refused(settings: Settings, item: dict, op: dict, **author) -> str:
+    """The message of the refusal an agent's correction meets (nothing is recorded)."""
+    before = sm.load_or_build(settings, COURSE, item)["overrides"]["revision"]
+    with pytest.raises(sm.SourceMapError) as error:
+        sm.apply_override(settings, COURSE, item, op, reason="The agent reads the pages this way", **(author or {"author": "agent"}))
+    assert error.value.code == "learner_correction_in_force", op
+    assert sm.load_or_build(settings, COURSE, item)["overrides"]["revision"] == before
+    return error.value.message
+
+
+def test_an_agent_cannot_record_again_what_the_learner_undid_with_a_revert(course):
+    settings, root = course
+    write_slide_pdf(root / "materials/lectures/lecture-01/Deck.pdf", SEPARATE)
+    item = _item(settings)
+
+    def agent(op: dict) -> dict:
+        return sm.apply_override(settings, COURSE, item, op, author="agent", reason="The agent reads the pages this way")
+
+    def learner_undoes(revision: int) -> dict:
+        return sm.apply_override(settings, COURSE, item, {"type": "revert", "revisions": [revision]}, author="learner", reason="No: I looked, that is wrong")
+
+    # A grouping: the agent joins two pages, the learner undoes it. The same join is then the learner's to make, in any spelling.
+    assert _groups(agent({"type": "group", "pages": [2, 3]})) == [[1], [2, 3], [4]]
+    assert _groups(learner_undoes(1)) == [[1], [2], [3], [4]]
+    for op in ({"type": "group", "pages": [2, 3]}, {"type": "group", "pages": [2, 3], "kind": "duplicate"}, {"type": "group", "pages": [2, 3, 4]}, {"type": "group", "pages": [1, 2, 3]}):
+        assert "r2" in _refused(settings, item, op)  # the refusal names the learner's revert
+    # A role and a printed number: after the learner's undo the page's role and number are not the agent's to set again.
+    assert _page(agent({"type": "role", "page": 2, "role": "blank"}), 2)["role"]["role"] == "blank"
+    assert _page(learner_undoes(3), 2)["role"]["source"] == "auto"
+    for role in ("blank", "structural_title_or_section"):
+        assert "r4" in _refused(settings, item, {"type": "role", "page": 2, "role": role})
+    assert sm.describe_page(agent({"type": "printed_number", "page": 2, "printed_number": 41}), 2)["label"] == "PDF page 2 of 4 · Slide 41"
+    assert _page(learner_undoes(5), 2)["printed_number"] is None
+    assert "r6" in _refused(settings, item, {"type": "printed_number", "page": 2, "printed_number": 41})
+    # ... nor is the learner's revert itself the agent's to undo.
+    assert "r2" in _refused(settings, item, {"type": "revert", "revisions": [2]})
+
+    current = sm.load_or_build(settings, COURSE, item)
+    assert _groups(current) == [[1], [2], [3], [4]] and _page(current, 2)["role"]["source"] == "auto" and sm.describe_page(current, 2)["label"] == "PDF page 2 of 4"
+    assert _statuses(current) == [(1, "group", "reverted"), (2, "revert", "applied"), (3, "role", "reverted"), (4, "revert", "applied"), (5, "printed_number", "reverted"), (6, "revert", "applied")]
+    # What the learner did not speak about stays open to the agent: another boundary, another page, the same boundary read the learner's way.
+    assert _groups(agent({"type": "group", "pages": [3, 4]})) == [[1], [2], [3, 4]]
+    assert _page(agent({"type": "role", "page": 3, "role": "worked_example_or_question"}), 3)["role"]["role"] == "worked_example_or_question"
+    assert agent({"type": "split", "before_page": 3})["overrides"]["revision"] == 9
+    # On the learner's say the agent may record it, and the learner always may.
+    asked = sm.apply_override(settings, COURSE, item, {"type": "role", "page": 2, "role": "blank"}, author="agent", learner_authority=True, reason="The learner said: page 2 is empty")
+    assert _page(asked, 2)["role"]["role"] == "blank"
+    own = sm.apply_override(settings, COURSE, item, {"type": "group", "pages": [2, 3]}, author="learner", reason="One slide after all")
+    assert _groups(own) == [[1], [2, 3], [4]]
+
+
+def test_the_learners_undo_of_their_own_correction_is_protected_like_any_other_word_of_theirs(course):
+    settings, root = course
+    write_slide_pdf(root / "materials/lectures/lecture-01/Deck.pdf", SEPARATE)
+    item = _item(settings)
+    sm.apply_override(settings, COURSE, item, {"type": "group", "pages": [2, 3]}, author="learner", reason="One slide")
+    undone = sm.apply_override(settings, COURSE, item, {"type": "revert", "revisions": [1]}, author="learner", reason="Changed my mind: two slides")
+    assert _groups(undone) == [[1], [2], [3], [4]]
+    assert "r2" in _refused(settings, item, {"type": "revert", "revisions": [2]})
+    assert "r2" in _refused(settings, item, {"type": "group", "pages": [2, 3]})  # the same join by another road
+    assert _groups(sm.load_or_build(settings, COURSE, item)) == [[1], [2], [3], [4]]
+
+
+def test_what_the_learner_put_back_in_force_stands_against_an_agent_like_the_learners_own_correction(course):
+    settings, root = course
+    write_slide_pdf(root / "materials/lectures/lecture-01/Deck.pdf", SEPARATE)
+    item = _item(settings)
+
+    def record(op: dict, author: str) -> dict:
+        return sm.apply_override(settings, COURSE, item, op, author=author, reason="As read")
+
+    # The agent groups, the agent takes it back, the learner undoes the taking back: the group now stands on the learner's word.
+    record({"type": "group", "pages": [2, 3]}, "agent")
+    record({"type": "revert", "revisions": [1]}, "agent")
+    restored = record({"type": "revert", "revisions": [2]}, "learner")
+    assert _groups(restored) == [[1], [2, 3], [4]] and restored["overrides"]["history"][2]["restores"] == [1]
+    for op in ({"type": "revert", "revisions": [1]}, {"type": "split", "before_page": 3}, {"type": "split", "pages": [2]}, {"type": "group", "pages": [3, 4]}, {"type": "revert", "revisions": [3]}):
+        assert "r3" in _refused(settings, item, op)
+    assert _groups(sm.load_or_build(settings, COURSE, item)) == [[1], [2, 3], [4]]
+
+
+def test_the_learners_latest_word_wins_over_an_agent_record_made_before_it(course):
+    settings, root = course
+    write_slide_pdf(root / "materials/lectures/lecture-01/Deck.pdf", SEPARATE)
+    item = _item(settings)
+
+    def record(op: dict, author: str) -> dict:
+        return sm.apply_override(settings, COURSE, item, op, author=author, reason="As read")
+
+    record({"type": "group", "pages": [2, 3]}, "learner")  # r1
+    record({"type": "revert", "revisions": [1]}, "learner")  # r2: two slides
+    assert _groups(record({"type": "split", "before_page": 3}, "agent")) == [[1], [2], [3], [4]]  # r3 agrees with the learner's undo and is recorded
+    back = record({"type": "revert", "revisions": [2]}, "learner")  # r4: the learner's group is back, and it is the later word on that boundary
+    assert _groups(back) == [[1], [2, 3], [4]] and back["overrides"]["history"][3]["restores"] == [1]
+    assert _slide_of(back, 2)["overrides"] == [1] and sm.describe_page(back, 3)["label"] == "PDF page 3 of 4 · part 2 of 2"
+    # A role: while the learner's undo holds the role of the page is not the agent's to set; the learner's role, put back, holds again.
+    record({"type": "role", "page": 4, "role": "objectives_or_summary"}, "learner")  # r5
+    record({"type": "revert", "revisions": [5]}, "learner")  # r6
+    assert "r6" in _refused(settings, item, {"type": "role", "page": 4, "role": "blank"})
+    assert _page(record({"type": "revert", "revisions": [6]}, "learner"), 4)["role"]["role"] == "objectives_or_summary"
+
+
+def test_an_agent_cannot_change_the_kind_the_learner_gave_a_group(course):
+    settings, root = course
+    write_slide_pdf(root / "materials/lectures/lecture-01/Deck.pdf", SEPARATE)
+    item = _item(settings)
+    grouped = sm.apply_override(settings, COURSE, item, {"type": "group", "pages": [2, 3], "kind": "incremental_build"}, author="learner", reason="Page 3 adds to page 2")
+    assert sm.describe_page(grouped, 3)["label"] == "PDF page 3 of 4 · build 2 of 2"
+    assert "r1" in _refused(settings, item, {"type": "group", "pages": [2, 3], "kind": "duplicate"})
+    assert sm.describe_page(sm.load_or_build(settings, COURSE, item), 3)["label"] == "PDF page 3 of 4 · build 2 of 2"
+
+
+def test_the_same_rules_hold_for_records_applied_directly_and_a_record_without_an_author_is_not_the_learners(tmp_path):
+    path = _deck(tmp_path, SEPARATE)
+    learner, agent = {"kind": "learner", "ref": None}, {"kind": "agent", "ref": None}
+    redone = sm.build_source_map(path, overrides=[
+        {"op": {"type": "group", "pages": [2, 3]}, "author": agent, "reason": "one slide"},
+        {"op": {"type": "revert", "revisions": [1]}, "author": learner, "reason": "No: two slides"},
+        {"op": {"type": "group", "pages": [2, 3]}, "author": agent, "reason": "one slide, again"}])
+    assert _groups(redone) == [[1], [2], [3], [4]] and _statuses(redone) == [(1, "group", "reverted"), (2, "revert", "applied"), (3, "group", "refused")]
+    assert [(problem["code"], problem["revision"]) for problem in redone["overrides"]["problems"]] == [("learner_correction_in_force", 3)]
+    assert "r2" in redone["overrides"]["problems"][0]["message"]
+    # A record that does not say who made it (a hand-written file, a caller that left the author out) never takes the place of the learner's.
+    for author in ({}, {"author": None}, {"author": "someone"}, {"author": {"ref": "x"}}):
+        unsigned = sm.build_source_map(_deck(tmp_path, REVEAL, name="reveal.pdf"), overrides=[
+            {"op": {"type": "split", "before_page": 3}, "author": learner, "reason": "I checked"},
+            {"op": {"type": "group", "pages": [2, 3]}, "reason": "no author at all", **author}])
+        assert _groups(unsigned) == [[1], [2], [3, 4], [5]] and _statuses(unsigned) == [(1, "split", "applied"), (2, "group", "refused")], author
+    # Without a learner's correction in its way such a record is applied as before.
+    alone = sm.build_source_map(_deck(tmp_path, REVEAL, name="reveal.pdf"), overrides=[{"op": {"type": "split", "before_page": 3}, "reason": "no author"}])
+    assert _groups(alone) == [[1], [2], [3, 4], [5]] and _statuses(alone) == [(1, "split", "applied")]
 
 
 def test_a_regions_correction_keeps_region_addresses_stable(course):

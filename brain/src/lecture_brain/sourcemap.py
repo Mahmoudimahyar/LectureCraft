@@ -6,8 +6,9 @@ same map of one source file instead of assuming that a slide is a page. The map 
 * the source: id, version and the sha256 of the bytes that were inspected;
 * the physical PDF page index (1-based; the base is stated in the data) and, only when the file defines one, the
   PDF page label;
-* the printed slide number, only when a short isolated number stands at one place in the page margin across the deck
-  and advances like a slide number (the evidence is recorded) — a number in the body text is never one;
+* the printed slide number, only when a short isolated number stands at one place in the page margin across the deck,
+  advances like a slide number and, where it repeats, repeats under one heading (the evidence is recorded) — a number
+  in the body text, or a counter that stays the same over different slides, is never one;
 * the PPTX slide id and ordinal, only when a presentation of the same unit exists and a text/title sequence
   alignment of at least three pages supports the correspondence — never "slide N is page N";
 * the app's logical slide: one or more adjacent pages with the evidence for the grouping, the index of each page in
@@ -20,8 +21,10 @@ A group of pages is one of three kinds, and the label of a page says which:
   order or its text at the same places, its pictures, its shapes — and more;
 * ``duplicate`` ("copy 2 of 2"): the pages draw exactly the same, mark for mark;
 * ``animation_steps`` ("step 2 of 4"): one authored slide in several states — equal or growing text while something
-  drawn changes, or could not be compared, or the deck's own number says so. Never more than medium confidence, and
-  no page of it is said to show everything (``cumulative: false``).
+  drawn changes, is covered (a fill in the paper's paint is laid that the earlier page does not have), or could not
+  be compared, or the deck's own number says so. Never more than medium confidence, and no page of it is said to
+  show everything (``cumulative: false``). The name says what the file shows: that two such pages look different on
+  screen is not claimed.
 
 Grouping is proposed from several signals (adjacency, heading, ordered text containment, text position, pictures by
 their bytes, drawing operations, printed numbers, PDF labels, PPTX alignment). Equal words alone do not make a group:
@@ -31,15 +34,23 @@ Nothing is collapsed or deleted: every page stays addressable, and ``page=N`` of
 
 What the map does not know: the text of a page is the text embedded in the file. Whether a shape or picture covers
 it cannot be told without rendering, so a page may list words it does not show (``text_basis``, and
-``text_visibility: not_established`` on every logical slide). Nothing here renders a page.
+``text_visibility: not_established`` on every logical slide). Two counts per page point at where that matters: the
+fills and the text runs painted in the paint of the page's own background. Nothing here renders a page.
+
+A picture or a drawing never lets a page be read as blank or as a bare heading for want of words. What nearly every
+page draws counts as the template only when it stands in the margins, covers the page or is a plain panel; what
+most pages draw in the body of the page may be one figure the deck walks through, and stays content.
 
 Corrections (group, split, role, printed number, regions, revert) are immutable revisions under the app's own area;
 applying them yields a new map revision, keeps the history, and leaves an alias for every logical-slide id and a
-retired entry for every region id that changed. A learner's correction is never replaced by an agent's. The computed
+retired entry for every region id that changed. A learner's correction is never replaced or undone by an agent's,
+an agent never records again what the learner undid, and a record that does not say who made it is not taken for
+the learner's. Where corrections in force disagree, the one that came into force last decides. The computed
 map is cached there too, keyed by source sha256 + map version + overrides revision, and a cached file is trusted only
-while the digest it carries of its own content matches. An inspection cut short by something of the moment (a read
-error, the time bound) is marked ``transient`` and is tried again; ``refresh=True`` always inspects again. A replaced
-source gets a new map that lists which earlier ids and corrections no longer apply.
+while the digest it carries of its own content matches. A map whose inspection was cut short by something of the moment
+(a read error, the time bound, a presentation of the unit that could not be opened) is marked ``transient`` and is
+never stored: every call inspects again until the file reads through; ``refresh=True`` always inspects again. A
+replaced source gets a new map that lists which earlier ids and corrections no longer apply.
 
 Pure read side: nothing here writes into a course folder, renders a page, runs OCR or calls a model. Everything in a
 map is inferred from what the file holds; a group is a proposal until someone has looked.
@@ -57,12 +68,13 @@ Shape of a map (plain JSON data)::
     page_layout       {kind: slides | document | mixed | unknown, landscape_pages, upright_pages}
     pdf_labels        {defined, differ_from_index, repeat, repeat_is_a_signal, distinct}
     printed_numbers   {established, numbers_count_slides, evidence}
-    pptx              None | {source, status, reason, slide_count, hidden_slides, truncated, alignment, candidates, slides}
+    pptx              None | {source, status, reason, transient, slide_count, hidden_slides, truncated, alignment, candidates, slides}
     text_basis        {source: embedded_text, visible_text_established: false, note}
     pages[]           page, status (ok | unknown), reason (unreadable | read_error | time_limit | page_limit), pdf_label, printed_number (+_source),
                       pptx {slide_id, ordinal, evidence} | None, title, text, word_count, content_word_count, text_sha256, content_sha256,
                       images[] {name, width, height, bytes, sha256, digest_basis, box, template}, image_count, pictures_unread,
-                      drawing {paint_operations, path_operations, shapes_beyond_template, fills_in_background_paint, marks_compared, visual_sha256},
+                      drawing {paint_operations, path_operations, shapes_beyond_template, fills_in_background_paint, text_runs_in_background_paint,
+                               marks_compared, visual_sha256},
                       size, regions[] {region_id, order, box, label, source}, retired_regions[] {region_id, box, retired_by_revision, resolves_to},
                       role {role, confidence, uncertain, evidence, source, forced_requirements}, logical_slide_id, build_index, build_count
     logical_slides[]  logical_slide_id, ordinal, kind (single | incremental_build | duplicate | animation_steps | manual_group),
@@ -104,7 +116,7 @@ from .ownerio.inventory import disk_version_id
 
 SOURCE_MAP_VERSION = "source-map/1"
 OVERRIDE_CONTRACT = "source-map-override/1"
-DETECTOR_REVISION = 2  # bump when the grouping, numbering or role heuristics change: cached maps are then rebuilt
+DETECTOR_REVISION = 3  # bump when the grouping, numbering or role heuristics change: cached maps are then rebuilt
 PAGE_INDEX_BASE = 1
 REGION_BOX_UNITS = "fraction_of_page_from_top_left"
 ROLES = ("instructional", "worked_example_or_question", "objectives_or_summary", "structural_title_or_section", "administrative", "blank", "mixed", "unknown")
@@ -115,7 +127,7 @@ _GROUP_WORD = {"incremental_build": "build", "duplicate": "copy", "animation_ste
 AUTHORS = ("learner", "agent")
 _NO_FORCED_REQUIREMENT = frozenset({"structural_title_or_section", "administrative", "blank"})
 _INSTRUCTIONAL = frozenset({"instructional", "worked_example_or_question", "mixed"})
-_MAX_TRANSIENT_ATTEMPTS = 3  # inspections of one cache entry that may end in a passing failure before a rebuild has to be asked for
+_PASSING_FAILURES: dict[tuple[str, str, str], int] = {}  # inspections in a row, in this process, that ended in a failure of the moment (never stored)
 
 __all__ = ["SOURCE_MAP_VERSION", "OVERRIDE_CONTRACT", "ROLES", "Limits", "SourceMapError", "build_source_map", "load_or_build", "apply_override",
            "describe_page", "resolve", "summary", "inspect_pptx", "role_policy"]
@@ -177,7 +189,11 @@ _RE_FORMULA = re.compile(
     r"|(?<![<>\w])[<>](?![<>\w])"  # a lone < or > between other things
     r"|[\w\])]\s*[+*]\s*[\w(\[]"  # x + y, x * y
     r"|(?<![A-Za-z])[A-Za-z)\]]\s+-\s+(?:[A-Za-z](?![A-Za-z])|\d|[(\[])|(?<![A-Za-z\d])\d+(?:\.\d+)?\s+-\s+[A-Za-z](?![A-Za-z])"  # x - y, with a one-letter operand
-    r"|(?<![A-Za-z])[A-Za-z]\s*/\s*[A-Za-z](?![A-Za-z])|[\w)\]]\s*/\s*[(\[]|[)\]]\s*/\s*\w")  # v / k, v / (k), (a) / b
+    r"|(?<![A-Za-z])[A-Za-z]\s*/\s*[A-Za-z](?![A-Za-z])|[\w)\]]\s*/\s*[(\[]|[)\]]\s*/\s*\w"  # v / k, v / (k), (a) / b
+    r"|(?<![A-Za-z])[A-Za-z][(\[][^()\[\]]{0,40}[)\]]"  # a one-letter name applied to something, with no space between: f(x), P(A | B), E[X], N(0, 1)
+    r"|(?<![A-Za-z])(?:Var|Cov|Corr|Pr|exp|log|ln|sin|cos|tan|max|min|det|lim|sup|inf|arg ?max|arg ?min)\s?[(\[]|(?<![A-Za-z])arg ?(?:max|min)(?![A-Za-z])"  # named operators
+    r"|(?<![A-Za-z])d[A-Za-z]{1,2}\s*/\s*d[A-Za-z]{1,2}(?![A-Za-z])"  # a derivative: dN/dt
+    r"|[A-Za-z]_[A-Za-z0-9]|\S\s~\s\S")  # a subscript written with an underscore, "is distributed as"
 # Abbreviations and addresses that only look like a ratio or an equation.
 _RE_NOT_FORMULA = re.compile(r"(?<![A-Za-z])(?:q\s*/\s*a|i\s*/\s*o|n\s*/\s*a|a\s*/\s*c|w\s*/\s*o|c\s*/\s*o|a\s*/\s*v|b\s*/\s*w)(?![A-Za-z])|\band\s*/\s*or\b|https?://\S+|www\.\S+|\S+@\S+", re.I)
 # "Example: ...", "Question 2", "Exercise 3" — but not "Examples of ...", "Exercise and oxygen uptake", "Problems with ..." or a closing "Questions?".
@@ -200,6 +216,10 @@ _RE_CLOSING = re.compile(r"^(?:(?:any )?questions\s*\??|q\s*[&/]\s*a|thank you\s
 _RE_REFERENCES = re.compile(r"^(?:references|bibliography|further reading|acknowledge?ments?|credits)\b", re.I)
 _RE_SECTION = re.compile(r"^(?:part|section|chapter|unit|module|lecture|week|topic)\s+(?:\d+|[ivxlc]+)\b", re.I)
 _RE_COVER = re.compile(r"\b(?:lecture|week|chapter|unit|module|session)\s+\d+\b|\b(?:19|20)\d{2}\b|\b(?:university|department|professor|prof\.|instructor|fall|spring|semester)\b", re.I)
+# What names a course on a first page that also shows a picture or a drawing. A season, a year or "unit 1" alone also occur in the
+# heading of a content page ("Free fall", "The 1953 double helix"): there only a lecture number, a term or an institution counts.
+_RE_COURSE_HEADER = re.compile(r"\b(?:lecture|week|chapter|module|session|class)\s+\d+\b|\b(?:fall|spring|summer|winter|autumn)\s+(?:term\s+)?(?:19|20)\d{2}\b|"
+                               r"\b(?:university|department|professor|prof\.|instructor|semester)\b", re.I)
 
 
 def _clean(text: str) -> str:
@@ -264,6 +284,34 @@ def _box_fraction(matrix: list[float], corners: list[tuple[float, float]], left:
     return [clamp((min(xs) - left) / width), clamp(1 - (max(ys) - bottom) / height), clamp((max(xs) - left) / width), clamp(1 - (min(ys) - bottom) / height)]
 
 
+_IDENTITY = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+_NO_BOX = (math.nan, math.nan, math.nan, math.nan)  # a mark that has no place of its own on the page
+_GROUND_PICTURE = "picture"  # stands for the background's paint once a picture covers the page: no paint equals it
+_PAGE_COVER = 0.9  # share of the page from which a fill or a picture is the page's background
+_PANEL = 0.2  # share of the page from which a plain closed box is a panel or a frame, not part of a figure
+_FIGURE = 0.02  # share of the page that what most pages draw in the body must span to be read as a figure rather than as the template
+_BODY = (0.15, 0.22, 0.85, 0.85)  # the body of a page (left, top, right, bottom as shares of the page): inside the margins, below the heading
+
+
+def _mul(first: Any, second: Any) -> tuple[float, float, float, float, float, float]:
+    """The transformation that applies ``first`` and then ``second`` (PDF matrices, six numbers each)."""
+    a1, b1, c1, d1, e1, f1 = (float(v) for v in first)
+    a2, b2, c2, d2, e2, f2 = (float(v) for v in second)
+    return (a1 * a2 + b1 * c2, a1 * b2 + b1 * d2, c1 * a2 + d1 * c2, c1 * b2 + d1 * d2, e1 * a2 + f1 * c2 + e2, e1 * b2 + f1 * d2 + f2)
+
+
+def _area(box: Any) -> float:
+    return max(0.0, box[2] - box[0]) * max(0.0, box[3] - box[1])
+
+
+def _in_body(box: Any) -> bool:
+    """Whether a box (fractions of the page from the top left) is centred in the body of the page and is not the page's background."""
+    if box is None or any(math.isnan(v) for v in box) or _area(box) >= _PAGE_COVER:
+        return False
+    x, y = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
+    return _BODY[0] <= x <= _BODY[2] and _BODY[1] <= y <= _BODY[3]
+
+
 def _stream_bytes(obj: Any) -> bytes | None:
     """The stored bytes of a stream object, or ``None`` when the parser does not hand them out."""
     raw = getattr(obj, "_data", None)
@@ -290,15 +338,32 @@ def _object_key(value: Any) -> tuple[int, int] | None:
     return (ref.idnum, ref.generation) if isinstance(ref, IndirectObject) else None
 
 
+_PICTURE_LOOK = ("/Width", "/Height", "/BitsPerComponent", "/ColorSpace", "/Decode", "/DecodeParms", "/Filter", "/ImageMask", "/Mask", "/SMask")
+
+
 def _image_record(name: str, ref: Any, box: list[float] | None, memo: dict | None = None) -> dict:
     """One picture. ``digest_basis`` says what the digest stands on: only ``stream_bytes`` and ``inline_bytes``
-    identify the picture; ``name_and_size`` is a placeholder that is never taken as evidence that two pictures are equal."""
+    identify the picture; ``name_and_size`` is a placeholder that is never taken as evidence that two pictures are equal.
+
+    The digest covers the stored bytes together with what decides how they are shown — size, colour space (with its
+    palette), decode array, filter, masks — so the same bytes shown inverted, through another palette or under
+    another mask are another picture. When one of those cannot be read the picture is not identified at all.
+    """
     key = _object_key(ref)
     obj = _deref(ref)
     known = memo.get(("picture", key)) if memo is not None and key is not None else None
     if known is None:
         raw = _stream_bytes(obj)
-        known = (hashlib.sha256(raw).hexdigest(), len(raw), "stream_bytes") if raw is not None else (None, None, "name_and_size")
+        try:
+            look = "|".join(f"{entry}:{_canon(obj[entry])}" for entry in _PICTURE_LOOK if entry in obj) if raw is not None else None
+        except Exception:  # a palette, a mask or a parameter that cannot be read
+            look = None
+        if raw is not None and look is not None:
+            digest = hashlib.sha256(raw)
+            digest.update(b"|" + look.encode("utf-8", "backslashreplace"))
+            known = (digest.hexdigest(), len(raw), "stream_bytes")
+        else:
+            known = (None, None, "name_and_size")
         if memo is not None and key is not None:
             memo[("picture", key)] = known
     digest, size, basis = known
@@ -369,8 +434,8 @@ def _canon(obj: Any, depth: int = 0) -> str:
         return str(obj)
     if isinstance(obj, (int, float)):
         return "%.4g" % obj
-    if isinstance(obj, (bytes, bytearray)):
-        return bytes(obj[:64]).hex()
+    if isinstance(obj, (bytes, bytearray)):  # a long string (a palette) by a digest of all of it
+        return bytes(obj).hex() if len(obj) <= 64 else "sha:" + hashlib.sha256(bytes(obj)).hexdigest()[:32]
     return str(obj)
 
 
@@ -424,9 +489,9 @@ class _TimeLimit(Exception):
 
 def _unknown_page(number: int, reason: str) -> dict:
     return {"page": number, "status": "unknown", "reason": reason, "text": "", "text_truncated": False, "word_count": 0, "title": None, "images": [], "image_count": 0,
-            "images_truncated": False, "paint_operations": None, "path_operations": None, "text_operations": None, "size": None, "origin": None, "placements": [], "chunks": [],
-            "vector_marks": array("Q"), "shape_marks": array("Q"), "hiding_marks": array("Q"), "text_marks": array("Q"), "runs_known": False,
-            "marks_known": False, "visual_sha256": None}
+            "images_truncated": False, "paint_operations": None, "path_operations": None, "text_operations": None, "text_in_background_paint": None, "size": None, "origin": None,
+            "placements": [], "chunks": [], "vector_marks": array("Q"), "vector_boxes": array("f"), "shape_marks": array("Q"), "hiding_marks": array("Q"), "text_marks": array("Q"),
+            "runs_known": False, "marks_known": False, "visual_sha256": None}
 
 
 def _inspect_page(page: Any, number: int, limits: Limits, memo: dict | None = None, expired: Callable[[], bool] | None = None) -> dict:
@@ -441,28 +506,40 @@ def _inspect_page(page: Any, number: int, limits: Limits, memo: dict | None = No
     Two kinds of shape are compared like any mark but are not counted as a drawing, because they show nothing of their
     own: a plain box that covers the whole page (a background), and a shape filled and outlined in nothing but the
     paint of that background (or in white on a page that paints no background) — a cover, which can only hide what
-    lies under it.
+    lies under it. Once a picture covers the page, what is painted afterwards lies on a picture and not on paper:
+    white paint is then a shape like any other, never a cover.
+
+    Each shape and picture is also given the box it lies in on the page (``vector_boxes``, also for marks inside a
+    form), so that what most pages draw in the body of the page can be told from what they carry in their margins.
+    A background, a cover and a plain closed box over a fifth of the page or more (a panel, a frame) get no box:
+    none of them is part of a figure. Text runs painted in the paint of the background are counted
+    (``text_in_background_paint``): the file holds those words, the page does not show them.
     """
     memo = memo if memo is not None else {}
     box = page.mediabox
     width, height, left, bottom = float(box.width), float(box.height), float(box.left), float(box.bottom)
     resources = _deref(page.get("/Resources")) or {}
-    counts = {"paint": 0, "path": 0, "text_ops": 0, "operators": 0}
+    counts = {"paint": 0, "path": 0, "text_ops": 0, "operators": 0, "unseen_text": 0}
     placed: list[tuple[str, list[float]]] = []
     chunks: list[tuple[str, float, float, float]] = []
     inline: list[dict] = []
-    vector, shapes, hiding, text_marks = array("Q"), array("Q"), array("Q"), array("Q")
+    vector, shapes, hiding, text_marks, boxes = array("Q"), array("Q"), array("Q"), array("Q"), array("f")
     visual = hashlib.sha256()
     marks = {"known": True, "truncated": False, "late": False, "text_in_forms": False}
     state = {"f": "", "fcs": "", "s": "", "scs": "", "l": {}, "gs": "", "font": "", "t": {}}
     saved: list[tuple[str, dict]] = []  # graphics states put aside by q, and by entering a form
-    frames: list[dict] = [{"resources": resources, "context": ""}]  # the page, then one frame per form being drawn
+    frames: list[dict] = [{"resources": resources, "context": "", "matrix": _IDENTITY}]  # the page, then one frame per form being drawn (with the way from its coordinates to the page's)
     opened: list[dict] = []  # one entry per Do that has not ended
     waiting: list[dict | None] = [None]  # the Do whose first inner operator has not come yet
     path: list[str] = []
     outline: list[tuple[float, float] | None] = []  # the corners of the path being built while it is a plain polygon; None once it is not
+    bounds: list[float] = []  # the extent of the path being built, in the coordinates it is written in: least x, least y, greatest x, greatest y
     clip = [False]
     paper = [None]  # the paint of the page's background, once one is painted
+    # Where something has been laid over the background so far (a fill in another paint, a picture, a shading): text there is not on
+    # bare paper. ``None`` stands for "somewhere, not known where" — text is then never counted as painted on the background.
+    grounds: list[list[float] | None] = []
+    clipped: list[list[float] | None] = [None]  # where the last clipping path lies (a shading fills it)
 
     def lookup(category: str, name: Any) -> Any:
         for frame in (frames[-1], frames[0]):  # a form without resources of its own draws with those of the page
@@ -475,7 +552,36 @@ def _inspect_page(page: Any, number: int, limits: Limits, memo: dict | None = No
         found = lookup(category, name)
         return _identity(found, memo) if found is not None else f"?{name}"
 
-    def emit(kind: str, data: str) -> None:
+    def reach(x: float, y: float) -> None:
+        if bounds:
+            bounds[:] = (min(bounds[0], x), min(bounds[1], y), max(bounds[2], x), max(bounds[3], y))
+        else:
+            bounds.extend((x, y, x, y))
+
+    def on_page(cm: Any, extent: Any) -> list[float] | None:
+        """Where a box written in the current coordinates lies on the page, as fractions from the top left (``None`` when that is not known)."""
+        if not extent or frames[-1]["matrix"] is None:
+            return None
+        x0, y0, x1, y1 = extent
+        return _box_fraction(list(_mul(cm, frames[-1]["matrix"])), [(x0, y0), (x1, y0), (x0, y1), (x1, y1)], left, bottom, width, height)
+
+    def laid(where: list[float] | None) -> None:
+        if where is None or len(grounds) >= 4000:
+            grounds[:] = [None]
+        elif grounds != [None] and _area(where) > 0:
+            grounds.append(where)
+
+    def on_bare_background(cm: Any, tm: Any) -> bool:
+        """Whether a text run starts where nothing has been laid over the background (as far as the file tells)."""
+        if grounds == [None] or frames[-1]["matrix"] is None:
+            return False
+        spot = on_page(cm, (float(tm[4]), float(tm[5]), float(tm[4]), float(tm[5])))
+        if spot is None:
+            return False
+        x, y = spot[0], spot[1]
+        return not any(box[0] - 0.005 <= x <= box[2] + 0.005 and box[1] - 0.005 <= y <= box[3] + 0.005 for box in grounds)
+
+    def emit(kind: str, data: str, where: list[float] | None = None) -> None:
         digest = hashlib.blake2b((kind + frames[-1]["context"] + "|" + data).encode("utf-8", "backslashreplace"), digest_size=8).digest()
         visual.update(digest)
         if kind == "c":  # a clipping path is part of what the page draws, but it is not a shape of its own
@@ -488,6 +594,7 @@ def _inspect_page(page: Any, number: int, limits: Limits, memo: dict | None = No
             text_marks.append(value)
         else:
             vector.append(value)
+            boxes.extend(where if where is not None else _NO_BOX)
             if kind == "v":  # "b" a background, "h" a fill in the background's paint, "p" a placed picture: compared, but not a painted shape
                 shapes.append(value)
             elif kind == "h":
@@ -519,6 +626,12 @@ def _inspect_page(page: Any, number: int, limits: Limits, memo: dict | None = No
         elif operator in _PATH or operator == b"h":
             counts["path"] += operator in _PATH
             path.append(name + _fmt(operands))
+            if operator == b"re" and len(operands) >= 4:
+                reach(float(operands[0]), float(operands[1]))
+                reach(float(operands[0]) + float(operands[2]), float(operands[1]) + float(operands[3]))
+            elif operator != b"h":  # the points of a line and the control points of a curve: the curve lies within them
+                for index in range(0, len(operands) - 1, 2):
+                    reach(float(operands[index]), float(operands[index + 1]))
             if len(path) <= 6 and None not in outline:
                 if operator == b"re" and len(operands) >= 4:
                     x, y, w, h = (float(v) for v in operands[:4])
@@ -535,6 +648,7 @@ def _inspect_page(page: Any, number: int, limits: Limits, memo: dict | None = No
                 emit("c", _fmt(cm) + "|" + ";".join(path))
             path.clear()
             outline.clear()
+            bounds.clear()
             clip[0] = False
         elif operator in _STROKE_OPS or operator in _FILL_OPS or operator in _BOTH_OPS:
             counts["paint"] += 1
@@ -550,9 +664,14 @@ def _inspect_page(page: Any, number: int, limits: Limits, memo: dict | None = No
                 kind, paper[0] = "b", fill
             elif all(paint == paper[0] or (paper[0] is None and paint in _WHITE) for paint in (fill, line) if paint is not None):
                 kind = "h"  # filled and outlined in nothing but the paint of the background
-            emit(kind, f"{name}|{_fmt(cm)}|{look}|" + ";".join(path))
+            where = on_page(cm, bounds) if kind == "v" else None
+            if where is not None and len(outline) >= 4 and None not in outline and len(path) <= 6 and _area(where) >= _PANEL and (
+                    operator not in _STROKE_OPS or operator == b"s" or path[-1] == "h" or all(item.startswith("re") for item in path)):
+                where = None  # a plain closed box over a good part of the page: a panel or a frame, which shows no figure of its own
+            emit(kind, f"{name}|{_fmt(cm)}|{look}|" + ";".join(path), where)
             path.clear()
             outline.clear()
+            bounds.clear()
             clip[0] = False
         elif operator == b"sh":
             counts["paint"] += 1
@@ -561,7 +680,10 @@ def _inspect_page(page: Any, number: int, limits: Limits, memo: dict | None = No
             counts["text_ops"] += 1
             if len(frames) > 1:
                 marks["text_in_forms"] = True
-            emit("t", f"{name}|{_fmt(cm)}|{_fmt(tm)}|{state['gs']}|{state['fcs']}{state['f']}|{state['font']}|{_fmt(sorted(state['t'].items()))}|{_fmt(operands)}")
+            ink = state["fcs"] + state["f"]
+            if ink == paper[0] or (paper[0] is None and ink in _WHITE):
+                counts["unseen_text"] += 1  # painted in the paint of the background: held by the file, not shown by the page
+            emit("t", f"{name}|{_fmt(cm)}|{_fmt(tm)}|{state['gs']}|{ink}|{state['font']}|{_fmt(sorted(state['t'].items()))}|{_fmt(operands)}")
         elif operator in _FILL_COLOUR or operator in _STROKE_COLOUR:
             values = list(operands)
             if values and isinstance(values[-1], str) and not isinstance(values[-1], (int, float)):  # a pattern is named, not numbered
@@ -585,7 +707,10 @@ def _inspect_page(page: Any, number: int, limits: Limits, memo: dict | None = No
             data = operands.get("data") if isinstance(operands, dict) else None
             data = bytes(data) if isinstance(data, (bytes, bytearray)) else b""
             digest = hashlib.sha256(data).hexdigest()
-            emit("p", f"inline|{_fmt(cm)}|{digest}")
+            where = on_page(cm, (0.0, 0.0, 1.0, 1.0))
+            if where is not None and _area(where) >= _PAGE_COVER:
+                paper[0], where = _GROUND_PICTURE, None
+            emit("p", f"inline|{_fmt(cm)}|{digest}", where)
             pixels = [settings.get(key) for key in ("/W", "/Width", "/H", "/Height")]
             inline.append({"name": "inline", "width": next((int(v) for v in pixels[:2] if v is not None), None), "height": next((int(v) for v in pixels[2:] if v is not None), None),
                            "bytes": len(data), "sha256": digest, "digest_basis": "inline_bytes", "template": False,
@@ -596,12 +721,26 @@ def _inspect_page(page: Any, number: int, limits: Limits, memo: dict | None = No
             entry: dict[str, Any] = {"entered": False, "frame": None, "mark": None}
             if isinstance(target, dict) and target.get("/Subtype") == "/Image":
                 picture = _image_record(str(operands[0]), ref, None, memo)
-                emit("p", f"image|{_fmt(cm)}|" + (picture["sha256"] if picture["digest_basis"] != "name_and_size" else f"unknown:{number}:{len(vector)}"))
+                where = on_page(cm, (0.0, 0.0, 1.0, 1.0))
+                if where is not None and _area(where) >= _PAGE_COVER:
+                    paper[0], where = _GROUND_PICTURE, None  # a picture over the whole page: what is painted after it lies on a picture, not on paper
+                stencil = target.get("/ImageMask")  # a stencil is painted in the fill colour of the moment: that colour is part of what the page shows
+                emit("p", f"image|{_fmt(cm)}|" + (picture["sha256"] if picture["digest_basis"] != "name_and_size" else f"unknown:{number}:{len(vector)}")
+                     + ("|" + state["fcs"] + state["f"] if getattr(stencil, "value", stencil) is True else ""), where)
             elif isinstance(target, dict):
                 placement = _fmt(cm) + "|" + _fmt(target.get("/Matrix") or []) + "|" + _fmt(target.get("/BBox") or [])
-                entry["frame"] = {"resources": _deref(target.get("/Resources")) or frames[-1]["resources"],
+                inner, whole = None, None  # the way from the form's coordinates to the page's, and where the form as a whole lies
+                try:
+                    if frames[-1]["matrix"] is not None:
+                        inner = _mul(_mul(target.get("/Matrix") or _IDENTITY, cm), frames[-1]["matrix"])
+                        x0, y0, x1, y1 = (float(v) for v in target.get("/BBox") or ())
+                        whole = _box_fraction(list(inner), [(x0, y0), (x1, y0), (x0, y1), (x1, y1)], left, bottom, width, height)
+                except (TypeError, ValueError):  # a matrix or a box that is not six or four numbers: marks inside the form then have no known place
+                    whole = None
+                entry["frame"] = {"resources": _deref(target.get("/Resources")) or frames[-1]["resources"], "matrix": inner,
                                   "context": hashlib.blake2b((frames[-1]["context"] + "|" + placement).encode("utf-8"), digest_size=6).hexdigest()}
-                entry["mark"] = (f"form|{_fmt(cm)}|", ref)  # the form as a whole, needed only if the parser does not open it
+                # the form as a whole, needed only if the parser does not open it
+                entry["mark"] = (f"form|{_fmt(cm)}|", ref, whole if whole is not None and _area(whole) < _PAGE_COVER else None)
             if len(frames) == 1 and operands:
                 placed.append((str(operands[0]), [float(v) for v in cm]))
             opened.append(entry)
@@ -617,7 +756,7 @@ def _inspect_page(page: Any, number: int, limits: Limits, memo: dict | None = No
             waiting[0] = None
             entry["entered"] = True
             saved.append(("form", {**state, "l": dict(state["l"]), "t": dict(state["t"])}))
-            frames.append(entry["frame"] or {"resources": frames[-1]["resources"], "context": frames[-1]["context"] + "?"})
+            frames.append(entry["frame"] or {"resources": frames[-1]["resources"], "context": frames[-1]["context"] + "?", "matrix": frames[-1]["matrix"]})
         if operator == b"Do" or marks["known"]:
             try:
                 track(operator, operands, cm, tm)
@@ -638,7 +777,7 @@ def _inspect_page(page: Any, number: int, limits: Limits, memo: dict | None = No
             restore("form")
         elif entry["mark"] and marks["known"]:
             try:  # a form the parser did not open (no resources, a repeat, too many): one mark for the whole of it
-                emit("v", entry["mark"][0] + _identity(entry["mark"][1], memo))
+                emit("v", entry["mark"][0] + _identity(entry["mark"][1], memo), entry["mark"][2])
             except Exception:  # its bytes could not be read: the drawing of the page is then not compared
                 marks["known"] = False
 
@@ -687,9 +826,9 @@ def _inspect_page(page: Any, number: int, limits: Limits, memo: dict | None = No
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     return {"page": number, "status": "ok", "reason": None, "text": text, "text_truncated": truncated, "word_count": len(_WORD.findall(text)), "title": _title_from(chunks, lines),
             "images": images, "image_count": count, "images_truncated": count > len(images), "paint_operations": counts["paint"], "path_operations": counts["path"],
-            "text_operations": counts["text_ops"],
+            "text_operations": counts["text_ops"], "text_in_background_paint": counts["unseen_text"] if marks["known"] else None,
             "size": {"width_pt": round(width, 2), "height_pt": round(height, 2), "rotation": int(page.get("/Rotate") or 0) % 360}, "origin": (left, bottom),
-            "placements": placements, "chunks": chunks, "vector_marks": vector, "shape_marks": shapes, "hiding_marks": hiding, "text_marks": text_marks,
+            "placements": placements, "chunks": chunks, "vector_marks": vector, "vector_boxes": boxes, "shape_marks": shapes, "hiding_marks": hiding, "text_marks": text_marks,
             "runs_known": not marks["text_in_forms"] and len(chunks) <= limits.max_marks_per_page,  # text inside a form has no place on the page here
             "marks_known": marks["known"] and not marks["truncated"], "visual_sha256": visual.hexdigest()[:32] if marks["known"] else None}
 
@@ -826,6 +965,8 @@ def inspect_pptx(path: Path, limits: Limits | None = None, *, clock: Callable[[]
     except OSError:  # locked, or a hiccup of a streamed folder: says nothing about the bytes
         return {**result, "status": "unavailable", "reason": "read_error"}
     except Exception as exc:  # not a presentation, or one the parser cannot read
+        if type(exc).__name__ == "PackageNotFoundError":  # the archive was opened a moment ago: the parser not finding it now is a state of the moment
+            return {**result, "status": "unavailable", "reason": "read_error"}
         return {**result, "status": "unreadable", "reason": type(exc).__name__}
     result.update(slide_count=len(deck.slides), slides=slides, hidden_slides=[s["ordinal"] for s in slides if s["hidden"]])
     return result
@@ -901,14 +1042,17 @@ def _detect_printed_numbers(pages: list[dict]) -> tuple[dict[int, int], dict[str
 
     Two kinds of evidence are needed. Position: a short text run that is nothing but a number, standing at the same
     place in the top or bottom margin of most pages — a number that ends a sentence, a caption or a list is body text
-    and is never read as a slide number. Sequence: the numbers never run backwards and mostly advance no faster than
-    the pages do (a number may repeat on the builds of one slide, and a few slides may be left out). A lone number,
-    a constant, or numbers that jump about establish nothing.
+    and is never read as a slide number. Sequence: at least three different numbers that never run backwards and
+    mostly advance no faster than the pages do (a number may repeat on the builds of one slide, and a few slides may
+    be left out). Where the number repeats, it must mostly do so under one heading, as on the builds of a slide: a
+    counter that stays the same over different slides (a section, a part) is not a slide number. A lone number, a
+    constant, or numbers that jump about establish nothing.
     """
     nothing = {"method": "consistent_number_sequence", "result": "no place in the page margin carries a consistent sequence of isolated numbers"}
     candidates = {page["page"]: _number_candidates(page) for page in pages if page["status"] == "ok"}
     candidates = {number: found for number, found in candidates.items() if found}
     text_pages = sum(1 for page in pages if page["status"] == "ok" and page["lines"])
+    headings = {page["page"]: _norm(page.get("title") or "") for page in pages}
     if len(candidates) < 3:
         return {}, nothing
     best: tuple[dict[int, int], dict[str, Any]] | None = None
@@ -945,13 +1089,19 @@ def _detect_printed_numbers(pages: list[dict]) -> tuple[dict[int, int], dict[str
             unit = sum(1 for first, second, apart in steps if second - first <= apart)  # the number advances no faster than the pages
             if len(chain) < 3 or distinct < 3 or len(chain) < 0.6 * text_pages or len(chain) < 0.85 * len(entries) or unit < 0.6 * len(steps):
                 continue
+            # A slide number repeats on the builds of one slide: pages under one heading. A number that mostly repeats over pages with
+            # different headings counts something else (a section, a part) and is not worded as a slide number.
+            repeated = [(a[0], b[0]) for a, b in zip(chain, chain[1:]) if a[1] == b[1]]
+            one_heading = sum(1 for first, second in repeated if headings.get(first) and headings[first] == headings.get(second))
+            if repeated and one_heading < 0.5 * len(repeated):
+                continue
             if best is not None and len(chain) <= len(best[0]):
                 continue
             tops, lefts = sorted(t for _, _, t, _ in chain), sorted(x for _, _, _, x in chain)
             evidence = {"method": "consistent_number_sequence", "position": "page_margin", "margin": "top" if tops[len(tops) // 2] <= 0.5 else "bottom",
                         "from_top": tops[len(tops) // 2], "from_left": lefts[len(lefts) // 2], "pages_with_number": len(chain), "pages_with_text": text_pages,
                         "candidates": len(entries), "distinct_values": distinct, "first": [chain[0][0], chain[0][1]], "last": [chain[-1][0], chain[-1][1]],
-                        "repeats": sum(1 for first, second, _ in steps if first == second), "steps_of_at_most_one": unit,
+                        "repeats": len(repeated), "repeats_under_one_heading": one_heading, "steps_of_at_most_one": unit,
                         "skips": [[first, second] for first, second, apart in steps if second - first > apart][:50],
                         "rejected_pages": sorted({entry[0] for entry in entries} - {entry[0] for entry in chain})[:50]}
             best = ({entry[0]: entry[1] for entry in chain}, evidence)
@@ -1003,9 +1153,14 @@ def _features(pages: list[dict], printed: dict[int, int], margin: str | None) ->
             counts.update({re.sub(r"\d+", "#", _norm(line)) for line in stripped[page["page"]]})
         heading_keys = {re.sub(r"\d+", "#", _norm(title)) for title in titles.values() if title}
         boilerplate = {line for line, n in counts.items() if n >= math.ceil(0.7 * len(with_text)) and line not in heading_keys}
-    # Pictures and shapes drawn on nearly every page belong to the template (a logo, a rule under the heading), not to a slide.
+    # Pictures and shapes drawn on nearly every page belong to the template (a logo, a rule under the heading, a background), not to
+    # a slide — when they stand in the margins of the page, cover it, or are a plain panel. What nearly every page draws in the BODY
+    # of the page may as well be one figure that the deck walks through: it stays content, so that a page showing it is never read
+    # as blank or as a bare heading. A picture is a figure from a fiftieth of the page; shapes are, when together they span that.
     template_images: set[str] = set()
     template_marks: set[int] = set()
+    body_images: set[str] = set()
+    body_marks: set[int] = set()
     if len(ok) >= 5:
         seen: Counter = Counter()
         drawn: Counter = Counter()
@@ -1013,8 +1168,28 @@ def _features(pages: list[dict], printed: dict[int, int], margin: str | None) ->
             seen.update({image["sha256"] for image in page["images"] if image["digest_basis"] != "name_and_size"})
             drawn.update(set(page["vector_marks"]))
         needed = math.ceil(0.8 * len(ok))
-        template_images = {digest for digest, n in seen.items() if n >= needed}
-        template_marks = {mark for mark, n in drawn.items() if n >= needed}
+        frequent_images = {digest for digest, n in seen.items() if n >= needed}
+        frequent_marks = {mark for mark, n in drawn.items() if n >= needed}
+        picture_at: dict[str, Any] = {}
+        mark_at: dict[int, Any] = {}
+        for page in ok:  # where each of them lies: the same mark lies at the same place on every page that draws it
+            if len(picture_at) == len(frequent_images) and len(mark_at) == len(frequent_marks):
+                break
+            for image in page["images"]:
+                if image["sha256"] in frequent_images and image["digest_basis"] != "name_and_size":
+                    picture_at.setdefault(image["sha256"], image["box"])
+            placed = page["vector_boxes"]
+            for index, mark in enumerate(page["vector_marks"]):
+                if mark in frequent_marks and mark not in mark_at:
+                    mark_at[mark] = tuple(placed[4 * index:4 * index + 4])
+        body_images = {digest for digest in frequent_images if _in_body(picture_at.get(digest)) and _area(picture_at[digest]) >= _FIGURE}
+        body_marks = {mark for mark in frequent_marks if _in_body(mark_at.get(mark))}
+        if body_marks:
+            spans = [mark_at[mark] for mark in body_marks]
+            if _area((min(s[0] for s in spans), min(s[1] for s in spans), max(s[2] for s in spans), max(s[3] for s in spans))) < _FIGURE:
+                body_marks = set()  # a small mark in the middle of every page (an emblem, a divider line) is still the template
+        template_images = frequent_images - body_images
+        template_marks = frequent_marks - body_marks
     feats: list[_Feat] = []
     for page in pages:
         if page["status"] != "ok":
@@ -1042,7 +1217,8 @@ def _features(pages: list[dict], printed: dict[int, int], margin: str | None) ->
                            shapes=sum(1 for mark in page["shape_marks"] if mark not in template_marks), marks_known=bool(page["marks_known"]), visual=page["visual_sha256"],
                            painted=page["paint_operations"] or 0, beyond_first_line=sum(words.values()) - len(_words(lines[0])) if lines else 0,
                            portrait=_is_portrait(page["size"]), printed=printed.get(page["page"]), label=page.get("pdf_label")))
-    return feats, {"boilerplate_lines": len(boilerplate), "template_images": len(template_images), "template_marks": len(template_marks)}
+    return feats, {"boilerplate_lines": len(boilerplate), "template_images": len(template_images), "template_marks": len(template_marks),
+                   "repeated_in_body": {"images": len(body_images), "marks": len(body_marks)}}
 
 
 def _align_pptx(feats: list[_Feat], slides: list[dict]) -> tuple[dict[int, dict], dict[str, Any]]:
@@ -1171,11 +1347,11 @@ def _pair(a: _Feat, b: _Feat, labels_signal: bool, numbers_count_slides: bool = 
     covers = [sum(a.covers.values()), sum(b.covers.values())]
     cover_removed, cover_added = compared and bool(a.covers - b.covers), compared and bool(b.covers - a.covers)
     drawing_same = compared and a.marks == b.marks and a.covers == b.covers
-    # Kept: every shape and picture of the earlier page is on the later page. A cover is not content. One that is lifted shows more; one that is
-    # added may hide something, but boxes filled in the paper's paint are everywhere on slides (a framed formula), so it does not undo "kept".
+    # Kept: every shape and picture of the earlier page is on the later page. A cover is not content. One that is lifted shows more. One that is
+    # added may hide something of the earlier page: the later page is then not known to show all of it, so the pair is never called a build.
     drawing_kept = compared and not (a.marks - b.marks)
     content_added = drawing_kept and shapes[1] > shapes[0]
-    drawing_grows = content_added or (drawing_kept and cover_removed and not cover_added)
+    drawing_grows = not cover_added and (content_added or (drawing_kept and cover_removed))
     # Equal marks are sound evidence that two pages draw the same. Different marks are weak evidence that they do not: the same shapes
     # are written with other operators when a page is exported under a transparency group or laid out again.
     mostly_same = compared and (max(shapes) == 0 or shared >= 0.5 * max(shapes))
@@ -1216,6 +1392,9 @@ def _pair(a: _Feat, b: _Feat, labels_signal: bool, numbers_count_slides: bool = 
                 "reasons": reasons or [], "notes": notes, "measures": measures}
 
     def step(relation: str) -> dict:  # one authored slide in two states: never called a build or a copy, never more than medium
+        if relation == "identical_text_visual_change":
+            # Named for what the file shows. The same picture on screen can be written in other operations, so a difference on screen is not claimed.
+            notes.append("the two pages are drawn differently in the file (other operations, paints or covers); that they look different on screen was not established")
         return out("join", relation, "animation_steps", "medium")
 
     differs = f"most of the drawing differs ({shared} of {max(shapes)} shapes are on both pages)"
@@ -1248,7 +1427,7 @@ def _pair(a: _Feat, b: _Feat, labels_signal: bool, numbers_count_slides: bool = 
             if substantial:
                 return step("identical_text_drawing_not_compared")
             return out("uncertain", reasons=["the text is identical but short, and the drawing of the pages could not be compared"])
-        if in_place and drawing_kept and (drawing_grows or not images_same):
+        if in_place and drawing_kept and not cover_added and (drawing_grows or not images_same):
             # All that the earlier page shows is on the later page, where it was, and more is shown. With only a heading in common it stays a medium reading.
             relation = "identical_text_drawing_grows" if content_added or not images_same else "identical_text_cover_removed"
             return out("join", relation, "incremental_build", "high" if substantial and (same_title or authored_same) else "medium")
@@ -1268,8 +1447,10 @@ def _pair(a: _Feat, b: _Feat, labels_signal: bool, numbers_count_slides: bool = 
             return out("uncertain", reasons=[f"the text grows, but it is short and {differs}"])
         heading_with_its_figure = same_title and (bool(a.images) or shapes[0] > 0) and images_kept and (drawing_kept or not compared)
         if more_than_a_heading or authored_same or heading_with_its_figure:
-            if not images_kept or (compared and not drawing_kept):  # the text grows while something drawn changes: not everything is carried over
+            if not images_kept or (compared and not drawing_kept) or cover_added:  # the text grows while something drawn changes or is covered: not everything is known to carry over
                 return step("text_superset_visual_change")
+            if not compared:  # what the pages draw could not be compared: knowing less never gives the stronger claim
+                return step("text_superset_drawing_not_compared")
             firm = ((same_title and more_than_a_heading) or authored_same) and (in_place or extended == 0)
             return out("join", "text_superset", "incremental_build", "high" if firm else "medium")
         return out("uncertain", reasons=["the earlier page shows only the heading that the later page also carries: a section page or a first build"])
@@ -1400,8 +1581,9 @@ def _role(page: dict, feat: _Feat, first_content_page: int) -> dict:
             return out("instructional", 0.5, f"sparse text ({words} words) that reads like an equation")
         cover = page["page"] == first_content_page and not any(_BULLET.match(line) for line in feat.lines)
         if visual:
-            if cover and _RE_COVER.search(text):
-                return out("structural_title_or_section", 0.6, f"first page with a lecture or course header and {words} words; it also shows " + " and ".join(visual))
+            if cover and _RE_COURSE_HEADER.search(text):
+                # Positive evidence of a cover, not the word count; the picture or drawing beside it keeps the reading uncertain.
+                return out("structural_title_or_section", 0.55, f"first page with a lecture or course header and {words} words; it also shows " + " and ".join(visual))
             return out("instructional", 0.5, f"short text ({words} words) with " + " and ".join(visual))
         if _RE_SECTION.match(title.strip()):
             return out("structural_title_or_section", 0.8, f"section heading: {title!r}")
@@ -1425,7 +1607,10 @@ _TEXT_BASIS = {"source": "embedded_text", "visible_text_established": False,
                "note": "Page text is the text embedded in the file. Reading it cannot tell whether a shape or a picture covers it, so a page may list words it does not "
                        "show. In a group of pages, what is visible on each page was not established: the text of a page says what the file holds there, not what is seen. "
                        "A page counts the fills it paints in the paint of its own background (drawing.fills_in_background_paint): such a fill shows nothing and can only "
-                       "hide, so a page with some is where this limitation is most likely to matter. The count is a fact about the file, not a finding that text is hidden."}
+                       "hide, so a page with some is where this limitation is most likely to matter. It also counts the text runs it paints in that paint "
+                       "(drawing.text_runs_in_background_paint; white counts as the paint of bare paper): words the file holds and the page does not show, as on a build "
+                       "that keeps a later line unseen. Both counts are facts about the file, not findings about the screen: white text over a dark picture that does not "
+                       "cover the page is counted although it is seen, and text under a picture is not counted although it is hidden."}
 
 
 def _logical_id(sha256: str, pages: list[int]) -> str:
@@ -1446,7 +1631,8 @@ def _empty_base(record: dict, limits: Limits) -> dict[str, Any]:
             "page_layout": {"kind": "unknown", "landscape_pages": 0, "upright_pages": 0},
             "pdf_labels": {"defined": False, "differ_from_index": False, "repeat": False, "repeat_is_a_signal": False, "distinct": 0},
             "printed_numbers": {"established": False, "numbers_count_slides": False, "evidence": None},
-            "pptx": None, "region_box_units": REGION_BOX_UNITS, "text_basis": dict(_TEXT_BASIS), "template": {"boilerplate_lines": 0, "template_images": 0, "template_marks": 0},
+            "pptx": None, "region_box_units": REGION_BOX_UNITS, "text_basis": dict(_TEXT_BASIS),
+            "template": {"boilerplate_lines": 0, "template_images": 0, "template_marks": 0, "repeated_in_body": {"images": 0, "marks": 0}},
             "pages": [], "pairs": []}
 
 
@@ -1481,6 +1667,7 @@ def _analyse(path: Path, source: dict | None, presentations: list[tuple[Path, di
         base["inspection"].update(status="pptx_only" if inspected["status"] == "ok" else inspected["status"], reason=inspected["reason"], tool=inspected["tool"],
                                   transient=inspected["reason"] in _TRANSIENT_REASONS)
         base["pptx"] = {"source": {key: record[key] for key in ("source_id", "version_id", "sha256", "filename")}, "status": inspected["status"], "reason": inspected["reason"],
+                        "transient": inspected["reason"] in _TRANSIENT_REASONS,
                         "slide_count": inspected["slide_count"], "hidden_slides": inspected["hidden_slides"], "truncated": inspected["truncated"],
                         "alignment": {"status": "not_attempted", "method": None},
                         "candidates": [], "slides": [dict(slide, matched_pages=[]) for slide in inspected["slides"]]}
@@ -1538,11 +1725,15 @@ def _analyse(path: Path, source: dict | None, presentations: list[tuple[Path, di
     if tried:
         supported = [entry for entry in tried if entry[3]["status"] == "supported"]
         reference, deck, matches, alignment = max(supported or tried, key=lambda entry: (len(entry[2]), entry[3].get("candidate_matches") or 0))
-        base["pptx"] = {"source": reference, "status": deck["status"], "reason": deck["reason"], "slide_count": deck["slide_count"], "hidden_slides": deck["hidden_slides"],
-                        "truncated": deck["truncated"], "alignment": alignment,
-                        "candidates": [{"source_id": ref["source_id"], "sha256": ref["sha256"], "status": d["status"], "reason": d["reason"], "slide_count": d["slide_count"],
-                                        "alignment": a["status"], "matched_pages": len(f), "used": ref is reference} for ref, d, f, a in tried],
+        base["pptx"] = {"source": reference, "status": deck["status"], "reason": deck["reason"], "transient": deck["reason"] in _TRANSIENT_REASONS,
+                        "slide_count": deck["slide_count"], "hidden_slides": deck["hidden_slides"], "truncated": deck["truncated"], "alignment": alignment,
+                        "candidates": [{"source_id": ref["source_id"], "sha256": ref["sha256"], "status": d["status"], "reason": d["reason"], "transient": d["reason"] in _TRANSIENT_REASONS,
+                                        "slide_count": d["slide_count"], "alignment": a["status"], "matched_pages": len(f), "used": ref is reference} for ref, d, f, a in tried],
                         "slides": [dict(slide, matched_pages=[page for page, match in sorted(matches.items()) if match["slide_id"] == slide["slide_id"]]) for slide in deck["slides"]]}
+        if any(d["reason"] in _TRANSIENT_REASONS for _, d, _, _ in tried):
+            # A presentation that could not be read just now (locked, out of time) may lend slide identity on another attempt:
+            # the pages are read, but this is not the settled map of the source.
+            base["inspection"]["transient"] = True
         for feat in feats:
             feat.pptx_id = matches[feat.page]["slide_id"] if feat.page in matches else None
 
@@ -1565,7 +1756,8 @@ def _analyse(path: Path, source: dict | None, presentations: list[tuple[Path, di
             "content_sha256": _digest([text_identity, sorted(image["sha256"] for image in page["images"])]),
             "images": page["images"], "image_count": page["image_count"], "images_truncated": page["images_truncated"], "pictures_unread": unread,
             "drawing": {"paint_operations": page["paint_operations"], "path_operations": page["path_operations"], "shapes_beyond_template": feat.shapes if feat.ok else None,
-                        "fills_in_background_paint": sum(feat.covers.values()) if feat.ok else None, "marks_compared": feat.marks_known, "visual_sha256": page["visual_sha256"]},
+                        "fills_in_background_paint": sum(feat.covers.values()) if feat.ok else None, "text_runs_in_background_paint": page["text_in_background_paint"],
+                        "marks_compared": feat.marks_known, "visual_sha256": page["visual_sha256"]},
             "size": page["size"], "regions": regions.get(page["page"], []), "retired_regions": [], "role": _role(page, feat, first_content)})
     return base
 
@@ -1692,11 +1884,6 @@ def _by_learner(record: dict) -> bool:
     return kind == "learner" or (kind == "agent" and authority)
 
 
-def _by_agent_alone(record: dict) -> bool:
-    kind, authority = _author(record)
-    return kind == "agent" and not authority
-
-
 def _in_force(ledger: list[dict], upto: int | None = None) -> set[int]:
     """The revisions whose effect holds. A revert takes its targets out of force; reverting that revert puts them back."""
     force: set[int] = set()
@@ -1710,30 +1897,122 @@ def _in_force(ledger: list[dict], upto: int | None = None) -> set[int]:
     return force
 
 
-def _learner_conflicts(op: dict, live: list[dict], page_count: int) -> list[int]:
-    """The learner's corrections in force that this correction would undo or contradict (their revision numbers)."""
-    protected = [record for record in live if _by_learner(record)]
-    if op["type"] == "revert":
-        return sorted(record["revision"] for record in protected if record["revision"] in op["revisions"])
-    if op["type"] in {"role", "printed_number", "regions"}:
-        return [record["revision"] for record in protected if record["op"]["type"] == op["type"] and record["op"]["page"] == op["page"]][-1:]
-    fixed: dict[int, tuple[str, int]] = {}
-    for record in protected:  # in order: the learner's later word on a boundary replaces the earlier one
-        if record["op"]["type"] in {"group", "split"}:
-            for gap, state in _op_gaps(record["op"], page_count).items():
-                fixed[gap] = (state, record["revision"])
-    return sorted({fixed[gap][1] for gap, state in _op_gaps(op, page_count).items() if gap in fixed and fixed[gap][0] != state})
+def _timeline(ledger: list[dict]) -> dict[int, dict[int, int]]:
+    """After each revision: the revisions whose effect holds, each with the revision at which it last came into force —
+    its own number, or that of the revert which put it back. ``0`` is the state before any correction."""
+    timeline: dict[int, dict[int, int]] = {0: {}}
+    since: dict[int, int] = {}
+    for record in ledger:
+        since = {revision: since.get(revision, record["revision"]) for revision in _in_force(ledger, record["revision"])}
+        timeline[record["revision"]] = since
+    return timeline
+
+
+def _effective(ledger: list[dict], since: dict[int, int]) -> list[dict]:
+    """The corrections that hold (reverts aside), in the order in which they came into force. Where two of them speak
+    about the same boundary, role, number or regions, the one that came into force later decides: a correction that is
+    put back by undoing its undo is the later word, whatever its number."""
+    return sorted((record for record in ledger if record["revision"] in since and record["op"]["type"] != "revert"), key=lambda record: (since[record["revision"]], record["revision"]))
+
+
+def _decided(ledger: list[dict], since: dict[int, int], page_count: int) -> tuple[dict[int, tuple[str, int, str | None]], dict[tuple[str, int], int]]:
+    """Which correction decides each page boundary (``{gap: (state, revision, kind of a join)}``) and each role, printed
+    number and set of regions of a page (``{(type, page): revision}``)."""
+    gaps: dict[int, tuple[str, int, str | None]] = {}
+    facets: dict[tuple[str, int], int] = {}
+    for record in _effective(ledger, since):
+        op = record["op"]
+        if op["type"] in {"group", "split"}:
+            for gap, state in _op_gaps(op, page_count).items():
+                gaps[gap] = (state, record["revision"], op.get("kind") if state == "join" else None)
+        else:
+            facets[(op["type"], op["page"])] = record["revision"]
+    return gaps, facets
+
+
+def _learner_word(ledger: list[dict], since: dict[int, int], page_count: int) -> tuple[dict[int, int], dict[int, tuple[str, int, str | None]], dict[tuple[str, int], int]]:
+    """What the learner's corrections in force settle, the later word replacing the earlier one.
+
+    ``owner``: the corrections that hold on the learner's word — the learner's own, and those a learner's revert put
+    back in force — each with the learner's revision it stands on. ``gaps``: page boundaries, with the state the
+    learner's word leaves there and the kind the learner gave a join. ``facets``: the role, printed number or regions
+    of a page the learner has spoken about.
+
+    A revert is a word too. What it undid is not an agent's to record again: the boundaries of an undone group or
+    split are held at the other state, and the role, number or regions of that page are the learner's. What it put
+    back in force stands like a correction of the learner's own.
+    """
+    by_revision = {record["revision"]: record for record in ledger}
+    owner: dict[int, int] = {}
+    gaps: dict[int, tuple[str, int, str | None]] = {}
+    facets: dict[tuple[str, int], int] = {}
+
+    def speak(record: dict, by: int, depth: int = 0) -> None:
+        owner[record["revision"]] = by
+        op = record["op"]
+        if op["type"] in {"group", "split"}:
+            for gap, state in _op_gaps(op, page_count).items():
+                gaps[gap] = (state, by, op.get("kind") if state == "join" else None)
+        elif op["type"] != "revert":
+            facets[(op["type"], op["page"])] = by
+        elif depth < 64:
+            for target in op["revisions"]:
+                undone = by_revision.get(target)
+                if undone is None or undone["op"] is None or undone["refused"]:
+                    continue
+                other = undone["op"]
+                if other["type"] == "revert":  # an undo is undone: what it had taken out of force holds again, now on the learner's word
+                    for revision in other["revisions"]:
+                        if revision in since:
+                            speak(by_revision[revision], by, depth + 1)
+                elif other["type"] in {"group", "split"}:
+                    for gap, state in _op_gaps(other, page_count).items():
+                        gaps[gap] = ("cut" if state == "join" else "join", by, None)
+                else:
+                    facets[(other["type"], other["page"])] = by
+
+    for record in sorted((record for record in ledger if record["revision"] in since and _by_learner(record)), key=lambda record: (since[record["revision"]], record["revision"])):
+        speak(record, record["revision"])
+    return owner, gaps, facets
+
+
+def _learner_conflicts(op: dict, ledger: list[dict], page_count: int) -> list[int]:
+    """The learner's corrections in force that this correction would undo, contradict or take the place of (their
+    revision numbers). ``ledger`` is every earlier record; the correction is measured by what recording it would do:
+    nothing the learner's word holds may go out of force, no boundary the learner settled may be decided otherwise
+    (nor a join be given another kind), and no role, number or regions the learner spoke about may get another
+    deciding correction. That covers the correction itself, a revert of a learner's correction, a revert that would
+    put back what the learner undid, and the same correction recorded again after the learner's undo."""
+    before = _timeline(ledger)[ledger[-1]["revision"] if ledger else 0]
+    owner, gaps, facets = _learner_word(ledger, before, page_count)
+    if not owner:
+        return []
+    revision = (ledger[-1]["revision"] if ledger else 0) + 1
+    after_ledger = [*ledger, {"revision": revision, "op": op, "refused": False}]
+    after = _timeline(after_ledger)[revision]
+    against = {by for held, by in owner.items() if held not in after}
+    gaps_before, facets_before = _decided(ledger, before, page_count)
+    gaps_after, facets_after = _decided(after_ledger, after, page_count)
+    for gap, (state, by, kind) in gaps.items():
+        decided = gaps_after.get(gap)
+        if decided is not None and decided != gaps_before.get(gap) and (decided[0] != state or (kind is not None and decided[2] != kind)):
+            against.add(by)
+    for facet, by in facets.items():
+        if facets_after.get(facet) != facets_before.get(facet):
+            against.add(by)
+    return sorted(against)
 
 
 def _refusal(against: list[int]) -> str:
-    return (f"the learner's correction r{', r'.join(str(r) for r in against)} is in force here; a correction made by an agent never replaces or undoes one made by the learner. "
-            "It is recorded only when the learner makes it, or when the call says it is made on the learner's authority")
+    return (f"the learner's correction r{', r'.join(str(r) for r in against)} is in force here; a correction made by an agent never replaces or undoes one made by the learner, "
+            "and never records again what the learner undid. It is recorded only when the learner makes it, or when the call says it is made on the learner's authority")
 
 
 def _ledger(records: list[dict], page_count: int) -> tuple[list[dict], list[dict]]:
     """The correction records in order and in normal form, each with what became of it: ``op`` is ``None`` for a record
-    that is not valid, and ``refused`` is set for an agent's record that contradicts a learner's correction in force
-    (neither has any effect). Also returns the problems found."""
+    that is not valid, and ``refused`` is set for a record that is not the learner's — an agent's, or one that does not
+    say who made it — and goes against a learner's correction in force (neither has any effect). Also returns the
+    problems found."""
     ledger: list[dict] = []
     problems: list[dict] = []
     known: list[int] = []
@@ -1746,8 +2025,8 @@ def _ledger(records: list[dict], page_count: int) -> tuple[list[dict], list[dict
         except SourceMapError as exc:
             problems.append({"code": "invalid_override", "revision": record["revision"], "message": exc.message})
             op = None
-        if op is not None and _by_agent_alone(record):
-            against = _learner_conflicts(op, [earlier for earlier in ledger if earlier["revision"] in force], page_count)
+        if op is not None and not _by_learner(record):
+            against = _learner_conflicts(op, ledger, page_count)
             if against:
                 refused = True
                 problems.append({"code": "learner_correction_in_force", "revision": record["revision"], "message": _refusal(against)})
@@ -1801,7 +2080,7 @@ def _overlap(first: list[float], second: list[float]) -> float:
     return shared / ((first[2] - first[0]) * (first[3] - first[1]) + (second[2] - second[0]) * (second[3] - second[1]) - shared)
 
 
-def _regions_of(page: dict, ledger: list[dict]) -> tuple[list[dict], list[dict]]:
+def _regions_of(page: dict, ledger: list[dict], timeline: dict[int, dict[int, int]]) -> tuple[list[dict], list[dict]]:
     """The regions of a page after its corrections, and the regions that are gone.
 
     A region id keeps naming the box it named: a correction that lists the same box again keeps its id whatever the
@@ -1817,8 +2096,7 @@ def _regions_of(page: dict, ledger: list[dict]) -> tuple[list[dict], list[dict]]
     retired: dict[str, int] = {}
     current, governing = automatic, None
     for record in relevant:
-        force = _in_force(ledger, record["revision"])
-        holder = next((r for r in reversed(ledger) if r["revision"] in force and r["op"]["type"] == "regions" and r["op"]["page"] == number), None)
+        holder = next((r for r in reversed(_effective(ledger, timeline[record["revision"]])) if r["op"]["type"] == "regions" and r["op"]["page"] == number), None)
         if (holder["revision"] if holder else None) == governing:
             continue
         governing = holder["revision"] if holder else None
@@ -1856,10 +2134,10 @@ def _apply(base: dict, records: list[dict], problems: list[dict] | None = None) 
     count = len(pages)
     ledger, found = _ledger(records, count)
     problems = [*(problems or []), *found]
+    timeline = _timeline(ledger)
 
-    def effective(upto: int) -> list[dict]:
-        force = _in_force(ledger, upto)
-        return [record for record in ledger if record["revision"] in force and record["op"]["type"] != "revert"]
+    def effective(upto: int) -> list[dict]:  # in the order in which the corrections came into force: the later word decides
+        return _effective(ledger, timeline[upto])
 
     auto = {pair["pages"][0]: pair for pair in result["pairs"] if pair["decision"] == "join"}
 
@@ -1891,7 +2169,7 @@ def _apply(base: dict, records: list[dict], problems: list[dict] | None = None) 
             page["printed_number_detected"] = page["printed_number"]
             page["printed_number"] = number_ops[number]["op"]["printed_number"]
             page["printed_number_source"] = "override"
-        page["regions"], page["retired_regions"] = _regions_of(page, ledger)
+        page["regions"], page["retired_regions"] = _regions_of(page, ledger, timeline)
 
     uncertain: dict[int, list[tuple[int, list[str]]]] = {}
     for pair in result["pairs"]:
@@ -2148,12 +2426,14 @@ def load_or_build(settings: Settings, course_id: str, item: dict, *, lecture: di
     * A file over the byte bound, missing or empty is not read (not even hashed) and nothing is kept for it.
     * A file that cannot be opened just now (locked, a read error) gives ``inspection.status = "unavailable"`` with
       ``transient``; nothing is kept and an earlier good map is left as it is.
-    * An inspection cut short by a read error on a page or by the time bound gives a ``partial`` map marked
-      ``inspection.transient``. It is not the settled map of the source: the next calls inspect the file again
-      (``inspection.retry = "automatic"``) until ``inspection.attempts`` reaches three; after that the partial map is
-      served as it is (``retry = "on_request"``) so that a file which always runs out of time is not inspected on
-      every call.
-    * ``refresh=True`` always inspects again and replaces what is cached.
+    * An inspection cut short by something of the moment — a read error on a page, the time bound, a presentation of
+      the unit that could not be opened or was not reached in time — gives a map marked ``inspection.transient``
+      (``retry = "automatic"``, ``cache`` is ``None``). It is never stored, however often it happens: every call
+      inspects the file again until it reads through, and a settled map stored earlier is left as it is. The
+      corrections of the source are applied to such a map as to any other. ``inspection.attempts`` counts the
+      inspections in a row that ended this way in this process, so that a caller can decide how often to ask: a file
+      that always runs out of time costs ``limits.max_seconds`` on every call.
+    * ``refresh=True`` always inspects again and replaces what is cached — unless that inspection is itself cut short.
     * A cached file is used only when the digest it carries of its own content still matches; otherwise it is rebuilt.
       A cache that cannot be written does not fail the call.
 
@@ -2181,6 +2461,7 @@ def load_or_build(settings: Settings, course_id: str, item: dict, *, lecture: di
               "registration": item.get("registration"), "index_sha256_matches": (declared == sha) if declared else None, "sha256": sha}
     presentations: list[tuple[Path, dict | None]] = []
     partners: list[str] = []
+    partner_unread = False
     for deck in _companions(root, item, lecture, companions):
         deck_path = root / deck["path"]
         try:
@@ -2190,7 +2471,10 @@ def load_or_build(settings: Settings, course_id: str, item: dict, *, lecture: di
                 partners.append(f"oversized:{deck['source_id']}:{deck_size}")
                 continue
             deck_sha = _file_sha256(deck_path)
-        except OSError:
+        except OSError:  # the presentation is there but cannot be read just now: it is still tried, and whatever comes of it is not kept
+            presentations.append((deck_path, {"source_id": deck["source_id"], "sha256": None, "version_id": None}))
+            partners.append(f"unread:{deck['source_id']}")
+            partner_unread = True
             continue
         presentations.append((deck_path, {"source_id": deck["source_id"], "sha256": deck_sha,
                                           "version_id": deck["version_id"] if deck.get("sha256") == deck_sha and deck.get("version_id") else disk_version_id(deck_sha)}))
@@ -2215,24 +2499,34 @@ def load_or_build(settings: Settings, course_id: str, item: dict, *, lecture: di
         return base
 
     zero = read(0)
-    if zero is not None and not (zero["cache"].get("base_digest") == base_digest and zero["cache"].get("analysis_digest") and (zero.get("overrides") or {}).get("revision") == 0):
+    if zero is not None and not (zero["cache"].get("base_digest") == base_digest and zero["cache"].get("analysis_digest") and (zero.get("overrides") or {}).get("revision") == 0
+                                 and not zero["inspection"].get("transient")):  # a map cut short is never the stored map, whoever wrote the file
         zero = None
-    attempts = 0
-    if zero is not None and zero["inspection"].get("transient") and zero["inspection"].get("attempts", 1) < _MAX_TRANSIENT_ATTEMPTS:
-        attempts, zero = zero["inspection"].get("attempts", 1), None  # cut short by something of the moment: inspect again
     if zero is not None:
         base = base_of(zero)
         analysis_digest = zero["cache"]["analysis_digest"]
     else:
         base = _analyse(path, source, presentations, limits, clock or time.monotonic)
         inspection = base["inspection"]
-        inspection["attempts"] = attempts + 1
-        inspection["retry"] = "automatic" if inspection["transient"] and inspection["attempts"] < _MAX_TRANSIENT_ATTEMPTS else "on_request"
-        if base["source"]["sha256"] is None or inspection["status"] == "unavailable":
-            inspection["retry"] = "automatic"  # the file could not be read just now: nothing is kept, so the next call reads it again
-            result = _apply(base, [])
+        if partner_unread:
+            inspection["transient"] = True
+        unread = base["source"]["sha256"] is None or inspection["status"] == "unavailable"
+        attempt_key = (str(version_dir), suffix, base_digest)
+        inspection["attempts"] = _PASSING_FAILURES.get(attempt_key, 0) + 1
+        if unread or inspection["transient"]:
+            # Something of the moment (the file or a presentation could not be read, the time ran out): this is not the map of the
+            # source. Nothing is written, an earlier settled map is left as it is, and the next call inspects again.
+            _PASSING_FAILURES[attempt_key] = inspection["attempts"]
+            while len(_PASSING_FAILURES) > 512:
+                _PASSING_FAILURES.pop(next(iter(_PASSING_FAILURES)))
+            inspection["retry"] = "automatic"
+            result = _apply(base, [] if unread else records, None if unread else problems)
+            if not unread:  # corrections belong to the bytes, so they are shown; the ids and corrections of other bytes are listed as always
+                result["other_source_versions"] = _other_versions(source_dir, version_dir.name, result["pages"])[0]
             result["cache"] = None
-            return result
+            return _plain(result)
+        _PASSING_FAILURES.pop(attempt_key, None)
+        inspection["attempts"], inspection["retry"] = 1, "on_request"  # the settled map: what is stored does not depend on what went before
         base = _plain(base)
         analysis_digest = _digest(base)
     others, fingerprint = _other_versions(source_dir, version_dir.name, base["pages"])
@@ -2283,6 +2577,11 @@ def apply_override(settings: Settings, course_id: str, item: dict, op: dict, *, 
     The learner's corrections stand: a correction with ``author="agent"`` that would replace, contradict or revert a
     learner's correction in force is refused with ``learner_correction_in_force`` and nothing is recorded — unless
     ``learner_authority=True`` says the agent records it on the learner's explicit say (the record then carries that).
+    A learner's revert is such a correction: an agent can neither undo it nor record again what it undid (the same
+    group or split, another kind for a join the learner made, any role, number or regions for that page), and what
+    the learner's revert put back in force is protected like the learner's own. Where two corrections in force speak
+    about the same thing, the one that came into force later decides — a correction put back by undoing its undo
+    counts from that moment.
 
     Raises :class:`SourceMapError`: ``invalid_override`` (nothing is recorded), ``learner_correction_in_force``,
     ``override_conflict`` (another writer took the revision number), ``override_chain_broken`` (the stored revisions
@@ -2308,7 +2607,7 @@ def apply_override(settings: Settings, course_id: str, item: dict, op: dict, *, 
     normal = _validate_op(op, count, [record["revision"] for record in records], force)
     agent_alone = author == "agent" and not learner_authority
     if agent_alone:
-        against = _learner_conflicts(normal, live, count)
+        against = _learner_conflicts(normal, ledger, count)
         if against:
             raise SourceMapError("learner_correction_in_force", _refusal(against))
     revision = len(records) + 1

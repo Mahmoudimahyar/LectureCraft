@@ -174,6 +174,9 @@ def write_slide_pdf(path: Path, pages: list[dict], *, page_labels: dict[int, tup
     ``polygons`` ``[([(x, y), ...], colour)]`` filled polygons, drawn before the text (after the background)
     ``text_colour``  a colour for the body text (``bullets``, ``lines``, ``texts``) instead of the ink of the heading
     ``printed_xy``  ``(x, y)`` where the printed number is drawn instead of bottom-right
+    ``background_image``  a picture seed: one picture over the whole page, drawn before anything else (a theme's background)
+    ``stroke_colour``  a colour for ``strokes`` and ``polylines`` instead of slate
+    ``title_colour``  a colour for the heading instead of ink
 
     A colour is a name of the fixture palette or an ``(r, g, b)`` triple.
 
@@ -196,13 +199,15 @@ def write_slide_pdf(path: Path, pages: list[dict], *, page_labels: dict[int, tup
         if page_labels and number in page_labels:
             style, prefix, start = page_labels[number]
             pdf.set_page_label(label_style=style, label_prefix=prefix, label_start=start)
+        if page.get("background_image") is not None:
+            pdf.image(io.BytesIO(synthetic_image_png(page["background_image"])), x=0, y=0, w=width, h=height)
         if page.get("background") is not None:
             pdf.set_fill_color(*rgb(page["background"]))
             pdf.rect(0, 0, width, height, style="F")
         for points, colour in page.get("polygons", []):
             pdf.set_fill_color(*rgb(colour))
             pdf.polygon(list(points), style="F")
-        pdf.set_text_color(*_COLORS["ink"])
+        pdf.set_text_color(*rgb(page.get("title_colour", "ink")))
         if page.get("title"):
             pdf.set_font("helvetica", "B", 26)
             pdf.set_xy(16, 18)
@@ -213,8 +218,7 @@ def write_slide_pdf(path: Path, pages: list[dict], *, page_labels: dict[int, tup
                 pdf.set_font("helvetica", "B", points)
                 pdf.cell(pdf.get_string_width(text) + 2, 12, text)
         pdf.set_font("helvetica", "", 15)
-        if page.get("text_colour") is not None:
-            pdf.set_text_color(*rgb(page["text_colour"]))
+        pdf.set_text_color(*rgb(page.get("text_colour", "ink")))
         y = 52.0
         for text in [*("- " + bullet for bullet in page.get("bullets", [])), *page.get("lines", [])]:
             pdf.set_xy(20, y)
@@ -227,7 +231,7 @@ def write_slide_pdf(path: Path, pages: list[dict], *, page_labels: dict[int, tup
             _figure(pdf, page["figure"])
         if page.get("strokes") or page.get("polylines"):
             pdf.set_line_width(1.0)
-            pdf.set_draw_color(*_COLORS["slate"])
+            pdf.set_draw_color(*rgb(page.get("stroke_colour", "slate")))
             for x1, y1, x2, y2 in page.get("strokes", []):
                 pdf.line(x1, y1, x2, y2)
             for points in page.get("polylines", []):
@@ -273,6 +277,33 @@ def add_inline_image(path: Path, page: int, *, seed: int = 1, box_pt: tuple[floa
     stream = DecodedStreamObject()
     stream.set_data(f"q {width} 0 0 {height} {left} {bottom} cm BI /W 16 /H 16 /CS /G /BPC 8 ID ".encode("ascii") + pixels + b" EI Q")
     writer.pages[page - 1][NameObject("/Contents")] = writer._add_object(stream)
+    with open(path, "wb") as handle:
+        writer.write(handle)
+
+
+def set_picture_decode(path: Path, page: int, decode: tuple[float, ...]) -> None:
+    """Give the pictures of one page (1-based) of a synthetic PDF a ``/Decode`` array, leaving their stored bytes as they are.
+
+    The page gets its own copy of each picture object, so the same picture on other pages is shown as before: two
+    pictures with equal bytes that are not shown the same. For source-map cases only; ``build_fixture_workspace`` does not use it.
+    """
+    from pypdf import PdfReader, PdfWriter
+    from pypdf.generic import ArrayObject, DictionaryObject, FloatObject, NameObject
+
+    writer = PdfWriter()
+    for source_page in PdfReader(str(path)).pages:
+        writer.add_page(source_page)
+    target = writer.pages[page - 1]
+    resources = DictionaryObject(target["/Resources"])
+    pictures = DictionaryObject(resources["/XObject"])
+    for name in list(pictures):
+        picture = pictures[name]
+        if picture.get("/Subtype") == "/Image":
+            copy = picture.clone(writer, force_duplicate=True)
+            copy[NameObject("/Decode")] = ArrayObject(FloatObject(value) for value in decode)
+            pictures[NameObject(name)] = copy.indirect_reference
+    resources[NameObject("/XObject")] = pictures
+    target[NameObject("/Resources")] = resources
     with open(path, "wb") as handle:
         writer.write(handle)
 

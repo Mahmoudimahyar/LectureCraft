@@ -5,6 +5,11 @@ is a presentation of them: a row has an *instance id* (the path that led to it),
 one canonical node shown on two branches. Children are returned one level at a time, bounded, and a node already on
 the path is not expanded again. Question-to-question relations are cross-links kept with the owner's labels; they are
 never tree edges and never credit. Criterion wording is not part of this model (it is shown with feedback only).
+
+Amendment R2 (R2-C5): ``hierarchy`` is the one set of joins — what lies below a node inside a scope. ``children``,
+``questions_of`` and the counts of ``concept_graph`` are all read from it, so a node has the same questions in the
+outline, in the graph and in its detail. A concept that criteria name directly lists those questions itself, and what
+the catalog files under nothing is listed beside the topics instead of being counted and unreachable.
 """
 from __future__ import annotations
 
@@ -34,6 +39,7 @@ class OutlineModel:
                                                            "action_types": list(criterion.get("action_types") or []), "tag": criterion.get("tag")}
         self.canonical_counts = {"topic": len(self.topics), "concept": len(self.concepts), "skill": len(self.skills), "question_family": len(self.families),
                                  "question": len(self.questions), "criterion": len(self.criteria), "question_relationship": len(self.relationships)}
+        self._hierarchy: tuple[tuple, dict[str, Any]] | None = None  # the joins of the scope read last (``hierarchy``)
 
     # ---- identity ---------------------------------------------------------------------------------------
     def kind_of(self, node_id: str) -> str | None:
@@ -90,26 +96,88 @@ class OutlineModel:
         criteria = [c for q in questions for c in self.questions[q].get("criteria") or []]
         return questions, {c["concept_id"] for c in criteria if c.get("concept_id")}, {c["skill_id"] for c in criteria if c.get("skill_id")}
 
+    def hierarchy(self, scope: dict | None = None) -> dict[str, Any]:
+        """What lies directly below each node inside a scope (``None``: the whole catalog), read once.
+
+        These are the ONLY joins of the hierarchy: the outline's ``children``, a node's counts, a node's question list
+        (``questions_of``) and the concept graph are all read from them, so one node has one set of questions everywhere.
+
+        * A concept is filed under each catalogued topic it names; a skill under its concept, or — when its concept is
+          not catalogued — under each catalogued topic it names.
+        * A question is listed under every skill one of its criteria names. A criterion may also name a concept that
+          is not the concept of its skill (or name a concept and no catalogued skill): the question is then listed
+          directly under that concept as well, unless it is already under one of that concept's skills.
+        * What the catalog files under nothing — a concept without a catalogued topic, a skill with neither, a question
+          whose criteria name nothing catalogued — is listed beside the topics (``unfiled``), so it is counted AND reachable.
+        * An id that occurs in two tables is the object ``kind_of`` says it is; its other entry is not a second node.
+        """
+        questions, concepts, skills = self._in_scope(scope) if scope is not None else (None, None, None)
+        criteria = scope.get("criterion_ids") if scope is not None else None  # R2: set only by a resolved slide scope whose support names single criteria
+        key = (questions, concepts, skills, criteria, len(self.topics), len(self.concepts), len(self.skills), len(self.questions))
+        if self._hierarchy is not None and all(a is b if isinstance(a, set) or a is None else a == b for a, b in zip(self._hierarchy[0], key)):
+            return self._hierarchy[1]
+
+        def within(members: set[str] | None, node_id: Any) -> bool:
+            return members is None or node_id in members
+
+        def filed(names: Any) -> list[str]:
+            return [t for t in dict.fromkeys(names or []) if self.kind_of(t) == "topic"]
+
+        index: dict[str, Any] = {name: {} for name in ("concepts_of_topic", "loose_skills_of_topic", "skills_of_concept", "questions_of_skill", "direct_questions_of_concept",
+                                                        "criteria_of_question")}
+        unfiled: list[str] = []
+        for concept_id, concept in self.concepts.items():
+            if self.kind_of(concept_id) == "concept" and within(concepts, concept_id):
+                topics = filed(concept.get("topic_ids"))
+                for topic_id in topics:
+                    index["concepts_of_topic"].setdefault(topic_id, []).append(concept_id)
+                if not topics:
+                    unfiled.append(concept_id)
+        for skill_id, skill in self.skills.items():
+            if self.kind_of(skill_id) != "skill" or not within(skills, skill_id):
+                continue
+            if self.kind_of(skill.get("concept_id") or "") == "concept":
+                index["skills_of_concept"].setdefault(skill["concept_id"], []).append(skill_id)
+            else:
+                topics = filed(skill.get("topic_ids"))
+                for topic_id in topics:
+                    index["loose_skills_of_topic"].setdefault(topic_id, []).append(skill_id)
+                if not topics:
+                    unfiled.append(skill_id)
+        for question_id, question in self.questions.items():
+            if self.kind_of(question_id) != "question" or not within(questions, question_id):
+                continue
+            listed = [c for c in question.get("criteria") or [] if within(criteria, c["criterion_id"])]
+            index["criteria_of_question"][question_id] = [c["criterion_id"] for c in listed]
+            through = sorted({c["skill_id"] for c in listed if self.kind_of(c.get("skill_id") or "") == "skill" and within(skills, c["skill_id"])})
+            named = sorted({c["concept_id"] for c in listed if self.kind_of(c.get("concept_id") or "") == "concept" and within(concepts, c["concept_id"])})
+            direct = [c for c in named if not any(self.skills[s].get("concept_id") == c for s in through)]
+            for skill_id in through:
+                index["questions_of_skill"].setdefault(skill_id, []).append(question_id)
+            for concept_id in direct:
+                index["direct_questions_of_concept"].setdefault(concept_id, []).append(question_id)
+            if not through and not direct:
+                unfiled.append(question_id)
+        index["topics"] = [t for t in self.topics if concepts is None or t in index["concepts_of_topic"] or t in index["loose_skills_of_topic"]]
+        index["unfiled"] = unfiled
+        self._hierarchy = (key, index)
+        return index
+
     def children(self, node_id: str | None, scope: dict) -> list[tuple[str, str]]:
         """(child id, relation) of one node in the hierarchy subset, in a stable order. Cross-links are not children."""
-        questions, concepts, skills = self._in_scope(scope)
-        criteria = scope.get("criterion_ids")  # R2: set only by a resolved slide scope whose support names single criteria; ``None`` leaves every criterion in
+        index = self.hierarchy(scope)
+        kind = self.kind_of(node_id) if node_id is not None else None
         if node_id is None:
-            topics = [t for t in self.topics if concepts is None or any(t in self.concepts[c].get("topic_ids", []) for c in concepts if c in self.concepts)
-                      or any(t in self.skills[s].get("topic_ids", []) for s in (skills or ()) if s in self.skills and self.skills[s].get("concept_id") not in self.concepts)]
-            return [(t, "root") for t in sorted(topics, key=lambda t: (self.label_of(t).lower(), t))]
-        kind = self.kind_of(node_id)
-        if kind == "topic":
-            out = [(c, "topic_includes_concept") for c, concept in self.concepts.items() if node_id in concept.get("topic_ids", []) and (concepts is None or c in concepts)]
-            out += [(s, "topic_includes_skill") for s, skill in self.skills.items() if skill.get("concept_id") not in self.concepts and node_id in skill.get("topic_ids", [])
-                    and (skills is None or s in skills)]
+            out = [(t, "root") for t in index["topics"]] + [(n, "unfiled") for n in index["unfiled"]]
+        elif kind == "topic":
+            out = [(c, "topic_includes_concept") for c in index["concepts_of_topic"].get(node_id, [])] + [(s, "topic_includes_skill") for s in index["loose_skills_of_topic"].get(node_id, [])]
         elif kind == "concept":
-            out = [(s, "concept_assessed_as_skill") for s, skill in self.skills.items() if skill.get("concept_id") == node_id and (skills is None or s in skills)]
+            out = ([(s, "concept_assessed_as_skill") for s in index["skills_of_concept"].get(node_id, [])]
+                   + [(q, "concept_assessed_by_question") for q in index["direct_questions_of_concept"].get(node_id, [])])
         elif kind == "skill":
-            out = [(q, "skill_assessed_by_question") for q, question in self.questions.items() if (questions is None or q in questions)
-                   and any(c.get("skill_id") == node_id and (criteria is None or c["criterion_id"] in criteria) for c in question.get("criteria") or [])]
+            out = [(q, "skill_assessed_by_question") for q in index["questions_of_skill"].get(node_id, [])]
         elif kind == "question":
-            out = [(c["criterion_id"], "question_has_criterion") for c in self.questions[node_id].get("criteria") or [] if criteria is None or c["criterion_id"] in criteria]
+            out = [(c, "question_has_criterion") for c in index["criteria_of_question"].get(node_id, [])]
         else:
             out = []
         return sorted(out, key=lambda pair: (_ORDER[self.kind_of(pair[0]) or "criterion"], self.label_of(pair[0]).lower() if self.kind_of(pair[0]) != "criterion" else "", pair[0]))
@@ -153,17 +221,21 @@ class OutlineModel:
             ids = [self.criteria[node_id]["question_id"]]
         return [{"node_id": i, "kind": self.kind_of(i), "label": self.label_of(i)} for i in ids if self.kind_of(i)]
 
-    def questions_of(self, node_id: str) -> list[str]:
+    def questions_of(self, node_id: str, scope: dict | None = None) -> list[str]:
+        """The questions of a node inside a scope (``None``: the whole catalog): exactly the questions that expanding the node in
+        the outline lists, each once. A skill's are those a criterion ties to it; a concept's are those of its skills and those
+        whose criteria name the concept itself; a topic's are those of the concepts and loose skills filed under it."""
         kind = self.kind_of(node_id)
         if kind == "question":
             return [node_id]
         if kind == "criterion":
             return [self.criteria[node_id]["question_id"]]
-        key = {"concept": "concept_id", "skill": "skill_id"}.get(kind or "")
-        if key:
-            return sorted(q for q, question in self.questions.items() if any(c.get(key) == node_id for c in question.get("criteria") or []))
-        concepts = {c for c, concept in self.concepts.items() if node_id in concept.get("topic_ids", [])}
-        return sorted(q for q, question in self.questions.items() if any(c.get("concept_id") in concepts for c in question.get("criteria") or []))
+        index = self.hierarchy(scope)
+        if kind == "skill":
+            return sorted(index["questions_of_skill"].get(node_id, []))
+        concepts = [node_id] if kind == "concept" else index["concepts_of_topic"].get(node_id, [])
+        skills = [s for c in concepts for s in index["skills_of_concept"].get(c, [])] + (index["loose_skills_of_topic"].get(node_id, []) if kind == "topic" else [])
+        return sorted({q for c in concepts for q in index["direct_questions_of_concept"].get(c, [])} | {q for s in skills for q in index["questions_of_skill"].get(s, [])})
 
     def skills_of(self, node_id: str) -> list[str]:
         kind = self.kind_of(node_id)

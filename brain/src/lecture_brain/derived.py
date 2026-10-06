@@ -65,9 +65,16 @@ _PRODUCER_KEYS = ("tool", "tool_version", "model", "language", "parameters_sha25
 _PROVENANCE_SUMMARY = ("origin", "adapter", "runner", "producer_contract", "job_key", "producer_manifest_sha256", "producer_statuses", "model", "counts", "covers_whole_recording",
                        "publication")
 # Merge policies of the app's own speech runner under which text failing the repetition check is withheld and its time
-# stated as unresolved. A runner generation that names none of these was published before withholding: never served.
-SERVED_MERGE_POLICIES = frozenset({"withhold-repetition-1", "withhold-repetition-2"})
+# stated as unresolved, OLDEST FIRST. A runner generation that names none of these was published before withholding:
+# never served. Each later policy states more of what is unknown than the one before it (``-3``: also the time around
+# withheld text in which the recogniser emitted nothing), so a generation under an older policy gives way to one under
+# a newer policy that processed at least the same window, however much the older one claims to resolve.
+MERGE_POLICY_ORDER = ("withhold-repetition-1", "withhold-repetition-2", "withhold-repetition-3")
+SERVED_MERGE_POLICIES = frozenset(MERGE_POLICY_ORDER)
 GENERATION_STATES = ("current", "superseded", "unserved_policy", "stale", "invalid", "incomplete")
+# What the reader says about processed, covered and unresolved time (:meth:`Derived._coverage`). A view that hands on
+# a generation hands on ALL of these: ``window`` without the intervals shows withheld time as if it were silence.
+COVERAGE_KEYS = ("window", "duration_ms", "coverage_fraction", "processed_fraction", "covers_whole_recording", "covered_intervals", "unresolved_intervals", "unresolved_seconds")
 
 
 def input_fingerprint(*, recording_sha256: str, recording_bytes: int, window_start_ms: int, window_end_ms: int, clip_offset_ms: int, producer: dict,
@@ -191,6 +198,16 @@ def policy_problem(provenance: dict | None) -> str | None:
         return (f"Published by the speech runner under merge policy {policy!r} without stating unresolved intervals as this consumer needs them "
                 f"({', '.join(sorted(SERVED_MERGE_POLICIES))}): text that fails the repetition check may not have been withheld. Kept on disk, never served.")
     return None
+
+
+def merge_policy_rank(provenance: dict | None) -> int | None:
+    """Where a speech-runner generation's merge policy stands in :data:`MERGE_POLICY_ORDER` (0 is the oldest); None for
+    a generation of another origin, which states no such policy and is not ranked by one."""
+    if not isinstance(provenance, dict) or provenance.get("origin") != "speech_runner":
+        return None
+    decoding = provenance.get("decoding")
+    policy = decoding.get("merge_policy") if isinstance(decoding, dict) else None
+    return MERGE_POLICY_ORDER.index(policy) if policy in MERGE_POLICY_ORDER else None
 
 
 def covered_intervals(window: dict, unresolved: list[dict]) -> list[dict[str, int]]:
@@ -684,8 +701,21 @@ class Derived:
             else:
                 entry["state"] = "superseded"
                 servable.append(entry)
-        if servable:
-            max(servable, key=lambda e: (e["resolved_ms"], _when(e["manifest"])))["state"] = "current"
+        # A runner generation under an older withholding policy gives way to one under a newer policy that processed at
+        # least the same window: the older one states less of what is unknown, so "most resolved" would wrongly prefer it.
+        ranked = [(entry, merge_policy_rank(entry["provenance"])) for entry in servable]
+        candidates = []
+        for entry, rank in ranked:
+            window = entry["manifest"]["window"]
+            newer = next((other for other, other_rank in ranked if rank is not None and other_rank is not None and other_rank > rank
+                          and other["manifest"]["window"]["start_ms"] <= window["start_ms"] and other["manifest"]["window"]["end_ms"] >= window["end_ms"]), None)
+            if newer is None:
+                candidates.append(entry)
+            else:
+                entry["detail"] = (f"Published under an older merge policy ({MERGE_POLICY_ORDER[rank]}); generation {newer['generation']} under "
+                                   f"{MERGE_POLICY_ORDER[merge_policy_rank(newer['provenance'])]} processed at least the same window and states more of what is unknown.")  # type: ignore[index]
+        if candidates:
+            max(candidates, key=lambda e: (e["resolved_ms"], _when(e["manifest"])))["state"] = "current"
         return usable + [dict(e, state=e["problem"]) for e in entries if e["problem"] is not None]
 
     def newest_created_at(self, course_id: str, source_id: str) -> str | None:

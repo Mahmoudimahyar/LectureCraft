@@ -59,6 +59,7 @@ from typing import Any, Callable, Mapping
 import uuid
 
 from .. import contracts as c
+from .. import derived as derived_module
 from ..annotations import media_duration_ms
 from ..config import Settings
 from ..derived import MANIFEST_NAME, TIME_TOLERANCE_MS, Derived, assemble_generation
@@ -68,7 +69,7 @@ from ..preparation import Preparation
 from . import chunks as ch
 from .ledger import Allowance, LedgerRefused, read_json, write_json
 
-RUNNER_VERSION = "speech-runner-2"
+RUNNER_VERSION = "speech-runner-3"
 RECEIPT_KIND = "speech-run"
 BINDING_NAME = "speech.json"  # in config/local-bindings/ (private, git-ignored)
 BINDING_ENV = "LL_SPEECH_BINDING"  # the fixture profile only: a test binding file
@@ -88,7 +89,10 @@ DECODING_POLICY = "repetition-second-pass-2"
 # A chunk result made under one of these was checked by its worker and decoded once more when it had to be. Results
 # of the first policy stay accepted: they are finished chunks, and their second-pass identity is recorded with them.
 ACCEPTED_DECODING_POLICIES = frozenset({"repetition-second-pass-1", DECODING_POLICY})
-MERGE_POLICY = "withhold-repetition-2"  # withholding as in -1; the overlap is spliced at a matched word (chunks.OVERLAP_RULE)
+# withhold-repetition-2: withholding as in -1; the overlap is spliced at a matched word. -3: the time a withheld run stands for runs from the accepted text
+# before it to the accepted text after it (chunks.UNRESOLVED_RULE), and an overlap in which only one chunk has accepted text is supplied by that chunk
+# (chunks.OVERLAP_RULE). The reader ranks these policies (derived.MERGE_POLICY_ORDER): a generation under an older one gives way to one under a newer one.
+MERGE_POLICY = "withhold-repetition-3"
 REPETITION_THRESHOLD = INFERENCE_SETTINGS["compression_ratio_threshold"]  # the recogniser's own measure and its own threshold
 
 
@@ -106,6 +110,7 @@ DEFAULT_OVERLAP_SECONDS = 5.0
 DEFAULT_SAFETY_MARGIN_SECONDS = 180.0  # must be longer than one chunk takes, so a chunk that starts always ends below the ceiling
 DEFAULT_PUBLISH_EVERY_CHUNKS = 4
 MAX_CHUNK_ATTEMPTS = 2  # a chunk that fails this often sets its recording aside as failed
+GENERATION_NAMES = 3  # names tried for one publication: the digest of its bytes, then digests of that, when a stored folder of the name holds other or damaged bytes
 # ``complete``: every chunk is published and nothing is unresolved. ``complete_with_unresolved``: every chunk is
 # published, but part of the recording is time whose text was withheld; it is processed, not covered.
 STATES = ("queued", "partial", "complete", "complete_with_unresolved", "source_conflict", "failed", "not_in_frozen_queue")
@@ -238,7 +243,7 @@ def check_binding(binding: dict[str, Any]) -> dict[str, Any]:
     if binding.get("state_dir") is not None:
         if not isinstance(binding["state_dir"], str) or not binding["state_dir"].strip():
             raise Refused("binding_invalid", "state_dir must be the path of the state directory this grant's ledger lives in.")
-        checked["state_dir"] = Path(binding["state_dir"])  # relative to the repository when it is not absolute
+        checked["state_dir"] = Path(binding["state_dir"])  # an absolute path; only a test binding of the fixture profile may name it relative to the repository
     if binding.get("worker_script"):
         checked["worker_script"] = Path(str(binding["worker_script"]))
     if isinstance(binding.get("timings"), dict):
@@ -307,6 +312,11 @@ class SpeechRunner:
                 raise Refused("state_dir_not_bound", f"The speech binding does not name state_dir. Outside the fixture profile the allowance of grant {checked['grant_id']!r} lives in "
                                                      "ONE state directory, named in the private binding; without it nothing runs.")
             return checked
+        if not named.is_absolute() and self._settings.profile != "fixture":
+            # Relative to the repository it would be another directory in every copy of the working tree: the same private
+            # binding in a copied tree would open a second ledger, and a second allowance, under the same grant.
+            raise Refused("state_dir_not_bound", f"The speech binding names state_dir {str(named)!r}, which is not an absolute path. Outside the fixture profile the ONE state "
+                                                 f"directory of grant {checked['grant_id']!r} is named absolutely, so that a copy of the working tree cannot open a second ledger.")
         bound = named if named.is_absolute() else self._settings.repo / named
         if os.path.normcase(str(bound.resolve())) != os.path.normcase(str(self._settings.state_dir.resolve())):
             raise Refused("state_dir_not_bound", f"The speech binding binds grant {checked['grant_id']!r} to the state directory {bound}; this command uses {self._settings.state_dir}. "
@@ -419,6 +429,9 @@ class SpeechRunner:
         decoded, segments = document.get("decoded_ms"), document.get("segments")
         if not isinstance(segments, list) or not all(isinstance(segment, dict) for segment in segments) or type(decoded) is not int or decoded < 0:
             return "the result has no list of segments or no decoded length"
+        unreadable = ch.result_problem(document)  # an inside the merge and the publication could not read: refused here, never an error later
+        if unreadable:
+            return unreadable
         wanted = entry["end_ms"] - entry["start_ms"]
         if not (decoded >= wanted - TIME_TOLERANCE_MS or document.get("end_of_stream") is True):
             return f"the result holds {decoded} ms of the {wanted} ms asked for without having reached the end of the recording"
@@ -497,9 +510,10 @@ class SpeechRunner:
     @staticmethod
     def publication_identity() -> str:
         """Digest of everything in this code that decides what a publication of given chunk results looks like."""
-        return c.sha256_hex(c.dump_json({"runner": RUNNER_VERSION, "merge_policy": MERGE_POLICY, "overlap_rule": ch.OVERLAP_RULE, "match_tolerance_ms": ch.MATCH_TOLERANCE_MS,
-                                         "repetition_threshold": REPETITION_THRESHOLD, "decoding_policy": DECODING_POLICY, "second_pass_sha256": SECOND_PASS_SHA256,
-                                         "inference_settings": INFERENCE_SETTINGS, "tolerance_ms": TIME_TOLERANCE_MS}))
+        return c.sha256_hex(c.dump_json({"runner": RUNNER_VERSION, "merge_policy": MERGE_POLICY, "overlap_rule": ch.OVERLAP_RULE, "unresolved_rule": ch.UNRESOLVED_RULE,
+                                         "match_tolerance_ms": ch.MATCH_TOLERANCE_MS, "repetition_threshold": REPETITION_THRESHOLD, "decoding_policy": DECODING_POLICY,
+                                         "second_pass_sha256": SECOND_PASS_SHA256, "inference_settings": INFERENCE_SETTINGS, "tolerance_ms": TIME_TOLERANCE_MS,
+                                         "consumer": derived_module.CONSUMER_VERSION}))  # the consumer the generation is written for: another one cannot read what is stored
 
     @staticmethod
     def _second_pass_of(document: dict) -> tuple[str | None, str]:
@@ -519,9 +533,15 @@ class SpeechRunner:
     def _publish(self, queue: dict, binding: dict[str, Any], item: dict, report: dict) -> None:
         """Publish the contiguous processed prefix of one recording as a new immutable generation, through the importer.
 
-        The generation id ends in a digest of the published CONTENT (text, provenance, producer, window), so the same
-        id always means the same bytes: other chunk results, another merge rule or an edit of this code give another
-        generation, never a conflict with a stored one."""
+        The generation id ends in a digest of the generation AS IT IS ASSEMBLED — the manifest and, through it, every
+        output — with a fixed stand-in for the id and the creation time, which are not content. The same id therefore
+        always means the same bytes: other chunk results, another merge rule, an edit of this code, an edit of the
+        assembly or another consumer version give another generation, never a conflict with a stored one. A stored
+        generation is never replaced or repaired: when the folder of that name holds other bytes or was damaged, the
+        same content goes into the next name (a digest of the first), once.
+
+        Chunk results that passed the acceptance check and still cannot be merged are THIS recording's problem: it
+        is set aside with the reason (``publish_rejected``, tried again by the next run) and the queue goes on."""
         count = item["chunks_done"]
         if not count or count < item["published_chunks"]:
             return  # nothing processed, or less than what is already published (a chunk is being done again)
@@ -534,6 +554,63 @@ class SpeechRunner:
         inputs = c.sha256_hex(c.dump_json({"chunks": digests, "publication": identity}))
         if inputs == item.get("published_inputs") and self._published_exists(item):
             return  # exactly these chunk results are published by exactly this publication code
+        entry: dict[str, Any] = {"course_id": item["course_id"], "source_id": item["source_id"], "generation": None, "window_end_ms": None, "complete": False,
+                                 "covers_whole_recording": False, "chunks": count, "status": "failed", "reason": "merge_failed", "words": 0, "segments": 0, "covered_seconds": 0.0,
+                                 "unresolved_seconds": 0.0, "withheld_repetition_words": 0}
+
+        def assemble(generation: str, created_at: str) -> tuple[bytes, dict[str, bytes]]:
+            return assemble_generation(course_id=item["course_id"], source_id=item["source_id"], generation=generation, created_at=created_at, recording_sha256=item["sha256"],
+                                       recording_bytes=item["bytes"], declared_duration_ms=item["duration_ms"], producer=producer, window=merged["window"], clip_offset_ms=0,
+                                       segments=merged["segments"], provenance=provenance)
+
+        try:
+            merged, producer, provenance = self._describe(queue, item, plan, documents, digests, identity, inputs)
+            name = c.sha256_hex(assemble(f"sp-{item['work_id']}-p{count:04d}-{'0' * 8}", "1970-01-01T00:00:00Z")[0])  # the stand-ins are the same for every generation
+        except Exception as exc:  # noqa: BLE001 - whatever it is, it is this recording's: shown, bounded, and not the end of the run
+            item.update(state="failed", reason="publish_rejected", last_error=f"publication failed: the chunk results could not be merged ({type(exc).__name__}: {exc})"[:600])
+            report["published"].append({**entry, "detail": f"{type(exc).__name__}: {exc}"[:300]})
+            return
+        whole = bool(merged["complete"] and not merged["unresolved"])
+        for _ in range(GENERATION_NAMES):
+            generation = f"sp-{item['work_id']}-p{count:04d}-{name[:8]}"
+            # A generation that is already stored keeps its time: publishing the same content again must give the same bytes.
+            # A new one is stamped when its newest chunk result was finished, and always later than every generation already
+            # stored for this recording, so that among generations resolving equally much the newest is the latest publication.
+            created_at = self._derived.stored_created_at(item["course_id"], item["source_id"], generation)
+            if created_at is None:
+                finished = [document["completed_at"] for document in documents if isinstance(document.get("completed_at"), str) and _TIME.match(document["completed_at"])]
+                created_at = max(finished) if finished else self._now()
+                for earlier in (item.get("published_at"), self._derived.newest_created_at(item["course_id"], item["source_id"])):
+                    if isinstance(earlier, str) and _TIME.match(earlier):
+                        created_at = max(created_at, _iso(datetime.strptime(earlier, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp() + 1))
+            manifest_bytes, outputs = assemble(generation, created_at)
+            result = self._derived.import_prepared(course_id=item["course_id"], manifest_bytes=manifest_bytes, outputs=outputs, origin=f"speech-runner:{item['work_id']}:p{count:04d}")
+            if result["reason"] not in {"generation_conflict", "stored_generation_damaged"}:
+                break
+            name = c.sha256_hex(f"{name}/next".encode("utf-8"))  # the folder of that name holds other bytes, or was damaged: it stays as it is, and this content takes the next name
+        entry.update(generation=generation, window_end_ms=merged["window"]["end_ms"], complete=merged["complete"], covers_whole_recording=whole, status=result["status"],
+                     reason=result["reason"], words=merged["stats"]["words"], segments=merged["stats"]["segments"], covered_seconds=merged["stats"]["covered_ms"] / 1000,
+                     unresolved_seconds=merged["stats"]["unresolved_ms"] / 1000, withheld_repetition_words=merged["stats"]["withheld_repetition_words"])
+        report["published"].append(entry)
+        if result["status"] in {"imported", "reused"}:
+            item.update(published_chunks=count, published_generation=generation, published_policy=MERGE_POLICY, published_at=created_at, published_inputs=inputs,
+                        published_identity=identity, published_window_end_ms=merged["window"]["end_ms"], unresolved_seconds=merged["stats"]["unresolved_ms"] / 1000,
+                        unresolved_intervals=[{"start_ms": interval["start_ms"], "end_ms": interval["end_ms"], "reason": interval["reason"]} for interval in merged["unresolved"]])
+            if item["reason"] == "publish_rejected":  # what was refused in this run is published now
+                item.update(state=self._progress_state(item), reason=None)
+            if str(item.get("last_error") or "").startswith("publication "):
+                item["last_error"] = None
+        elif result["reason"] in {"changed_input", "source_unavailable"}:
+            item.update(state="source_conflict", reason="bytes_changed", last_error=f"{result['reason']}: {result['detail']}")
+        elif result["status"] == "rejected":
+            item.update(state="failed", reason="publish_rejected", last_error=f"publication refused ({result['reason']}): {result['detail']}"[:600])
+        else:
+            item["last_error"] = f"publication {result['status']}: {result['detail']}"
+
+    def _describe(self, queue: dict, item: dict, plan: list[dict[str, int]], documents: list[dict], digests: list[str], identity: str, inputs: str) -> tuple[dict, dict, dict]:
+        """Merge the chunk results ``0..k-1`` of one recording and describe the generation that results: the merged
+        text with what it covers, the producer, and the provenance. Pure with respect to the store: nothing is written."""
+        count = len(documents)
         merged = ch.merge_prefix(plan, documents, duration_ms=item["duration_ms"], tolerance_ms=TIME_TOLERANCE_MS, repetition_threshold=REPETITION_THRESHOLD)
         last = documents[-1]
         runtime = last.get("runtime") if isinstance(last.get("runtime"), dict) else {}
@@ -565,7 +642,7 @@ class SpeechRunner:
                                    # Chunk results that used a second pass under ANOTHER identity than the one this code has now: other settings or another selection rule.
                                    "chunks_with_other_second_pass": [document["index"] for document, (digest, _) in zip(documents, second_passes) if digest not in (None, SECOND_PASS_SHA256)]},
                       "publication": {"identity_sha256": identity, "inputs_sha256": inputs, "merge_policy": MERGE_POLICY, "overlap_rule": ch.OVERLAP_RULE,
-                                      "match_tolerance_ms": ch.MATCH_TOLERANCE_MS},
+                                      "unresolved_rule": ch.UNRESOLVED_RULE, "match_tolerance_ms": ch.MATCH_TOLERANCE_MS},
                       "unresolved_intervals": merged["unresolved"], "covered_intervals": merged["covered"],
                       "chunking": {"chunk_ms": queue["chunk_ms"], "overlap_ms": queue["overlap_ms"], "chunks_total": len(plan), "chunks_merged": count, "rule": ch.OVERLAP_RULE},
                       "chunks": [{"index": document["index"], "offset_ms": document["offset_ms"], "end_ms": document["end_ms"], "decoded_ms": document["decoded_ms"],
@@ -583,41 +660,7 @@ class SpeechRunner:
                               + "Generated, unreviewed speech text for the stated window. Acoustic accuracy was not reviewed and nothing about slides is established. "
                               + "Unresolved intervals are where the recogniser's output failed the repetition check and was withheld: neither speech nor silence is known there, "
                               + "and that time is not covered."}
-        content = c.sha256_hex(c.dump_json({"segments": merged["segments"], "provenance": provenance, "producer": producer, "window": merged["window"]}))
-        generation = f"sp-{item['work_id']}-p{count:04d}-{content[:8]}"
-        # A generation that is already stored keeps its time: publishing the same content again must give the same bytes.
-        # A new one is stamped when its newest chunk result was finished, and always later than every generation already
-        # stored for this recording, so that among generations resolving equally much the newest is the latest publication.
-        created_at = self._derived.stored_created_at(item["course_id"], item["source_id"], generation)
-        if created_at is None:
-            finished = [document["completed_at"] for document in documents if isinstance(document.get("completed_at"), str) and _TIME.match(document["completed_at"])]
-            created_at = max(finished) if finished else self._now()
-            for earlier in (item.get("published_at"), self._derived.newest_created_at(item["course_id"], item["source_id"])):
-                if isinstance(earlier, str) and _TIME.match(earlier):
-                    created_at = max(created_at, _iso(datetime.strptime(earlier, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp() + 1))
-        manifest_bytes, outputs = assemble_generation(course_id=item["course_id"], source_id=item["source_id"], generation=generation, created_at=created_at,
-                                                      recording_sha256=item["sha256"], recording_bytes=item["bytes"], declared_duration_ms=item["duration_ms"], producer=producer,
-                                                      window=merged["window"], clip_offset_ms=0, segments=merged["segments"], provenance=provenance)
-        result = self._derived.import_prepared(course_id=item["course_id"], manifest_bytes=manifest_bytes, outputs=outputs, origin=f"speech-runner:{item['work_id']}:p{count:04d}")
-        entry = {"course_id": item["course_id"], "source_id": item["source_id"], "generation": generation, "window_end_ms": merged["window"]["end_ms"], "complete": merged["complete"],
-                 "covers_whole_recording": whole, "chunks": count, "status": result["status"], "reason": result["reason"], "words": merged["stats"]["words"],
-                 "segments": merged["stats"]["segments"], "covered_seconds": merged["stats"]["covered_ms"] / 1000, "unresolved_seconds": merged["stats"]["unresolved_ms"] / 1000,
-                 "withheld_repetition_words": merged["stats"]["withheld_repetition_words"]}
-        report["published"].append(entry)
-        if result["status"] in {"imported", "reused"}:
-            item.update(published_chunks=count, published_generation=generation, published_policy=MERGE_POLICY, published_at=created_at, published_inputs=inputs,
-                        published_identity=identity, published_window_end_ms=merged["window"]["end_ms"], unresolved_seconds=merged["stats"]["unresolved_ms"] / 1000,
-                        unresolved_intervals=[{"start_ms": interval["start_ms"], "end_ms": interval["end_ms"], "reason": interval["reason"]} for interval in merged["unresolved"]])
-            if item["reason"] == "publish_rejected":  # what was refused in this run is published now
-                item.update(state=self._progress_state(item), reason=None)
-            if str(item.get("last_error") or "").startswith("publication "):
-                item["last_error"] = None
-        elif result["reason"] in {"changed_input", "source_unavailable"}:
-            item.update(state="source_conflict", reason="bytes_changed", last_error=f"{result['reason']}: {result['detail']}")
-        elif result["status"] == "rejected":
-            item.update(state="failed", reason="publish_rejected", last_error=f"publication refused ({result['reason']}): {result['detail']}"[:600])
-        else:
-            item["last_error"] = f"publication {result['status']}: {result['detail']}"
+        return merged, producer, provenance
 
     # ---- one run --------------------------------------------------------------------------------------------------
     def run(self, *, courses: list[str] | None = None, priority: list[str] | None = None, max_seconds: float | None = None, chunk_seconds: float | None = None,
@@ -764,6 +807,7 @@ class SpeechRunner:
         pause = queue.get("pause") if isinstance(queue.get("pause"), dict) else None
         if pause and retry_failed:  # the owner says: go on
             report["resumed_after_pause"], queue["pause"], pause = pause, None, None
+            queue.pop("unexplained_end", None)
         for item in queue["items"]:
             self._evaluate(queue, item, listed, retry_failed=retry_failed and item in selected)
         identity = self.publication_identity()
@@ -798,10 +842,10 @@ class SpeechRunner:
         report["remaining"] = self._remaining(queue)
 
         def refused_publications() -> str | None:
-            """Why this run is not a clean one although its work is done: the importer refused what it tried to publish."""
+            """Why this run is not a clean one although its work is done: what it tried to publish was refused by the importer, or could not be merged."""
             refused = [item for item in selected if item["reason"] == "publish_rejected"]
-            return (f"The importer refused the publication of {len(refused)} recording(s) ({', '.join(item['key'] for item in refused[:5])}); each is set aside with the reason "
-                    "in its last_error. --retry-failed tries them again.") if refused else None
+            return (f"The publication of {len(refused)} recording(s) did not go through ({', '.join(item['key'] for item in refused[:5])}): the importer refused it, or the chunk "
+                    "results could not be merged. Each is set aside with the reason in its last_error; the next run, and --retry-failed, try them again.") if refused else None
 
         if not jobs:
             report.update(state="no_change" if not report["published"] else "completed", outcome="no_change" if not report["published"] else "ran")
@@ -887,6 +931,7 @@ class SpeechRunner:
                     item["chunks_done"] += 1  # a later chunk whose result was on disk before this run: it was not handed out, it simply counts
                 item.update(state=self._progress_state(item) if item["state"] in _WORKABLE else item["state"], last_error=None)
                 item.pop("resource_failures", None)  # a chunk of this recording went through: it is not held back any more
+                queue.pop("unexplained_end", None)  # a chunk went through: a worker that ended without a word before did not end for a reason of the machine
                 report["chunks_completed"] += 1
                 report["media_seconds"] += loaded[0]["decoded_ms"] / 1000
                 report["segments"] += len(loaded[0]["segments"])
@@ -927,9 +972,16 @@ class SpeechRunner:
                 while process is not None and process.poll() is None:
                     elapsed = time.monotonic() - started
                     if time.monotonic() - last_beat >= timings.heartbeat_seconds:
-                        ledger.heartbeat(lease_seconds=timings.lease_seconds)
-                        write_json(lease_path, {"until": time.time() + timings.lease_seconds})
-                        last_beat = time.monotonic()
+                        try:
+                            ledger.heartbeat(lease_seconds=timings.lease_seconds)
+                            write_json(lease_path, {"until": time.time() + timings.lease_seconds})
+                            last_beat = time.monotonic()
+                        except OSError:
+                            # The file could not be replaced this time (on Windows: another process has it open). The lease
+                            # written before is still good, so this is tried again at the next look. Only when no refresh went
+                            # through for a whole lease — the worker has stopped by itself by then — is it the end of the run.
+                            if time.monotonic() - last_beat >= timings.lease_seconds:
+                                raise
                     try:
                         beat = read_json(heartbeat_path)
                     except ValueError:
@@ -1017,11 +1069,28 @@ class SpeechRunner:
             else:
                 ended.update(state="failed", reason="worker_lease_lost" if kind == "lease_lost" else "worker_died", detail=detail)
         if ended["state"] == "failed" and ended["reason"] in {"worker_died", "worker_stalled"}:
-            # Nothing says why: the failure is counted against the chunk the worker was in. A chunk that keeps failing sets its recording aside.
+            # Nothing says why: the failure is counted against the chunk the worker was in. A chunk that keeps failing sets its
+            # recording aside — it may be that recording's audio. But when the worker ends the same way in ANOTHER recording
+            # with no chunk finished in between, the cause is the machine: the queue is paused, like after a failure the worker
+            # reports, and nothing more is counted or set aside until the owner says to go on.
             candidates = [p for p in pending if p not in blamed and jobs[p]["item"]["work_id"] not in passed_over]
             position = at_position if at_position in candidates else (candidates[0] if candidates else None)
             if position is not None:
-                self._chunk_failure(jobs[position]["item"], jobs[position]["index"], ended["detail"])
+                item, index = jobs[position]["item"], jobs[position]["index"]
+                before = queue.get("unexplained_end") if isinstance(queue.get("unexplained_end"), dict) else None
+                if before is not None and before.get("recording") != item["key"]:
+                    counts = dict(item.get("resource_failures") or {})
+                    counts[str(index)] = counts.get(str(index), 0) + 1
+                    item["resource_failures"] = counts
+                    item["last_error"] = f"chunk {index}: the worker ended without saying why, as it did in {before.get('recording')} just before; the queue is paused: {ended['detail']}"[:600]
+                    queue["pause"] = {"reason": PAUSE_REASON, "worker_reason": ended["reason"], "detail": ended["detail"], "at": self._now(), "run_id": report["run_id"],
+                                      "recording": item["key"], "chunk": index}
+                    ended.update(state="paused", detail=f"{ended['detail']} — The worker ended without saying why in two recordings in a row ({before.get('recording')}, then "
+                                                        f"{item['key']}) with no chunk finished in between: the queue is paused and nothing more was set aside. When the cause is "
+                                                        "dealt with, run speech-run with --retry-failed to continue.")
+                else:
+                    self._chunk_failure(item, index, ended["detail"])
+                    queue["unexplained_end"] = {"recording": item["key"], "chunk": index, "reason": ended["reason"], "run_id": report["run_id"], "at": self._now()}
         save()
         report["_ended"] = ended
 

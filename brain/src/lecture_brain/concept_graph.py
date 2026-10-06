@@ -15,6 +15,10 @@ show the same ids and the same counts. Nothing here stores a graph, and nothing 
   later build is never reported as being on an earlier one.
 * Criterion wording, question wording and the owner's rationales are not part of any output (criteria are identified,
   never quoted before an attempt).
+* One join answers "the questions of a node inside a scope" (``OutlineModel.hierarchy``): the outline's children, a
+  node's counts and the Questions of its detail are the same set, also for a concept that only criteria name.
+* A recorded source reference is listed as the kind it is — pages, transcript lines or a broad text locator — and is
+  never dropped because it is not a page, and never turned into one.
 """
 from __future__ import annotations
 
@@ -36,12 +40,16 @@ MAX_LIMIT = 400
 MAX_DEPTH = 3
 MAX_SOURCES = 80
 MAX_QUESTIONS = 100
+MAX_LOCATOR_TEXT = 300
+SOURCE_KINDS = ("pages", "transcript_lines", "text")  # the kind a recorded reference IS; one is never converted into another
 KINDS = ("topic", "concept", "skill", "question", "criterion")
 FAMILIES = ("assessment", "source", "structure")
 TIES = ("exact", "stated", "agent_inferred")  # as recorded; one is never rewritten into another
 WHERE = ("on_this_page", "elsewhere_in_sequence", "group_level")
-SCOPE_PATTERN = r"^(course|lecture:[A-Za-z0-9._-]+|slide:[A-Za-z0-9._-]+:[0-9]{1,5})$"
+SCOPE_PATTERN = r"^(course|lecture:[A-Za-z0-9._-]+|slide:[A-Za-z0-9._-]+:[1-9][0-9]{0,4})$"  # a page is written as a 1-based number: no page 0, and "007" is not another name of page 7
 PRIVATE_SCOPE_KEYS = ("question_ids", "concept_ids", "skill_ids", "criterion_ids", "topic_ids", "support")
+# What a view is built from besides the scope itself (R2-C11); a key that was not handed in is ``None``, never guessed. ``scope_revision`` is added by ``graph``.
+REVISION_KEYS = ("question_index_sha256", "skills_sha256", "map_revision", "anchor_revision", "policy_revision", "evidence_revision")
 _SCOPE = re.compile(SCOPE_PATTERN)
 _ORDER = {kind: position for position, kind in enumerate(KINDS)}
 _FAMILY_ORDER = {"structure": 0, "assessment": 1, "source": 2}
@@ -49,6 +57,8 @@ _TIE_PROVENANCE = {"exact": "course anchor (reviewed page)", "stated": "course a
 _STRUCTURAL_NOTE = "No question or concept is required of this page: its role is {role} (a structural page). The lecture scope lists this lecture's concepts and questions."
 _EMPTY_SLIDE_NOTE = "Nothing in the course record and no suggested link names this slide. The lecture scope lists this lecture's concepts and questions."
 _SLIDE_NOTE = "What the course record or a suggested link ties to this slide, each entry once. Support pages name the pages of the slide on which the support is recorded."
+_ELSEWHERE_NOTE = " {count} {noun} listed here {verb} to another collection than this lecture's (tied to this slide by a link); the lecture scope lists this lecture's own collections only."
+_ACCEPTED = ", accepted by the learner"
 
 
 # ---- scope: one filter for outline and graph --------------------------------------------------------------------------
@@ -65,49 +75,63 @@ def _anchor_entries(model: OutlineModel, lecture_id: str, deck: str | None, memb
 
 
 def _support(model: OutlineModel, entries: Iterable[Any], members: list[int]) -> dict[str, dict[str, dict]]:
-    """node id → tie → ``{pages, direct}``. An entry that names nothing of this slide, an unknown node or an unknown tie is left out."""
+    """node id → tie → ``{pages, direct, group, accepted}``. An entry that names nothing of this slide, an unknown node, an unknown
+    tie or pages that are not page numbers is left out; it is never widened. ``group``: ONE record was made for the slide as a
+    whole (it names no page, or every page of a group of two or more) — page records that together happen to cover a group are
+    not that. ``accepted``: the learner confirmed a suggested link among the records."""
     found: dict[str, dict[str, dict]] = {}
     whole = set(members)
 
-    def add(node_id: Any, tie: str, pages: set[int], direct: bool) -> None:
+    def add(node_id: Any, tie: str, pages: set[int], direct: bool, group: bool, accepted: bool) -> None:
         if isinstance(node_id, str) and model.kind_of(node_id) is not None:
-            slot = found.setdefault(node_id, {}).setdefault(tie, {"pages": set(), "direct": False})
+            slot = found.setdefault(node_id, {}).setdefault(tie, {"pages": set(), "direct": False, "group": False, "accepted": False})
             slot["pages"] |= pages
-            slot["direct"] = slot["direct"] or direct
-
-    def through(criterion: dict, tie: str, pages: set[int]) -> None:  # what a supported criterion assesses
-        add(criterion.get("concept_id"), tie, pages, False)
-        add(criterion.get("skill_id"), tie, pages, False)
-        add((model.skills.get(criterion.get("skill_id")) or {}).get("concept_id"), tie, pages, False)
+            slot["direct"], slot["group"], slot["accepted"] = slot["direct"] or direct, slot["group"] or group, slot["accepted"] or accepted
 
     for entry in entries:
         node_id, tie = (entry.get("node_id"), entry.get("tie")) if isinstance(entry, dict) else (None, None)
         kind = model.kind_of(node_id) if isinstance(node_id, str) else None
         if kind in {None, "topic"} or tie not in TIES:  # a topic is a heading of the catalog: no support is recorded for a heading
             continue
-        named = {p for p in entry.get("pages") or [] if isinstance(p, int) and not isinstance(p, bool)}
-        pages = named & whole if named else set(whole)  # no page named: the support was recorded for the slide as a whole
-        if not pages:
+        raw = entry.get("pages")
+        listed = isinstance(raw, (list, tuple, set, frozenset))
+        if raw is None or (listed and not raw):
+            pages = set(whole)  # no page named: the support was recorded for the slide as a whole
+        else:
+            pages = {p for p in raw if isinstance(p, int) and not isinstance(p, bool)} & whole if listed else set()
+        if not pages:  # it names something, and none of it is a page of this slide
             continue
-        add(node_id, tie, pages, True)
+        group, accepted = len(whole) >= 2 and pages == whole, tie == "agent_inferred" and entry.get("decision") == "confirmed"
+
+        def through(criterion: dict) -> None:  # what a supported criterion assesses
+            add(criterion.get("concept_id"), tie, pages, False, group, accepted)
+            add(criterion.get("skill_id"), tie, pages, False, group, accepted)
+            add((model.skills.get(criterion.get("skill_id")) or {}).get("concept_id"), tie, pages, False, group, accepted)
+
+        add(node_id, tie, pages, True, group, accepted)
         if kind == "question":
             for criterion in model.questions[node_id].get("criteria") or []:
-                add(criterion["criterion_id"], tie, pages, False)
-                through(criterion, tie, pages)
+                add(criterion["criterion_id"], tie, pages, False, group, accepted)
+                through(criterion)
         elif kind == "criterion":
-            add(model.criteria[node_id]["question_id"], tie, pages, False)
-            through(model.criteria[node_id], tie, pages)
+            add(model.criteria[node_id]["question_id"], tie, pages, False, group, accepted)
+            through(model.criteria[node_id])
         elif kind == "skill":
-            add(model.skills[node_id].get("concept_id"), tie, pages, False)
+            add(model.skills[node_id].get("concept_id"), tie, pages, False, group, accepted)
     return found
 
 
 def resolve_scope(model: OutlineModel, scope: str, deck_source_id_of: Callable[[str], str | None], slide_support: dict | None = None) -> dict[str, Any]:
     """The filter of one scope: the R1 scope description plus the id sets by kind that outline and graph both use.
 
-    ``slide_support`` (slide scope) is ``{"logical_slide_id", "label", "page", "pages", "entries", "role"?}``; ``entries``
-    are ``{"node_id", "tie", "pages"}`` and ``None`` means "the course's own anchors on the member pages". Without
-    ``slide_support`` the slide is the single page. Raises ``ValueError`` for a scope that does not exist.
+    ``slide_support`` (slide scope) is ``{"logical_slide_id", "label", "page", "pages", "entries", "role"?, "page_count"?}``;
+    ``entries`` are ``{"node_id", "tie", "pages", "decision"?}`` and ``None`` means "the course's own anchors on the member
+    pages". Without ``slide_support`` the slide is the single page. Raises ``ValueError`` for a scope that does not exist:
+    an unknown lecture, a page number that is not written as a 1-based number, a page beyond a ``page_count`` handed in.
+
+    A slide scope lists what is tied to the slide. A suggested link may tie a question of another collection to it, so a
+    slide scope is not always a subset of its lecture scope (which is collection membership): such questions are named in
+    ``questions_of_other_collections`` and the scope's note says so.
     """
     if not isinstance(scope, str) or not _SCOPE.fullmatch(scope):
         raise ValueError(f"Unknown scope {scope!r}")
@@ -131,6 +155,9 @@ def resolve_scope(model: OutlineModel, scope: str, deck_source_id_of: Callable[[
             raise ValueError("The pages of the slide handed in are not page numbers") from None
         if page not in members or given.get("page", page) != page:
             raise ValueError(f"Page {page} is not a page of the slide handed in")
+        count = given.get("page_count")
+        if isinstance(count, int) and not isinstance(count, bool) and not all(1 <= member <= count for member in members):
+            raise ValueError(f"Page {page} is not a page of the displayed deck, which has {count}")
         entries = given.get("entries")
         if entries is None:
             entries = _anchor_entries(model, lecture_id, deck_source_id_of(lecture_id), members)
@@ -147,14 +174,18 @@ def resolve_scope(model: OutlineModel, scope: str, deck_source_id_of: Callable[[
             note = _STRUCTURAL_NOTE.format(role=str(role.get("value") or "structural").replace("_", " "))
         else:
             note = _EMPTY_SLIDE_NOTE if slide_support is not None else base["note"]
+        elsewhere = sorted(q for q in by_kind["question"] if q not in own)  # tied to this slide, and not a question of this lecture's collections
+        if elsewhere:
+            note += _ELSEWHERE_NOTE.format(count=len(elsewhere), noun="question" if len(elsewhere) == 1 else "questions", verb="belongs" if len(elsewhere) == 1 else "belong")
         resolved.update(
             question_ids=by_kind["question"], concept_ids=by_kind["concept"], skill_ids=by_kind["skill"], criterion_ids=by_kind["criterion"],
             basis="typed_anchor_or_suggested_link" if any("agent_inferred" in ties for ties in found.values()) else base["basis"],
-            anchored_questions=sorted(by_kind["question"] - suggested), suggested_questions=sorted(suggested),
+            anchored_questions=sorted(by_kind["question"] - suggested), suggested_questions=sorted(suggested), questions_of_other_collections=elsewhere,
             related_questions=sorted(q for q in own if q not in by_kind["question"] and any(c.get("concept_id") in by_kind["concept"] for c in model.questions[q].get("criteria") or [])),
             note=note, logical_slide_id=given.get("logical_slide_id"), label=given.get("label"), pages=members, role=role,
-            support={node_id: [{"tie": tie, "pages": sorted(ties[tie]["pages"]), "direct": ties[tie]["direct"]} for tie in TIES if tie in ties] for node_id, ties in found.items()})
-    resolved["topic_ids"] = {topic for topic, _ in model.children(None, resolved)}  # the headings under which something of the scope is listed
+            support={node_id: [{"tie": tie, "pages": sorted(ties[tie]["pages"]), "direct": ties[tie]["direct"], "group": ties[tie]["group"], "accepted": ties[tie]["accepted"]}
+                               for tie in TIES if tie in ties] for node_id, ties in found.items()})
+    resolved["topic_ids"] = set(model.hierarchy(resolved)["topics"])  # the headings under which something of the scope is listed
     return resolved
 
 
@@ -170,48 +201,28 @@ def _members(model: OutlineModel, resolved: dict) -> dict[str, Any]:
     return {"topic": resolved["topic_ids"], "concept": resolved["concept_ids"], "skill": resolved["skill_ids"], "question": resolved["question_ids"], "criterion": resolved["criterion_ids"]}
 
 
-def hierarchy_index(model: OutlineModel, resolved: dict) -> dict[str, dict[str, list[str]]]:
-    """What lies directly below each node INSIDE the scope — the same joins and the same filter as ``OutlineModel.children``, read once."""
-    members = _members(model, resolved)
-
-    def within(kind: str, node_id: Any) -> bool:
-        return members[kind] is None or node_id in members[kind]
-
-    index: dict[str, dict[str, list[str]]] = {"concepts_of_topic": {}, "loose_skills_of_topic": {}, "skills_of_concept": {}, "questions_of_skill": {}}
-    for concept_id, concept in model.concepts.items():
-        if within("concept", concept_id):
-            for topic_id in concept.get("topic_ids") or []:
-                index["concepts_of_topic"].setdefault(topic_id, []).append(concept_id)
-    for skill_id, skill in model.skills.items():
-        if within("skill", skill_id):
-            if skill.get("concept_id") in model.concepts:
-                index["skills_of_concept"].setdefault(skill["concept_id"], []).append(skill_id)
-            else:
-                for topic_id in skill.get("topic_ids") or []:
-                    index["loose_skills_of_topic"].setdefault(topic_id, []).append(skill_id)
-    for question_id, question in model.questions.items():
-        if within("question", question_id):
-            for skill_id in {c.get("skill_id") for c in question.get("criteria") or [] if within("criterion", c["criterion_id"])}:
-                index["questions_of_skill"].setdefault(skill_id, []).append(question_id)
-    return index
+def hierarchy_index(model: OutlineModel, resolved: dict) -> dict[str, Any]:
+    """What lies directly below each node INSIDE the scope: ``OutlineModel.hierarchy`` itself — the joins ``OutlineModel.children`` lists, read once."""
+    return model.hierarchy(resolved)
 
 
 def node_counts(model: OutlineModel, resolved: dict, node_id: str, index: dict | None = None) -> dict[str, int | None]:
     """Distinct skills and questions BELOW a node inside the scope — what expanding it in the outline shows, each id once.
-    A count that does not apply to the node's kind is ``None`` (a question has skills and no questions below it)."""
+    The questions are ``OutlineModel.questions_of(node, scope)``: the join the node detail lists and the graph draws. A count
+    that does not apply to the node's kind is ``None`` (a question has skills and no questions below it)."""
     kind = model.kind_of(node_id)
     if kind == "question":
         return {"skills": len([s for s in model.skills_of(node_id) if resolved["skill_ids"] is None or s in resolved["skill_ids"]]), "questions": None}
     if kind not in {"topic", "concept", "skill"}:
         return {"skills": None, "questions": None}
-    index = index or hierarchy_index(model, resolved)
+    index = index or model.hierarchy(resolved)
     if kind == "skill":
-        skills = [node_id]
+        skills: list[str] | None = None
     elif kind == "concept":
         skills = index["skills_of_concept"].get(node_id, [])
     else:
         skills = sorted({*index["loose_skills_of_topic"].get(node_id, []), *(s for c in index["concepts_of_topic"].get(node_id, []) for s in index["skills_of_concept"].get(c, []))})
-    return {"skills": None if kind == "skill" else len(skills), "questions": len({q for s in skills for q in index["questions_of_skill"].get(s, [])})}
+    return {"skills": None if skills is None else len(skills), "questions": len(model.questions_of(node_id, resolved))}
 
 
 # ---- edges ----------------------------------------------------------------------------------------------------------------
@@ -229,52 +240,61 @@ def _catalog_edges(model: OutlineModel) -> list[dict[str, Any]]:
     def keep(edge: dict) -> None:
         edges.setdefault(edge["id"], edge)
 
+    def is_a(node_id: Any, kind: str) -> bool:  # an id that occurs in two tables is the object ``kind_of`` says it is, and nothing else
+        return isinstance(node_id, str) and model.kind_of(node_id) == kind
+
     for concept_id, concept in model.concepts.items():
         for topic_id in concept.get("topic_ids") or []:
-            if topic_id in model.topics:
+            if is_a(topic_id, "topic") and is_a(concept_id, "concept"):
                 keep(_edge("structure", "topic_includes_concept", topic_id, concept_id, "question index"))
     for skill_id, skill in model.skills.items():
-        if skill.get("concept_id") in model.concepts:
+        if not is_a(skill_id, "skill"):
+            continue
+        if is_a(skill.get("concept_id"), "concept"):
             keep(_edge("structure", "concept_assessed_as_skill", skill["concept_id"], skill_id, "skills catalog"))
         else:
             for topic_id in skill.get("topic_ids") or []:
-                if topic_id in model.topics:
+                if is_a(topic_id, "topic"):
                     keep(_edge("structure", "topic_includes_skill", topic_id, skill_id, "skills catalog"))
     for question_id, question in model.questions.items():
         for criterion in question.get("criteria") or []:
+            if not (is_a(question_id, "question") and is_a(criterion["criterion_id"], "criterion")):
+                continue
             keep(_edge("assessment", "question_has_criterion", question_id, criterion["criterion_id"], "question index"))
-            if criterion.get("concept_id") in model.concepts:
+            if is_a(criterion.get("concept_id"), "concept"):
                 keep(_edge("assessment", "criterion_assesses_concept", criterion["criterion_id"], criterion["concept_id"], "question index"))
-            if criterion.get("skill_id") in model.skills:
+            if is_a(criterion.get("skill_id"), "skill"):
                 keep(_edge("assessment", "criterion_assesses_skill", criterion["criterion_id"], criterion["skill_id"], "question index"))
     for relation in model.relationships:  # the owner's label, between the two questions it names, and nothing derived from it
         source, target, label = relation.get("from_question"), relation.get("to_question"), relation.get("relation")
-        if source in model.questions and target in model.questions and source != target and isinstance(label, str) and label:
+        if is_a(source, "question") and is_a(target, "question") and source != target and isinstance(label, str) and label:
             keep(_edge("structure", label, source, target, "question index", credit=relation.get("automatic_credit") is True, between_questions=True))
     return list(edges.values())
 
 
-def _where(pages: list[int], page: int, members: list[int]) -> str:
-    if len(members) >= 2 and set(members) <= set(pages):
-        return "group_level"
-    return "on_this_page" if page in pages else "elsewhere_in_sequence"
-
-
 def node_support(resolved: dict, node_id: str) -> dict[str, Any]:
     """``{where, support_pages}`` of a node in a slide scope: the member pages its support is recorded on, worded relative to the
-    selected page. Outside a slide scope, and for a node no support names, ``where`` is ``None`` and the list is empty."""
+    selected page. ``group_level`` only when one record was made for the slide as a whole; page records that together cover
+    a group stay page records. Outside a slide scope, and for a node no support names, ``where`` is ``None`` and the list is empty."""
     ties = resolved["support"].get(node_id) if resolved["kind"] == "slide" else None
     pages = sorted({page for tie in ties for page in tie["pages"]}) if ties else []
-    return {"where": _where(pages, resolved["page"], resolved["pages"]) if pages else None, "support_pages": pages}
+    if not pages:
+        return {"where": None, "support_pages": []}
+    where = "group_level" if any(tie["group"] for tie in ties) else ("on_this_page" if resolved["page"] in pages else "elsewhere_in_sequence")
+    return {"where": where, "support_pages": pages}
 
 
 def _scope_revision(model: OutlineModel, resolved: dict) -> str:
-    """Digest of what the scope holds. It changes when membership, a build group or a tie of THIS scope changes, and with nothing else."""
+    """Digest of what the scope holds and how it is filed. It changes when membership, the place of a member in the hierarchy
+    (a skill moved to another concept keeps its id), a build group, a tie of THIS scope or the learner's decision on one of its
+    suggested links changes, and with nothing else."""
     members = _members(model, resolved)
     tables = {"topic": model.topics, "concept": model.concepts, "skill": model.skills, "question": model.questions, "criterion": model.criteria}
+    filed = model.hierarchy(resolved)
     payload = {"kind": resolved["kind"], "lecture_id": resolved.get("lecture_id"), "page": resolved.get("page"), "logical_slide_id": resolved["logical_slide_id"], "pages": resolved["pages"],
                "ids": {kind: sorted(tables[kind] if members[kind] is None else members[kind]) for kind in KINDS},
-               "support": {node_id: [[t["tie"], t["pages"], t["direct"]] for t in ties] for node_id, ties in sorted(resolved["support"].items())}}
+               "hierarchy": {name: ({key: sorted(below) for key, below in filed[name].items()} if isinstance(filed[name], dict) else sorted(filed[name])) for name in sorted(filed)},
+               "support": {node_id: [[t["tie"], t["pages"], t["direct"], t["group"], t["accepted"]] for t in ties] for node_id, ties in sorted(resolved["support"].items())}}
     return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:16]
 
 
@@ -296,8 +316,10 @@ def graph(model: OutlineModel, *, course_id: str, scope: str, focus: str | None 
     Without ``focus``: the scope's topics, concepts and skills. With ``focus``: that node and what lies within ``depth``
     (1–3) relations of it, questions and criteria included. A neighbour is drawn when it belongs to the scope; a
     question reached through the owner's question-to-question relation is drawn too and marked ``in_scope: false``, as
-    is a focus that lies outside the scope. A criterion is never returned without its question. ``limit`` caps the
-    nodes; ``dropped`` says how many were left out. ``totals`` count what the scope holds, each id once.
+    is a focus that lies outside the scope. A criterion is never returned without its question: the question is listed
+    before it, and a focused criterion comes with its question even at ``limit=1`` (the one case of two nodes). ``limit``
+    caps the nodes otherwise; ``dropped`` says how many were left out. ``totals`` count what the scope holds — exactly
+    the ids the outline reaches by expanding — each id once, as the kind ``kind_of`` gives it.
     """
     try:
         resolved = resolve_scope(model, scope, deck_source_id_of, slide_support)
@@ -316,9 +338,10 @@ def graph(model: OutlineModel, *, course_id: str, scope: str, focus: str | None 
         return _ORDER[model.kind_of(node_id) or "criterion"], model.label_of(node_id).lower(), node_id
 
     edges = _catalog_edges(model)
+    tables = {"topic": model.topics, "concept": model.concepts, "skill": model.skills, "question": model.questions, "criterion": model.criteria}
+    held = {kind: [node_id for node_id in (tables[kind] if everything else members[kind]) if model.kind_of(node_id) == kind] for kind in KINDS}  # each id once, as the kind it is
     if focus is None:
-        tables = {"topic": model.topics, "concept": model.concepts, "skill": model.skills}
-        order = sorted((node_id for kind, table in tables.items() for node_id in (table if everything else members[kind]) if node_id in table), key=rank)
+        order = sorted((node_id for kind in ("topic", "concept", "skill") for node_id in held[kind]), key=rank)
     else:
         adjacency: dict[str, list[tuple[str, bool]]] = {}
         for edge in edges:
@@ -337,6 +360,8 @@ def graph(model: OutlineModel, *, course_id: str, scope: str, focus: str | None 
             question_id = model.criteria[node_id]["question_id"]
             distance[question_id] = min(distance.get(question_id, distance[node_id]), distance[node_id])
         order = sorted(distance, key=lambda node_id: (node_id != focus, distance[node_id], *rank(node_id)))
+        if model.kind_of(focus) == "criterion":  # a focused criterion is identified by its question: the two are not separated, whatever the limit
+            limit = max(limit, 2)
     kept = order[:limit]
     present = set(kept)
 
@@ -348,56 +373,89 @@ def graph(model: OutlineModel, *, course_id: str, scope: str, focus: str | None 
                       **node_support(resolved, node_id), "evidence": evidence_of(node_id) if evidence_of is not None else None})
         for tie in resolved["support"].get(node_id) or []:  # one source edge per kind of tie: a stated anchor and a suggested link stay two things
             drawn.append(_edge("source", "slide_supports" if tie["direct"] else "slide_supports_by_assessment", resolved["logical_slide_id"] or f"slide:{resolved['lecture_id']}:{resolved['page']}",
-                               node_id, _TIE_PROVENANCE[tie["tie"]], tie=tie["tie"], pages=list(tie["pages"])))
+                               node_id, _TIE_PROVENANCE[tie["tie"]] + (_ACCEPTED if tie["accepted"] else ""), tie=tie["tie"], pages=list(tie["pages"])))
     drawn.sort(key=lambda edge: (_FAMILY_ORDER[edge["family"]], edge["relation"], edge["from"], edge["to"], edge["tie"] or ""))
-    totals = {kind: model.canonical_counts[kind] if members[kind] is None else len(members[kind]) for kind in KINDS}
+    totals = {kind: len(held[kind]) for kind in KINDS}
     return {"course_id": course_id, "graph_version": GRAPH_VERSION,
             "scope": {"kind": resolved["kind"], "lecture_id": resolved.get("lecture_id"), "page": resolved.get("page"), "logical_slide_id": resolved["logical_slide_id"], "label": resolved["label"],
                       "pages": list(resolved["pages"]), "note": resolved.get("note")},
             "nodes": nodes, "edges": [{key: value for key, value in edge.items() if not key.startswith("_")} for edge in drawn],
             "focus": focus, "truncated": len(order) > len(kept), "dropped": len(order) - len(kept), "totals": totals,
-            "revisions": {"question_index_sha256": None, "map_revision": None, "evidence_revision": None, **(revisions or {}), "scope_revision": _scope_revision(model, resolved)}}
+            "revisions": {**{key: None for key in REVISION_KEYS}, **(revisions or {}), "scope_revision": _scope_revision(model, resolved)}}
 
 
 # ---- node detail: Sources, Questions, Evidence ------------------------------------------------------------------------------
-def _pages_label(pages: list[int], page_count: int | None) -> str:
+def _runs(numbers: Iterable[int]) -> list[list[int]]:
     runs: list[list[int]] = []
-    for page in pages:
-        if runs and page == runs[-1][1] + 1:
-            runs[-1][1] = page
+    for number in sorted(set(numbers)):
+        if runs and number == runs[-1][1] + 1:
+            runs[-1][1] = number
         else:
-            runs.append([page, page])
-    text = ", ".join(str(a) if a == b else f"{a}–{b}" for a, b in runs)
-    return f"PDF page{'s' if len(pages) > 1 else ''} {text}" + (f" of {page_count}" if page_count else "")
+            runs.append([number, number])
+    return runs
+
+
+def _ranges_text(ranges: Iterable[Iterable[int]]) -> str:
+    return ", ".join(str(a) if a == b else f"{a}–{b}" for a, b in ranges)
+
+
+def _pages_label(pages: list[int], page_count: int | None) -> str:
+    return f"PDF page{'s' if len(pages) > 1 else ''} {_ranges_text(_runs(pages))}" + (f" of {page_count}" if page_count else "")
+
+
+def _line_ranges(ranges: Any) -> list[list[int]]:
+    """Inclusive line ranges as written: pairs of positive integers, first ≤ last. Anything else is left out, never repaired."""
+    out = []
+    for pair in ranges or []:
+        if isinstance(pair, (list, tuple)) and len(pair) == 2 and all(isinstance(n, int) and not isinstance(n, bool) and n > 0 for n in pair) and pair[0] <= pair[1]:
+            out.append([pair[0], pair[1]])
+    return out
 
 
 def catalog_sources(model: OutlineModel, *, deck_source_id_of: Callable[[str], str | None] | None = None, lecture_of_source: Callable[[str], str | None] | None = None,
-                    page_count_of: Callable[[str], int | None] | None = None, logical_slides_of: Callable[[str, str, list[int]], Iterable[str]] | None = None) -> Callable[[str], list[dict]]:
-    """``sources_of`` for :func:`node_detail` from the course's own records: a question's page anchors and a skill's source reference.
+                    page_count_of: Callable[[str], int | None] | None = None, logical_slides_of: Callable[[str, str, list[int]], Iterable[str]] | None = None,
+                    transcript_of: Callable[[str], str | None] | None = None) -> Callable[[str], list[dict]]:
+    """``sources_of`` for :func:`node_detail` from the course's own records: a question's anchors and a skill's source references.
 
-    What is not handed in is not claimed: without ``page_count_of`` a label has no "of n", without ``lecture_of_source``
-    a skill reference has no lecture, and a file that is not known to be the displayed deck is opened as the file itself.
+    Every recorded reference becomes a row of the kind it IS, and no kind is converted into another: ``pages`` of a file,
+    ``transcript_lines`` (inclusive line ranges; a line is not a page), or ``text`` — the catalog's own locator wording
+    when it names no page and no line (also a reference that names a file and no place in it). What is not handed in
+    is not claimed: without ``page_count_of`` a label has no "of n"; without ``lecture_of_source`` a skill reference has
+    no lecture; without ``transcript_of`` (lecture id → the id of the unit's one transcript) the lines a skill reference
+    names belong to a transcript that is not identified; and a file that is not known to be the displayed deck is opened
+    as the file itself.
     """
-    def row(lecture_id: str | None, source_id: str, pages: list[int], tie: str, basis: str, shown: bool | None) -> dict:
-        return {"lecture_id": lecture_id, "source_id": source_id, "pages": list(pages), "tie": tie, "basis": basis, "on_displayed_deck": shown,
-                "page_count": page_count_of(source_id) if page_count_of else None,
-                "logical_slide_ids": list(logical_slides_of(lecture_id, source_id, list(pages))) if logical_slides_of and lecture_id else []}
+    def row(lecture_id: str | None, source_id: str | None, pages: list[int], tie: str, basis: str, shown: bool | None) -> dict:
+        return {"kind": "pages", "lecture_id": lecture_id, "source_id": source_id, "pages": list(pages), "tie": tie, "basis": basis, "on_displayed_deck": shown,
+                "page_count": page_count_of(source_id) if page_count_of and source_id else None,
+                "logical_slide_ids": list(logical_slides_of(lecture_id, source_id, list(pages))) if logical_slides_of and lecture_id and source_id else []}
+
+    def lines(lecture_id: str | None, source_id: str | None, ranges: Any, tie: str, basis: str) -> dict:
+        return {"kind": "transcript_lines", "lecture_id": lecture_id, "source_id": source_id, "pages": [], "ranges": _line_ranges(ranges), "tie": tie, "basis": basis}
 
     def sources_of(node_id: str) -> list[dict]:
         kind, rows = model.kind_of(node_id), []
         if kind == "question":
             for anchor in (model.bank["questions"].get(node_id) or {}).get("anchors") or []:
-                if anchor.get("kind") == "pages" and anchor.get("source_id") and anchor.get("pages"):
-                    tie = "exact" if anchor.get("basis") == "exact" else "stated"
-                    rows.append(row(anchor.get("lecture_id"), anchor["source_id"], anchor["pages"], tie, f"question anchor ({tie})", anchor.get("on_displayed_deck")))
+                tie = "exact" if anchor.get("basis") == "exact" else "stated"
+                if anchor.get("kind") == "pages" and anchor.get("pages"):  # ``source_id`` is ``None`` when the record names a file the unit does not identify
+                    rows.append(row(anchor.get("lecture_id"), anchor.get("source_id") or None, anchor["pages"], tie, f"question anchor ({tie})", anchor.get("on_displayed_deck")))
+                elif anchor.get("kind") == "transcript_lines":
+                    rows.append(lines(anchor.get("lecture_id"), anchor.get("source_id") or None, anchor.get("ranges"), tie, f"question anchor ({tie})"))
         elif kind == "skill":
             for ref in model.skills[node_id].get("source_refs") or []:
-                source_id, locator = ref.get("source_id"), ref.get("locator")
-                pages = sorted({page for anchor in parse_locator(locator)["anchors"] if anchor["kind"] == "pages" and anchor["target"] == "cited" for page in anchor["pages"]}) if isinstance(locator, str) else []
-                if source_id and pages:
-                    lecture_id = lecture_of_source(source_id) if lecture_of_source else None
-                    shown = deck_source_id_of(lecture_id) == source_id if deck_source_id_of and lecture_id else None
-                    rows.append(row(lecture_id, source_id, pages, "stated", "skill source reference", shown))
+                source_id = ref.get("source_id") if isinstance(ref.get("source_id"), str) and ref.get("source_id") else None
+                locator = ref.get("locator").strip() if isinstance(ref.get("locator"), str) else ""
+                anchors = parse_locator(locator)["anchors"]
+                pages = sorted({page for anchor in anchors if anchor["kind"] == "pages" and anchor["target"] == "cited" for page in anchor["pages"]}) if source_id else []
+                named = [pair for anchor in anchors if anchor["kind"] == "transcript_lines" for pair in anchor["ranges"]]
+                lecture_id = lecture_of_source(source_id) if lecture_of_source and source_id else None
+                if pages:
+                    rows.append(row(lecture_id, source_id, pages, "stated", "skill source reference", deck_source_id_of(lecture_id) == source_id if deck_source_id_of and lecture_id else None))
+                if named:  # lines of the unit's transcript, which is another file than the one the reference cites
+                    rows.append(lines(lecture_id, transcript_of(lecture_id) if transcript_of and lecture_id else None, named, "stated", "skill source reference"))
+                if not pages and not named and (source_id or locator):  # no page and no line could be read from it: the reference as the catalog words it
+                    rows.append({"kind": "text", "lecture_id": lecture_id, "source_id": source_id, "pages": [], "locator_text": locator, "tie": "stated", "basis": "skill source reference"})
         return rows
 
     return sources_of
@@ -407,15 +465,22 @@ def tie_sources(ties: Iterable[dict] | None, *, page_count_of: Callable[[str], i
     """``sources_of`` rows from one question's ``ties`` of a lecture view (r2-read-api.md 1.3 ``questions.all[].ties``).
 
     A suggested link carries the criteria it supports; :func:`node_detail` then lists it only for a concept, skill or
-    criterion that one of those criteria is bound to. A tie without pages (transcript lines only) is not a page source.
+    criterion that one of those criteria is bound to. A tie without pages — a question the course anchors to transcript
+    lines only — is a row of transcript lines, never a page.
     """
     rows = []
     for tie in ties or []:
-        if tie.get("tie") in TIES and tie.get("pages") and tie.get("source_id"):
+        if tie.get("tie") not in TIES:
+            continue
+        basis = _TIE_PROVENANCE[tie["tie"]] if tie["tie"] == "agent_inferred" else f"question anchor ({tie['tie']})"
+        if tie.get("pages") and tie.get("source_id"):
             listed = [c.get("criterion_id") for c in tie.get("criteria") or [] if isinstance(c, dict) and c.get("criterion_id")] if tie["tie"] == "agent_inferred" else []
-            rows.append({"lecture_id": tie.get("lecture_id"), "source_id": tie["source_id"], "pages": list(tie["pages"]), "tie": tie["tie"], "on_displayed_deck": tie.get("on_displayed_deck"),
-                         "logical_slide_ids": list(tie.get("logical_slide_ids") or []), "page_count": page_count_of(tie["source_id"]) if page_count_of else None,
-                         "basis": _TIE_PROVENANCE[tie["tie"]] if tie["tie"] == "agent_inferred" else f"question anchor ({tie['tie']})", "criterion_ids": listed or None})
+            rows.append({"kind": "pages", "lecture_id": tie.get("lecture_id"), "source_id": tie["source_id"], "pages": list(tie["pages"]), "tie": tie["tie"],
+                         "on_displayed_deck": tie.get("on_displayed_deck"), "logical_slide_ids": list(tie.get("logical_slide_ids") or []),
+                         "page_count": page_count_of(tie["source_id"]) if page_count_of else None, "basis": basis, "criterion_ids": listed or None})
+        elif not tie.get("pages") and _line_ranges(tie.get("transcript_lines")):
+            rows.append({"kind": "transcript_lines", "lecture_id": tie.get("lecture_id"), "source_id": tie.get("source_id") or None, "pages": [], "ranges": _line_ranges(tie["transcript_lines"]),
+                         "tie": tie["tie"], "basis": basis, "criterion_ids": None})
     return rows
 
 
@@ -423,10 +488,13 @@ def node_detail(model: OutlineModel, node_id: str, *, course_id: str, sources_of
                 questions_of: Callable[[str], Iterable[str]] | None = None) -> dict[str, Any] | None:
     """The R2 additions to ``outline/node``: ``sources``, ``questions``, ``evidence`` (+ totals and ``definition``). ``None`` for an unknown node.
 
-    ``sources_of(id)`` yields ``{lecture_id, source_id, pages, tie, basis?, on_displayed_deck?, page_count?, logical_slide_ids?,
-    criterion_ids?}`` for a question or a skill (:func:`catalog_sources`, :func:`tie_sources`). Rows naming the same file
-    with the same kind of tie are joined; rows of different ties never are. A row that lists ``criterion_ids`` supports
-    those criteria only: it is a source of a concept, skill, topic or criterion only through one of them.
+    ``questions`` are ``OutlineModel.questions_of(node)`` — the join the outline expands and the counts count — unless
+    ``questions_of`` hands in another list. ``sources_of(id)`` yields, for a question or a skill, rows ``{kind?, lecture_id,
+    source_id, pages, ranges?, locator_text?, tie, basis?, on_displayed_deck?, page_count?, logical_slide_ids?, criterion_ids?}``
+    (:func:`catalog_sources`, :func:`tie_sources`). ``kind`` is ``pages`` (the default), ``transcript_lines`` or ``text``; a row
+    stays the kind it is. Rows of one kind naming the same file with the same kind of tie are joined; rows of different ties
+    never are. A row that lists ``criterion_ids`` supports those criteria only: it is a source of a concept, skill, topic or
+    criterion only through one of them. ``href`` is ``None`` for a row the record does not make openable (no file identified).
     ``evidence`` is an ``evidence.EvidenceReader`` (``.question(id)``, ``.node(id)``).
     """
     kind = model.kind_of(node_id) if isinstance(node_id, str) else None
@@ -434,36 +502,62 @@ def node_detail(model: OutlineModel, node_id: str, *, course_id: str, sources_of
         return None
     question_ids = [q for q in (questions_of(node_id) if questions_of else model.questions_of(node_id)) if q in model.questions]
     topic_concepts = {c for c, concept in model.concepts.items() if node_id in (concept.get("topic_ids") or [])} if kind == "topic" else set()
+    own_skills = skills_under(model, node_id) if kind in {"topic", "concept"} else set()  # the skills the outline lists under the node
 
-    def bound(criterion: dict) -> bool:
-        return {"question": True, "criterion": criterion["criterion_id"] == node_id, "concept": criterion.get("concept_id") == node_id, "skill": criterion.get("skill_id") == node_id,
-                "topic": criterion.get("concept_id") in topic_concepts}[kind]
+    def bound(criterion: dict) -> bool:  # the criteria through which a question is a question of this node: the same joins as ``OutlineModel.hierarchy``
+        return {"question": True, "criterion": criterion["criterion_id"] == node_id, "skill": criterion.get("skill_id") == node_id,
+                "concept": criterion.get("concept_id") == node_id or criterion.get("skill_id") in own_skills,
+                "topic": criterion.get("concept_id") in topic_concepts or criterion.get("skill_id") in own_skills}[kind]
 
     bound_criteria = {q: [c["criterion_id"] for c in model.questions[q].get("criteria") or [] if bound(c)] for q in question_ids}
-    origins = {"question": [node_id], "criterion": question_ids, "skill": [node_id, *question_ids]}.get(kind, [*sorted(skills_under(model, node_id)), *question_ids])
+    # Where a node's sources come from: its own records, the anchors of its questions, and the source references of its skills. For a
+    # question and a criterion the skills are those they assess (question → criterion → skill): where the assessed skill is taught is
+    # listed too, in rows of its own, so that the question's own anchor is not blurred by it.
+    assessed = model.skills_of(node_id) if kind in {"question", "criterion"} else []
+    origins = {"question": [node_id, *assessed], "criterion": [*question_ids, *assessed], "skill": [node_id, *question_ids]}.get(kind, [*sorted(own_skills), *question_ids])
     merged: dict[tuple, dict] = {}
     for origin in origins:
+        apart = 1 if origin in assessed else 0  # question and criterion only: 0 = the anchors of the question itself, 1 = the references of an assessed skill
         for raw in sources_of(origin) or ():
-            pages = {p for p in raw.get("pages") or [] if isinstance(p, int) and not isinstance(p, bool) and p > 0}
-            if not pages or raw.get("tie") not in TIES or not raw.get("source_id"):
+            row_kind = raw.get("kind") or "pages"
+            if row_kind not in SOURCE_KINDS or raw.get("tie") not in TIES:
                 continue
+            source_id = raw.get("source_id") if isinstance(raw.get("source_id"), str) and raw.get("source_id") else None
+            pages = {p for p in raw.get("pages") or [] if isinstance(p, int) and not isinstance(p, bool) and p > 0} if row_kind == "pages" else set()
+            ranges = {tuple(pair) for pair in _line_ranges(raw.get("ranges"))} if row_kind == "transcript_lines" else set()
+            text = raw.get("locator_text").strip()[:MAX_LOCATOR_TEXT] if row_kind == "text" and isinstance(raw.get("locator_text"), str) else ""
+            if (row_kind == "pages" and not pages) or (row_kind == "transcript_lines" and not ranges) or (row_kind == "text" and not text and source_id is None):
+                continue  # the row names nothing
             if raw.get("criterion_ids") is not None and kind != "question" and not set(raw["criterion_ids"]) & set(bound_criteria.get(origin, [])):
                 continue  # the link supports other criteria of that question, not the ones bound to this node
-            slot = merged.setdefault((raw.get("lecture_id"), raw["source_id"], raw["tie"]), {"pages": set(), "slides": set(), "from": set(), "basis": set(), "page_count": None, "shown": False})
+            key = (SOURCE_KINDS.index(row_kind), apart, raw.get("lecture_id") or "", source_id or "", TIES.index(raw["tie"]), text)
+            slot = merged.setdefault(key, {"kind": row_kind, "lecture_id": raw.get("lecture_id") or None, "source_id": source_id, "tie": raw["tie"], "text": text, "pages": set(), "ranges": set(),
+                                           "slides": set(), "from": set(), "basis": set(), "page_count": None, "shown": False})
             slot["pages"] |= pages
+            slot["ranges"] |= ranges
             slot["slides"] |= set(raw.get("logical_slide_ids") or [])
             slot["from"].add(origin)
             slot["basis"] |= {raw["basis"]} if raw.get("basis") else set()
             slot["page_count"] = slot["page_count"] or raw.get("page_count")
             slot["shown"] = slot["shown"] or raw.get("on_displayed_deck") is True
     sources = []
-    for (lecture_id, source_id, tie), slot in sorted(merged.items(), key=lambda item: (item[0][0] or "", item[0][1], TIES.index(item[0][2]))):
-        pages = sorted(slot["pages"])
-        # the lecture opens with its displayed deck: only a page of that deck is a page of the lecture; any other file is opened as itself
-        href = (f"/courses/{quote(course_id, safe='')}/lectures/{quote(lecture_id, safe='')}?page={pages[0]}" if lecture_id and slot["shown"]
-                else f"/courses/{quote(course_id, safe='')}/sources/{quote(source_id, safe='')}?page={pages[0]}")
-        sources.append({"lecture_id": lecture_id, "source_id": source_id, "pages": pages, "label": _pages_label(pages, slot["page_count"]), "tie": tie,
-                        "logical_slide_ids": sorted(slot["slides"]), "href": href, "basis": "; ".join(sorted(slot["basis"])), "from": sorted(slot["from"])})
+    course_path = f"/courses/{quote(course_id, safe='')}"
+    for _key, slot in sorted(merged.items()):  # pages first, then transcript lines, then broad text; inside a kind by lecture, file and tie
+        lecture_id, source_id, pages, ranges = slot["lecture_id"], slot["source_id"], sorted(slot["pages"]), [list(pair) for pair in sorted(slot["ranges"])]
+        lecture_path = f"{course_path}/lectures/{quote(lecture_id, safe='')}" if lecture_id else None
+        file_path = f"{course_path}/sources/{quote(source_id, safe='')}" if source_id else None
+        if slot["kind"] == "pages":
+            # the lecture opens with its displayed deck: only a page of that deck is a page of the lecture; any other file is opened as itself
+            href = f"{lecture_path}?page={pages[0]}" if lecture_path and source_id and slot["shown"] else (f"{file_path}?page={pages[0]}" if file_path else None)
+            label, shown_ranges = _pages_label(pages, slot["page_count"]), _runs(pages)
+        elif slot["kind"] == "transcript_lines":
+            # openable only when the record identifies the transcript; the lecture shows its unit's transcript at a line
+            href = None if not file_path else (f"{lecture_path}?line={ranges[0][0]}" if lecture_path else f"{file_path}?line={ranges[0][0]}")
+            label, shown_ranges = f"Transcript line{'s' if len(ranges) > 1 or ranges[0][0] != ranges[0][1] else ''} {_ranges_text(ranges)}", ranges
+        else:
+            href, label, shown_ranges = file_path, slot["text"] or "No place in the file is named", []
+        sources.append({"kind": slot["kind"], "lecture_id": lecture_id, "source_id": source_id, "pages": pages, "ranges": shown_ranges, "locator_text": slot["text"] if slot["kind"] == "text" else None,
+                        "label": label, "tie": slot["tie"], "logical_slide_ids": sorted(slot["slides"]), "href": href, "basis": "; ".join(sorted(slot["basis"])), "from": sorted(slot["from"])})
 
     tie_to_node = {"question": "self", "criterion": "criterion_of_question"}.get(kind, "assessment")
     questions = [{"question_id": q, "title": model.questions[q].get("title") or q, "collection": model.questions[q].get("collection"), "tie_to_node": tie_to_node,
@@ -484,10 +578,19 @@ def slide_support_from_lecture_view(view: dict, page: int) -> dict[str, Any] | N
     A course anchor names a page for a question, so the question is the entry. A suggested link names the criteria its
     pages support, so those criteria are the entries (the question itself when it lists none): a criterion the link does
     not list puts nothing on the slide. A tie the learner rejected is not a link and is left out; an accepted suggestion
-    stays a suggestion (``agent_inferred``). When the page has an identity but no ``question_ties``, ``entries`` is
-    ``None``: the course's own anchors are used.
+    stays a suggestion (``agent_inferred``) and its entries carry the decision. A tie that is not page support of this
+    slide is left out and never widened: one of section granularity (the course's study map names a range of pages; such
+    ties belong in ``section_ties``), and one that lists no support page. When the page has an identity but no
+    ``question_ties``, ``entries`` is ``None``: the course's own anchors are used.
+
+    Raises ``ValueError`` when the view states the deck's ``page_count`` and ``page`` is not one of its pages: a page that
+    does not exist is an unknown scope, not a slide that holds nothing.
     """
-    slide = next((s for s in (view or {}).get("slides") or [] if s.get("page") == page), None)
+    view = view or {}
+    count = view.get("page_count")
+    if isinstance(count, int) and not isinstance(count, bool) and not 1 <= page <= count:
+        raise ValueError(f"Page {page} is not a page of the displayed deck, which has {count}")
+    slide = next((s for s in view.get("slides") or [] if s.get("page") == page), None)
     identity = (slide or {}).get("identity") or {}
     if not identity.get("logical_slide_id"):
         return None
@@ -497,27 +600,55 @@ def slide_support_from_lecture_view(view: dict, page: int) -> dict[str, Any] | N
     if "question_ties" in slide:
         entries = []
         for tie in slide["question_ties"] or []:
-            if tie.get("tie") not in TIES or tie.get("learner_decision") == "rejected":
+            pages = tie.get("support_pages")
+            if tie.get("tie") not in TIES or tie.get("learner_decision") == "rejected" or tie.get("granularity") not in (None, "page") or not isinstance(pages, list) or not pages:
                 continue
             listed = [c.get("criterion_id") for c in tie.get("criteria") or [] if isinstance(c, dict) and c.get("criterion_id")] if tie["tie"] == "agent_inferred" else []
-            entries += [{"node_id": node_id, "tie": tie["tie"], "pages": list(tie.get("support_pages") or [])} for node_id in (listed or [tie.get("question_id")])]
+            entries += [{"node_id": node_id, "tie": tie["tie"], "pages": list(pages), "decision": tie.get("learner_decision")} for node_id in (listed or [tie.get("question_id")])]
     return {"logical_slide_id": identity["logical_slide_id"], "label": identity.get("label"), "page": page, "pages": sorted((logical or {}).get("pages") or [page]), "entries": entries,
             "role": {"value": role.get("value"), "forced_requirements": role.get("forced_requirements")} if role else None}
 
 
+def anchor_revision(view: dict | None) -> str | None:
+    """Digest of the anchors of ONE lecture as its lecture view lists them: the course's own anchors of the lecture's questions
+    and, when the view is enriched, every tie with the learner's decision on it. It changes when an anchor of that lecture is
+    added, moved or removed and when a suggested link is accepted, rejected or cleared — not with the wording of a rationale
+    and not with the order of listing. ``None`` without a lecture view: no revision is claimed."""
+    questions = ((view or {}).get("questions") or {}).get("all")
+    if not isinstance(questions, list):
+        return None
+    rows = []
+    for question in questions:
+        anchors = sorted(json.dumps([a.get("kind"), a.get("source_id"), a.get("lecture_id"), a.get("pages") or a.get("ranges") or [], a.get("basis")], sort_keys=True) for a in question.get("anchors") or [])
+        ties = sorted(json.dumps([t.get("tie"), t.get("source_id"), t.get("lecture_id"), t.get("pages") or [], t.get("transcript_lines") or [],
+                                  sorted(c.get("criterion_id") or "" for c in t.get("criteria") or [] if isinstance(c, dict)), t.get("state"), t.get("verdict"), t.get("suggestion_id"),
+                                  t.get("learner_decision")], sort_keys=True) for t in question.get("ties") or [])
+        rows.append([question.get("question_id"), anchors, ties])
+    return hashlib.sha256(json.dumps(sorted(rows, key=lambda row: str(row[0])), sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:16]
+
+
 def view(projector: Any, course_id: str, *, scope: str = "course", focus: str | None = None, depth: int = 1, limit: int = DEFAULT_LIMIT) -> dict[str, Any]:
-    """The concept graph of one course from the Projector's own readers (catalogs, question bank, attempt records, lecture view)."""
+    """The concept graph of one course from the Projector's own readers (catalogs, question bank, attempt records, lecture view).
+
+    ``revisions`` name what the view was built from (R2-C11): the question index and the skills catalog (their bytes), the
+    source-map revision and the anchor revision of the lecture (lecture and slide scopes; the course graph draws neither
+    a slide nor an anchor), the app's policy revision, the evidence revision, and the scope's own revision.
+    """
     model, bank, decks, catalogs = projector._outline(course_id)
     reader = EvidenceReader(projector._records(course_id), model)
-    support, map_revision = None, None
+    support, map_revision, anchors = None, None, None
     parts = scope.split(":") if isinstance(scope, str) else []
     if len(parts) >= 2 and parts[0] in {"lecture", "slide"} and parts[1] in bank["lectures"] and _SCOPE.fullmatch(scope):
         lecture = projector.lecture_view(course_id, parts[1]) or {}
-        map_revision = (lecture.get("source_map") or {}).get("map_revision")
+        map_revision, anchors = (lecture.get("source_map") or {}).get("map_revision"), anchor_revision(lecture)
         if parts[0] == "slide":
-            support = slide_support_from_lecture_view(lecture, int(parts[2]))
+            try:
+                support = slide_support_from_lecture_view(lecture, int(parts[2]))
+            except ValueError as exc:  # the deck has no such page
+                return _error(course_id, "unknown_scope", str(exc))
     return graph(model, course_id=course_id, scope=scope, focus=focus, depth=depth, limit=limit, deck_source_id_of=decks.get, slide_support=support, evidence_of=reader.compact,
-                 revisions={"question_index_sha256": (catalogs["questions"] or {}).get("sha256"), "map_revision": map_revision, "evidence_revision": reader.revision})
+                 revisions={"question_index_sha256": (catalogs["questions"] or {}).get("sha256"), "skills_sha256": (catalogs.get("skills") or {}).get("sha256"), "map_revision": map_revision,
+                            "anchor_revision": anchors, "policy_revision": getattr(getattr(projector, "settings", None), "policy_revision", None), "evidence_revision": reader.revision})
 
 
 def register(app: Any, runtime: Any, locked: Callable[[Callable[[], Any]], Any]) -> None:

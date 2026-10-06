@@ -1405,6 +1405,58 @@ def test_the_generation_with_the_most_resolved_coverage_is_served_then_the_newes
     assert row["current_generation"] == "gen-whole-newer" and row["covers_whole_recording"] is True
 
 
+def test_a_runner_generation_under_an_older_withholding_policy_gives_way_to_one_under_a_newer_policy(settings, derived, journal):
+    """Each withholding policy of the app's own runner states MORE of what is unknown than the one before it (the third
+    also states the time around withheld text that the recogniser left empty). "Most resolved time first" alone would
+    keep serving the older generation exactly because it admits less. So a runner generation is not served once a
+    runner generation under a NEWER policy exists that processed at least the same window; until then it is served
+    as before."""
+    item = recording(settings)
+    source_id = item["source_id"]
+    assert d.MERGE_POLICY_ORDER == ("withhold-repetition-1", "withhold-repetition-2", "withhold-repetition-3") and d.SERVED_MERGE_POLICIES == frozenset(d.MERGE_POLICY_ORDER)
+
+    def served() -> dict:
+        return derived.current("be505", source_id)
+
+    admit(derived, settings, "sp-two-p0003-aaaaaaaa", window=(0, 60_000), created_at="2026-10-05T12:00:00Z", provenance=runner_provenance([(10_000, 12_000)], merge_policy="withhold-repetition-2"))
+    assert served()["generation"] == "sp-two-p0003-aaaaaaaa"  # nothing newer is stored: served as before
+    # A part of the recording under the newer policy does not hide the whole under the older one: it processed less.
+    admit(derived, settings, "sp-three-p0001-bbbbbbbb", window=(0, 27_000), created_at="2026-10-05T12:30:00Z", provenance=runner_provenance([(5_000, 20_000)], merge_policy="withhold-repetition-3"))
+    assert served()["generation"] == "sp-two-p0003-aaaaaaaa"
+    # The whole recording under the newer policy: it resolves LESS (it states more as unknown) and is the one served.
+    admit(derived, settings, "sp-three-p0003-cccccccc", window=(0, 60_000), created_at="2026-10-05T13:00:00Z", provenance=runner_provenance([(5_000, 20_000)], merge_policy="withhold-repetition-3"))
+    assert served()["generation"] == "sp-three-p0003-cccccccc" and served()["unresolved_seconds"] == 15.0 and served()["covers_whole_recording"] is False
+    assert states(derived, source_id) == {"sp-three-p0003-cccccccc": "current", "sp-three-p0001-bbbbbbbb": "superseded", "sp-two-p0003-aaaaaaaa": "superseded"}
+    row = next(r for r in derived.status("be505")["recordings"] if r["source_id"] == source_id)
+    older = next(g for g in row["generations"] if g["generation"] == "sp-two-p0003-aaaaaaaa")
+    assert "older merge policy" in older["detail"] and "withhold-repetition-3" in older["detail"] and row["current_generation"] == "sp-three-p0003-cccccccc"
+    # Published again under the older policy, later, claiming that everything is resolved: it changes nothing.
+    admit(derived, settings, "sp-two-p0003-dddddddd", window=(0, 60_000), created_at="2026-10-05T14:00:00Z", provenance=runner_provenance([], merge_policy="withhold-repetition-2"))
+    assert served()["generation"] == "sp-three-p0003-cccccccc"
+    # Generations of other origins state no policy and compete as before: by the time they resolve.
+    admit(derived, settings, "gen-whole", window=(0, 60_000), created_at="2026-10-05T11:00:00Z")
+    assert served()["generation"] == "gen-whole" and states(derived, source_id)["sp-three-p0003-cccccccc"] == "superseded"
+    # With the newer generation damaged the older policy's generations are what is left to serve, as any other superseded generation would be.
+    (derived.store_dir("be505") / source_id / "gen-whole" / "segments.json").write_bytes(b"{}")
+    (derived.store_dir("be505") / source_id / "sp-three-p0003-cccccccc" / "segments.json").write_bytes(b"{}")
+    assert served()["generation"] == "sp-two-p0003-dddddddd"
+
+
+def test_the_reader_names_the_coverage_fields_that_belong_together(settings, derived, journal):
+    """A view that hands on ``window`` and ``coverage_fraction`` without the intervals shows withheld time as if it
+    were silence. The fields that say what was processed, what is covered and what is unresolved have ONE name list."""
+    item = recording(settings)
+    admit(derived, settings, "sp-test-p0003", window=(0, 60_000), created_at=NOW, provenance=runner_provenance([(1_000, 26_000)]))
+    current = derived.current("be505", item["source_id"])
+    assert d.COVERAGE_KEYS == ("window", "duration_ms", "coverage_fraction", "processed_fraction", "covers_whole_recording", "covered_intervals", "unresolved_intervals", "unresolved_seconds")
+    handed_on = {key: current[key] for key in d.COVERAGE_KEYS}  # what a consumer forwards
+    assert handed_on["unresolved_intervals"] == [{"start_ms": 1_000, "end_ms": 26_000, "reason": "repetition_check_failed"}] and handed_on["unresolved_seconds"] == 25.0
+    assert handed_on["covered_intervals"] == [{"start_ms": 0, "end_ms": 1_000}, {"start_ms": 26_000, "end_ms": 60_000}] and handed_on["window"] == {"start_ms": 0, "end_ms": 60_000}
+    assert handed_on["processed_fraction"] == 1.0 and handed_on["coverage_fraction"] == pytest.approx(35 / 60) and handed_on["covers_whole_recording"] is False
+    row = next(r for r in derived.status("be505")["recordings"] if r["source_id"] == item["source_id"])
+    assert all(key in row["generations"][0] for key in d.COVERAGE_KEYS)  # the status rows carry the same fields
+
+
 def test_a_runner_generation_from_before_text_was_withheld_is_kept_and_never_served(settings, derived, journal):
     """Such a generation can hold the output of a repetition loop as if it were speech. It stays on disk; it is not
     served, also not when the generation that replaced it is damaged or gone."""

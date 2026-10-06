@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from lecture_brain import concept_graph as cg
 from lecture_brain.evidence import EvidenceReader, evidence_revision
+from lecture_brain.evidence import skills_under as ev_skills_under
 from lecture_brain.fixtures import content
 from lecture_brain.journal import Journal
 from lecture_brain.outline import OutlineModel
@@ -24,6 +25,7 @@ DOCUMENT_KEYS = {"course_id", "graph_version", "scope", "nodes", "edges", "focus
 NODE_KEYS = {"id", "kind", "label", "counts", "in_scope", "where", "support_pages", "evidence"}
 EDGE_KEYS = {"id", "from", "to", "family", "relation", "provenance", "automatic_credit", "tie", "support_pages"}
 SCOPE_KEYS = {"kind", "lecture_id", "page", "logical_slide_id", "label", "pages", "note"}
+REVISION_KEYS = {"question_index_sha256", "skills_sha256", "map_revision", "anchor_revision", "policy_revision", "evidence_revision", "scope_revision"}
 OWNER_RELATIONS = {"strict_containment", "diagnostic_prerequisite", "partial_overlap"}
 DECKS = {"L1": "deck-1", "L2": "deck-2", "L3": None}
 GROUP = "ls-0a1b2c3d4e-p22-24"
@@ -77,6 +79,29 @@ def build_model(*, definition=None):
             "questions": {q: {"question_id": q, "collection": questions[q]["collection"], "anchors": anchors[q],
                               "slide_anchor": "named" if any(a["kind"] == "pages" and a["on_displayed_deck"] for a in anchors[q]) else "none"} for q in questions}}
     return OutlineModel({"skills": {"topics": topics, "skills": skills}, "families": {}, "questions": {"concepts": concepts, "questions": questions, "relationships": relationships}}, bank)
+
+
+def build_irregular():
+    """Shapes a real catalog also holds: a concept that criteria name and no skill is bound to (c.named); criteria whose concept is not their
+    skill's concept (Q1.C02, Q2.C01); a concept whose topic is not catalogued (c.adrift); a skill with neither concept nor topic
+    (s.nowhere); a skill whose concept is not catalogued (s.loose); a question without criteria (Q4); criteria on nothing catalogued (Q6)."""
+    topics = {t: {"topic_id": t, "label": label} for t, label in (("t.a", "Alpha"), ("t.b", "Beta"))}
+    concepts = {c: {"concept_id": c, "label": label, "topic_ids": filed, "aliases": []} for c, label, filed in (
+        ("c.own", "Own", ["t.a"]), ("c.named", "Named by criteria only", ["t.a"]), ("c.other", "Other", ["t.b"]), ("c.adrift", "Adrift", ["t.gone"]))}
+    skills = {s: {"skill_id": s, "topic_ids": filed, "concept_id": concept, "performance_target": label, "source_refs": []} for s, filed, concept, label in (
+        ("s.own", ["t.a"], "c.own", "Own skill"), ("s.other", ["t.b"], "c.other", "Other skill"), ("s.adrift", [], "c.adrift", "Adrift skill"),
+        ("s.loose", ["t.b"], "c.absent", "Loose skill"), ("s.nowhere", [], None, "Skill filed nowhere"))}
+    asked = {"Q1": ("L1", [criterion("Q1.C01", "s.own", "c.own"), criterion("Q1.C02", "s.own", "c.named")]),
+             "Q2": ("L1", [criterion("Q2.C01", "s.other", "c.named")]),
+             "Q3": ("L2", [criterion("Q3.C01", "s.loose", None)]),
+             "Q4": ("L2", []),
+             "Q5": ("L2", [criterion("Q5.C01", "s.ghost", "c.adrift")]),
+             "Q6": ("L2", [criterion("Q6.C01", "s.ghost", None)]),
+             "Q7": ("L1", [criterion("Q7.C01", "s.nowhere", None)])}
+    questions = {q: {"question_id": q, "title": f"Question {q[1:]}", "prompt": PROMPT, "collection": collection, "criteria": criteria} for q, (collection, criteria) in asked.items()}
+    bank = {"lectures": {lecture: {"lecture_id": lecture, "collections": [lecture], "question_ids": [q for q in questions if questions[q]["collection"] == lecture], "gap": None} for lecture in ("L1", "L2")},
+            "questions": {q: {"question_id": q, "collection": questions[q]["collection"], "anchors": [], "slide_anchor": "none"} for q in questions}}
+    return OutlineModel({"skills": {"topics": topics, "skills": skills}, "families": {}, "questions": {"concepts": concepts, "questions": questions, "relationships": []}}, bank)
 
 
 def support(page, entries, pages=(22, 23, 24), **extra):
@@ -168,6 +193,7 @@ def test_lecture_scope_filters_the_same_model_and_an_empty_scope_says_why():
 
 
 @pytest.mark.parametrize("scope,focus", [("lecture:nope", None), ("slide:nope:3", None), ("slide:L1:x", None), ("banana", None), ("", None), ("lecture:L1:extra", None),
+                                         ("slide:L1:0", None), ("slide:L1:00022", None), ("slide:L1:022", None), ("slide:L1:-1", None),   # pages are 1-based; "00022" is not another name of page 22
                                          ("course", "no-such-node"), ("lecture:L1", "")])
 def test_an_unknown_scope_or_focus_is_an_explicit_error_and_never_an_empty_graph(scope, focus):
     document = graph(scope=scope, focus=focus)
@@ -200,6 +226,102 @@ def test_outline_and_graph_show_the_same_ids_and_counts_in_every_scope(scope, sl
     assert {"question_ids", "concept_ids", "skill_ids", "criterion_ids", "support"}.isdisjoint(cg.public_scope(resolved))
 
 
+def assessed_in(document, node_id):
+    """The questions ONE graph document ties to a node by its own edges: what the structure edges put below the node, the criteria
+    that assess any of it, and the questions those criteria belong to."""
+    edges, below, frontier = document["edges"], {node_id}, [node_id]
+    while frontier:
+        frontier = [e["to"] for e in edges if e["from"] in frontier and e["relation"] in {"topic_includes_concept", "topic_includes_skill", "concept_assessed_as_skill"} and e["to"] not in below]
+        below |= set(frontier)
+    criteria = {e["from"] for e in edges if e["relation"] in {"criterion_assesses_concept", "criterion_assesses_skill"} and e["to"] in below}
+    return {e["from"] for e in edges if e["relation"] == "question_has_criterion" and e["to"] in criteria}
+
+
+@pytest.mark.parametrize("build", [build_model, build_irregular])
+@pytest.mark.parametrize("scope", ["course", "lecture:L1", "lecture:L2"])
+def test_a_node_has_one_question_count_in_the_outline_the_graph_and_its_detail(build, scope):
+    """R2-C5. The reviewed defect: a concept that criteria name and no skill is bound to read "0 questions" and could not be opened in
+    the outline, while its Questions list and its own graph showed the questions. One join now answers all of them."""
+    model = build()
+    reader = EvidenceReader({"attempts": {}, "revisions": {}, "effective": {}}, model)
+    resolved = cg.resolve_scope(model, scope, DECKS.get)
+    checked = 0
+    for row in walk(model, resolved):
+        if row["kind"] not in {"topic", "concept", "skill"}:
+            continue
+        node = row["node_id"]
+        under = {r["node_id"] for r in walk(model, resolved, row["instance_id"]) if r["kind"] == "question"}   # what expanding the row shows
+        assert cg.node_counts(model, resolved, node)["questions"] == len(under), (scope, node)
+        assert set(model.questions_of(node, resolved)) == under, (scope, node)
+        assert row["has_children"] is bool(model.children(node, resolved)) and (not under or row["has_children"]), (scope, node)   # what is counted can be opened
+        hood = graph(model, scope, focus=node, depth=3, limit=cg.MAX_LIMIT)
+        assert not hood["truncated"] and by_id(hood)[node]["counts"]["questions"] == len(under) and assessed_in(hood, node) == under, (scope, node)
+        near = graph(model, scope, focus=node, depth=1, limit=cg.MAX_LIMIT)   # one relation away is part of what lies below, never more than is counted
+        assert assessed_in(near, node) <= under and (row["kind"] != "skill" or assessed_in(near, node) == under), (scope, node)
+        if scope == "course":   # the node detail has no scope of its own: it is the course's
+            detail = cg.node_detail(model, node, course_id="demo", sources_of=cg.catalog_sources(model), evidence=reader)
+            assert detail["questions_total"] == len(under) and {q["question_id"] for q in detail["questions"]} == under, (scope, node)
+            assert all(q["criterion_ids"] for q in detail["questions"]), (scope, node)   # every listed question says through which criteria
+        checked += 1
+    assert checked
+
+
+def test_a_concept_assessed_only_through_criteria_is_counted_listed_and_reachable():
+    model = build_irregular()
+    reader = EvidenceReader({"attempts": {}, "revisions": {}, "effective": {}}, model)
+    course = cg.resolve_scope(model, "course", DECKS.get)
+    assert cg.node_counts(model, course, "c.named") == {"skills": 0, "questions": 2}
+    assert model.children("c.named", course) == [("Q1", "concept_assessed_by_question"), ("Q2", "concept_assessed_by_question")]
+    assert model.children("c.own", course) == [("s.own", "concept_assessed_as_skill")]   # Q1 is listed under the skill it is assessed through, not a second time beside it
+    named = next(r for r in model.rows(course, "t.a")["rows"] if r["node_id"] == "c.named")
+    assert named["has_children"] is True and [r["node_id"] for r in model.rows(course, "t.a>c.named")["rows"]] == ["Q1", "Q2"]
+    assert [r["node_id"] for r in model.rows(course, "t.a>c.named>Q1")["rows"]] == ["Q1.C01", "Q1.C02"]
+    detail = cg.node_detail(model, "c.named", course_id="demo", sources_of=cg.catalog_sources(model), evidence=reader)
+    assert [(q["question_id"], q["criterion_ids"]) for q in detail["questions"]] == [("Q1", ["Q1.C02"]), ("Q2", ["Q2.C01"])] and detail["questions_total"] == 2
+    assert by_id(graph(model, focus="c.named"))["c.named"]["counts"] == {"skills": 0, "questions": 2} and set(ids(graph(model, focus="c.named"), "question")) == {"Q1", "Q2"}
+    # a criterion whose concept is not its skill's concept: the question is a question of both, through the criteria that say so
+    other = cg.node_detail(model, "c.other", course_id="demo", sources_of=cg.catalog_sources(model), evidence=reader)
+    assert [(q["question_id"], q["criterion_ids"]) for q in other["questions"]] == [("Q2", ["Q2.C01"])] and cg.node_counts(model, course, "c.other") == {"skills": 1, "questions": 1}
+    assert cg.node_counts(model, course, "t.a") == {"skills": 1, "questions": 2} and cg.node_counts(model, course, "t.b") == {"skills": 2, "questions": 2}
+    assert [q["question_id"] for q in cg.node_detail(model, "t.a", course_id="demo", sources_of=cg.catalog_sources(model), evidence=reader)["questions"]] == ["Q1", "Q2"]
+    assert [q["question_id"] for q in cg.node_detail(model, "t.b", course_id="demo", sources_of=cg.catalog_sources(model), evidence=reader)["questions"]] == ["Q2", "Q3"]
+    first = cg.resolve_scope(model, "lecture:L1", DECKS.get)   # the same join inside a lecture: only this lecture's questions
+    assert cg.node_counts(model, first, "c.named") == {"skills": 0, "questions": 2} and model.questions_of("c.named", first) == ["Q1", "Q2"]
+    second = cg.resolve_scope(model, "lecture:L2", DECKS.get)
+    assert "c.named" not in second["concept_ids"] and model.questions_of("c.named", second) == []
+
+
+@pytest.mark.parametrize("scope", ["course", "lecture:L1", "lecture:L2"])
+def test_what_a_scope_counts_can_be_reached_in_the_outline_also_on_an_irregular_catalog(scope):
+    model = build_irregular()
+    resolved = cg.resolve_scope(model, scope, DECKS.get)
+    rows = walk(model, resolved)
+    outline = {kind: {r["node_id"] for r in rows if r["kind"] == kind} for kind in cg.KINDS}
+    document = graph(model, scope, limit=cg.MAX_LIMIT)
+    assert document["totals"] == {kind: len(found) for kind, found in outline.items()}   # nothing is counted that cannot be opened
+    assert {kind: set(ids(document, kind)) for kind in ("topic", "concept", "skill")} == {kind: outline[kind] for kind in ("topic", "concept", "skill")}
+    assert len(ids(document)) == len(set(ids(document)))
+    if scope == "course":
+        assert document["totals"] == {"topic": 2, "concept": 4, "skill": 5, "question": 7, "criterion": 7}
+        # what the catalog files under nothing is listed beside the topics, after them: a concept without a catalogued topic, a skill with neither, questions whose criteria name nothing catalogued
+        assert [(r["node_id"], r["kind"], r["relation"]) for r in model.rows(resolved, None)["rows"]] == [
+            ("t.a", "topic", "root"), ("t.b", "topic", "root"), ("c.adrift", "concept", "unfiled"), ("s.nowhere", "skill", "unfiled"), ("Q4", "question", "unfiled"), ("Q6", "question", "unfiled")]
+        assert model.children("c.adrift", resolved) == [("s.adrift", "concept_assessed_as_skill"), ("Q5", "concept_assessed_by_question")]
+        assert resolved["topic_ids"] is None and cg.resolve_scope(model, "lecture:L2", DECKS.get)["topic_ids"] == {"t.b"}   # an unfiled entry is not a topic
+
+
+def test_an_id_that_occurs_in_two_tables_is_one_node_of_one_kind():
+    model = build_model()
+    model.skills["c.pump"] = {"skill_id": "c.pump", "topic_ids": ["t.flow"], "concept_id": "c.valve", "performance_target": "A skill that reuses a concept's id", "source_refs": []}
+    document = graph(model, limit=cg.MAX_LIMIT)
+    assert ids(document).count("c.pump") == 1 and by_id(document)["c.pump"]["kind"] == "concept" and len({e["id"] for e in document["edges"]}) == len(document["edges"])
+    assert document["totals"] == graph()["totals"]   # the second entry is not a second object
+    kinds = {n["id"]: n["kind"] for n in graph(model, focus="c.valve", depth=2, limit=cg.MAX_LIMIT)["nodes"]}
+    assert not any(e["relation"] == "concept_assessed_as_skill" and e["to"] == "c.pump" for e in graph(model, focus="c.valve", depth=2, limit=cg.MAX_LIMIT)["edges"]) and kinds["c.pump"] == "concept"
+    resolved = cg.resolve_scope(model, "course", DECKS.get)
+    assert [r["node_id"] for r in walk(model, resolved)].count("c.pump") == 1   # under its one topic, as the concept it is
+
+
 # ---- neighbourhood, bounds (R2-C3, R2-C4) -------------------------------------------------------------------------------
 def test_focusing_a_node_returns_only_its_neighbours_with_criteria_never_shown_without_their_question():
     document = graph(focus="c.valve")
@@ -228,6 +350,9 @@ def test_the_limit_bounds_what_is_returned_and_says_how_much_was_left_out():
     hood = graph(focus="c.valve", limit=4)
     assert ids(hood) == ["c.valve", "t.control", "t.flow", "s.valve.explain"] and hood["truncated"] is True and hood["dropped"] == 4
     assert graph(limit=10**6)["truncated"] is False and len(graph(limit=0)["nodes"]) == 1   # out-of-range values are clamped, not obeyed
+    least = graph(focus="Q1.C02", limit=1)   # the one case in which the limit yields: a focused criterion is not returned without its question
+    assert ids(least) == ["Q1.C02", "Q1"] and least["truncated"] is True and least["dropped"] == 2 and ("Q1", "question_has_criterion", "Q1.C02") in edge_set(least)
+    assert ids(graph(focus="Q1", limit=1)) == ["Q1"] and all(len(graph(focus=node, limit=1)["nodes"]) == 1 for node in ("t.flow", "c.valve", "s.pump.size"))
 
 
 def test_the_largest_synthetic_course_stays_bounded_and_expands_on_demand():
@@ -344,6 +469,58 @@ def test_support_that_names_nothing_of_this_slide_is_left_out_and_a_wrong_page_i
     assert by_id(outside)["Q4"]["in_scope"] is False and by_id(outside)["Q4"]["where"] is None and "error" not in outside
 
 
+def test_a_page_the_deck_does_not_have_is_an_unknown_scope_and_never_an_empty_slide():
+    view = {"page_count": 4, "slides": [{"page": n, "title": None} for n in range(1, 5)]}
+    for page in (0, 5, 99999):
+        with pytest.raises(ValueError, match="not a page"):
+            cg.slide_support_from_lecture_view(view, page)
+    assert cg.slide_support_from_lecture_view(view, 4) is None   # a page of the deck that carries no slide identity yet: the course's own anchors are used
+    assert cg.slide_support_from_lecture_view({"page_count": None, "slides": []}, 7) is None   # no readable deck: this function cannot say which pages exist
+    assert graph(scope="slide:L1:23", slide_support=dict(support(23, THREE_BUILDS), page_count=40))["scope"]["page"] == 23
+    beyond = graph(scope="slide:L1:41", slide_support={"logical_slide_id": None, "label": None, "page": 41, "pages": [41], "entries": None, "page_count": 40})
+    assert set(beyond) == {"course_id", "graph_version", "error"} and beyond["error"]["code"] == "unknown_scope" and "41" in beyond["error"]["detail"]
+
+
+def test_a_malformed_support_entry_is_dropped_and_never_widened_to_the_whole_slide():
+    model = build_model()
+    for pages in (["24"], [24.0], [True], [None], "24", {"page": 24}):   # not page numbers: the entry names nothing, which is not the same as naming no page
+        assert graph(model, "slide:L1:22", slide_support=support(22, [{"node_id": "Q2", "tie": "stated", "pages": pages}]))["nodes"] == [], pages
+    partly = graph(model, "slide:L1:22", slide_support=support(22, [{"node_id": "Q2", "tie": "stated", "pages": [24, "x", 99]}]))
+    assert by_id(partly)["c.gauge"]["support_pages"] == [24] and by_id(partly)["c.gauge"]["where"] == "elsewhere_in_sequence"
+    for pages in ([], None):   # no page named at all: recorded for the slide as a whole
+        assert by_id(graph(model, "slide:L1:22", slide_support=support(22, [{"node_id": "Q2", "tie": "stated", "pages": pages}])))["c.gauge"]["where"] == "group_level"
+
+
+def test_group_level_means_one_record_made_for_the_group_not_page_records_that_happen_to_cover_it():
+    model = build_model()
+    apart = [{"node_id": "Q2", "tie": "stated", "pages": [22]}, {"node_id": "Q2", "tie": "stated", "pages": [23]}, {"node_id": "Q2", "tie": "agent_inferred", "pages": [24]}]
+    for page in (22, 23, 24):
+        node = by_id(graph(model, f"slide:L1:{page}", slide_support=support(page, apart), focus="Q2"))["Q2"]
+        assert node["where"] == "on_this_page" and node["support_pages"] == [22, 23, 24]   # three page-level records, one of them only a suggestion
+    two = by_id(graph(model, "slide:L1:24", slide_support=support(24, apart[:2]), focus="Q2"))["Q2"]
+    assert two["where"] == "elsewhere_in_sequence" and two["support_pages"] == [22, 23]
+    whole = [*apart, {"node_id": "Q2", "tie": "exact", "pages": [22, 23, 24]}]   # one record that names every page of the group
+    assert by_id(graph(model, "slide:L1:23", slide_support=support(23, whole), focus="Q2"))["Q2"]["where"] == "group_level"
+    resolved = cg.resolve_scope(model, "slide:L1:23", DECKS.get, support(23, whole))
+    assert [(t["tie"], t["pages"], t["group"]) for t in resolved["support"]["Q2"]] == [("exact", [22, 23, 24], True), ("stated", [22, 23], False), ("agent_inferred", [24], False)]
+    assert [(t["tie"], t["group"]) for t in resolved["support"]["c.gauge"]] == [("exact", True), ("stated", False), ("agent_inferred", False)]   # reached through the question's criterion: the same records
+
+
+def test_a_suggested_link_to_a_question_of_another_collection_is_on_the_slide_and_said_to_be_from_elsewhere():
+    """Decision: a slide scope lists what is tied to the slide; the lecture scope lists the collections of the lecture. A suggested link may tie
+    a question of another collection to a slide, so the slide scope can hold what the lecture scope does not — and says so."""
+    model = build_model()
+    given = support(22, [{"node_id": "Q1", "tie": "stated", "pages": [22]}, {"node_id": "Q4.C01", "tie": "agent_inferred", "pages": [22]}])   # Q4 belongs to L2
+    resolved = cg.resolve_scope(model, "slide:L1:22", DECKS.get, given)
+    assert resolved["questions_of_other_collections"] == ["Q4"] and "Q4" in resolved["question_ids"] and resolved["suggested_questions"] == ["Q4"]
+    assert "Q4" not in cg.resolve_scope(model, "lecture:L1", DECKS.get)["question_ids"]
+    public = cg.public_scope(resolved)
+    assert public["questions_of_other_collections"] == ["Q4"] and "another collection" in public["note"] and "1 question" in public["note"]
+    assert graph(model, "slide:L1:22", slide_support=given)["scope"]["note"] == public["note"]
+    plain = cg.resolve_scope(model, "slide:L1:22", DECKS.get, support(22, THREE_BUILDS))
+    assert plain["questions_of_other_collections"] == [] and "another collection" not in plain["note"]
+
+
 def test_without_a_source_map_the_slide_scope_is_the_course_anchors_of_that_page():
     document = graph(scope="slide:L1:22")
     assert document["scope"]["logical_slide_id"] is None and document["scope"]["label"] is None
@@ -369,20 +546,26 @@ def test_slide_support_is_read_from_an_enriched_lecture_view():
             {"question_id": "Q2", "tie": "agent_inferred", "where": "elsewhere_in_sequence", "support_pages": [24], "criteria": listed("Q2.C01"), "learner_decision": "confirmed"},   # accepted: still a suggestion
             {"question_id": "Q1", "tie": "agent_inferred", "where": "on_this_page", "support_pages": [23], "criteria": listed("Q1.C02"), "learner_decision": None},   # part of a question the course also anchors
             {"question_id": "Q3", "tie": "agent_inferred", "where": "group_level", "support_pages": [22, 23, 24], "criteria": [], "learner_decision": None},   # lists no criterion: the question is the entry
-            {"question_id": "Q4", "tie": "agent_inferred", "where": "on_this_page", "support_pages": [23], "criteria": listed("Q4.C01"), "learner_decision": "rejected"}]   # rejected by the learner: not a link
+            {"question_id": "Q4", "tie": "agent_inferred", "where": "on_this_page", "support_pages": [23], "criteria": listed("Q4.C01"), "learner_decision": "rejected"},   # rejected by the learner: not a link
+            # a section tie of the course's study map belongs in ``section_ties`` (r2-read-api.md 1.4); should one be listed here, it names a range of pages and is not support of this slide
+            {"question_id": "Q5", "tie": "stated", "granularity": "section", "from": "course_study_map", "where": None, "support_pages": [22, 23, 24], "criteria": None, "learner_decision": None},
+            {"question_id": "Q5", "tie": "stated", "granularity": "page", "where": None, "support_pages": [], "criteria": None, "learner_decision": None}]   # names no page of this slide: not widened to all of them
     view = {"source_map": {"state": "ready", "map_revision": "a1b2c3d4e5f60718", "logical_slides": [{"id": GROUP, "kind": "build_group", "pages": [22, 23, 24]}, {"id": "ls-x-p25", "kind": "single", "pages": [25]}]},
             "slides": [slide(22, 1, ties), slide(23, 2, ties), slide(24, 3, ties), {"page": 26, "title": "not enriched"}]}
     given = cg.slide_support_from_lecture_view(view, 23)
     assert given == {"logical_slide_id": GROUP, "label": "PDF page 23 of 40 · build 2 of 3", "page": 23, "pages": [22, 23, 24],
-                     "entries": [{"node_id": "Q1", "tie": "stated", "pages": [22]}, {"node_id": "Q2.C01", "tie": "agent_inferred", "pages": [24]},
-                                 {"node_id": "Q1.C02", "tie": "agent_inferred", "pages": [23]}, {"node_id": "Q3", "tie": "agent_inferred", "pages": [22, 23, 24]}],
+                     "entries": [{"node_id": "Q1", "tie": "stated", "pages": [22], "decision": None}, {"node_id": "Q2.C01", "tie": "agent_inferred", "pages": [24], "decision": "confirmed"},
+                                 {"node_id": "Q1.C02", "tie": "agent_inferred", "pages": [23], "decision": None}, {"node_id": "Q3", "tie": "agent_inferred", "pages": [22, 23, 24], "decision": None}],
                      "role": {"value": "instructional", "forced_requirements": True}}
     assert cg.slide_support_from_lecture_view(view, 26) is None and cg.slide_support_from_lecture_view(view, 99) is None and cg.slide_support_from_lecture_view({}, 1) is None
     document = graph(scope="slide:L1:23", slide_support=given)
     assert {n["id"]: (n["where"], n["support_pages"]) for n in document["nodes"] if n["kind"] == "concept"} == {
         "c.valve": ("elsewhere_in_sequence", [22]), "c.pump": ("on_this_page", [22, 23]), "c.gauge": ("elsewhere_in_sequence", [24]), "c.loop": ("group_level", [22, 23, 24])}
     assert sorted((e["tie"], e["support_pages"]) for e in document["edges"] if e["to"] == "c.pump" and e["family"] == "source") == [("agent_inferred", [23]), ("stated", [22])]
-    assert "Q4" not in cg.resolve_scope(build_model(), "slide:L1:23", DECKS.get, given)["question_ids"]
+    assert {"Q4", "Q5"}.isdisjoint(cg.resolve_scope(build_model(), "slide:L1:23", DECKS.get, given)["question_ids"])
+    # an accepted suggestion stays a suggestion and says that it was accepted; one nobody decided on does not
+    provenance = {e["to"]: e["provenance"] for e in document["edges"] if e["family"] == "source" and e["tie"] == "agent_inferred"}
+    assert provenance["c.gauge"] == "suggested link (agent-inferred), accepted by the learner" and provenance["c.pump"] == "suggested link (agent-inferred)"
     del view["slides"][1]["question_ties"]   # identity without ties (the tie module not run): the entries are left to the course anchors
     assert cg.slide_support_from_lecture_view(view, 23)["entries"] is None
 
@@ -409,9 +592,15 @@ def test_a_view_names_the_revisions_it_was_built_from_and_only_the_affected_scop
     model = build_model()
     given = {"question_index_sha256": "q" * 64, "map_revision": "a1b2c3d4e5f60718", "evidence_revision": "e" * 16}
     before = graph(model, "slide:L1:22", slide_support=support(22, THREE_BUILDS), revisions=given)["revisions"]
-    assert {k: before[k] for k in given} == given and len(before["scope_revision"]) == 16 and set(before) == {*given, "scope_revision"}
+    assert {k: before[k] for k in given} == given and len(before["scope_revision"]) == 16 and set(before) == REVISION_KEYS
     assert graph(model, "slide:L1:22", slide_support=support(22, THREE_BUILDS), revisions=given)["revisions"] == before
-    assert graph(model)["revisions"] == {"question_index_sha256": None, "map_revision": None, "evidence_revision": None, "scope_revision": graph(model)["revisions"]["scope_revision"]}
+    assert graph(model)["revisions"] == {**{key: None for key in REVISION_KEYS}, "scope_revision": graph(model)["revisions"]["scope_revision"]}   # what was not handed in is not claimed
+    # the learner accepts a suggested link of this slide: the same entries, and the view built before is stale
+    undecided = graph(model, "slide:L1:22", slide_support=support(22, [*THREE_BUILDS[:2], {"node_id": "Q2", "tie": "agent_inferred", "pages": [24], "decision": None}]), revisions=given)
+    decided = graph(model, "slide:L1:22", slide_support=support(22, [*THREE_BUILDS[:2], {"node_id": "Q2", "tie": "agent_inferred", "pages": [24], "decision": "confirmed"}]), revisions=given)
+    assert cg.stale_keys(undecided["revisions"], decided["revisions"]) == ["scope_revision"] and undecided["nodes"] == decided["nodes"]
+    assert [e["provenance"] for e in decided["edges"] if e["to"] == "c.gauge" and e["family"] == "source"] == ["suggested link (agent-inferred), accepted by the learner"]
+    assert cg.stale_keys(before, {**before, "skills_sha256": "5" * 64}) == ["skills_sha256"] and cg.stale_keys(before, {**before, "anchor_revision": "a" * 16}) == ["anchor_revision"]
     regrouped = graph(model, "slide:L1:22", slide_support=support(22, THREE_BUILDS[:2], pages=(22, 23)), revisions=given)["revisions"]            # the build group changed
     accepted = graph(model, "slide:L1:22", slide_support=support(22, [*THREE_BUILDS, {"node_id": "Q4", "tie": "agent_inferred", "pages": [23]}]), revisions=given)["revisions"]   # an anchor was accepted
     remapped = graph(model, "slide:L1:22", slide_support=support(22, THREE_BUILDS), revisions={**given, "map_revision": "ffff000011112222"})["revisions"]
@@ -424,6 +613,34 @@ def test_a_view_names_the_revisions_it_was_built_from_and_only_the_affected_scop
     grown.bank["lectures"]["L2"]["question_ids"].append("Q3")
     assert graph(grown, "lecture:L2")["revisions"]["scope_revision"] != graph(model, "lecture:L2")["revisions"]["scope_revision"]
     assert graph(grown, "lecture:L1")["revisions"]["scope_revision"] == graph(model, "lecture:L1")["revisions"]["scope_revision"]
+    # the skills catalog was edited and every id kept: a skill now sits under another concept. The scopes that hold it are stale; a lecture that does not is not
+    moved = build_model()
+    moved.skills["s.pump.size"]["concept_id"] = "c.gauge"
+    assert edge_set(graph(moved)) != edge_set(graph(model)) and set(ids(graph(moved))) == set(ids(graph(model)))
+    assert graph(moved)["revisions"]["scope_revision"] != graph(model)["revisions"]["scope_revision"]
+    assert graph(moved, "lecture:L1")["revisions"]["scope_revision"] != graph(model, "lecture:L1")["revisions"]["scope_revision"]
+    assert graph(moved, "lecture:L2")["revisions"]["scope_revision"] == graph(model, "lecture:L2")["revisions"]["scope_revision"]
+
+
+def test_the_anchor_revision_of_a_lecture_follows_its_anchors_and_the_decisions_on_them():
+    def lecture(decision=None, pages=(12,), rationale=RATIONALE):
+        return {"questions": {"all": [
+            {"question_id": "Q1", "anchors": [anchor("L1", "deck-1", [22], "stated")],
+             "ties": [{"tie": "stated", "lecture_id": "L1", "source_id": "deck-1", "pages": [22], "criteria": None, "learner_decision": None, "suggestion_id": None, "transcript_lines": []}]},
+            {"question_id": "Q2", "anchors": [],
+             "ties": [{"tie": "agent_inferred", "lecture_id": "L1", "source_id": "deck-1", "pages": list(pages), "criteria": [{"criterion_id": "Q2.C01", "number": 1}], "state": "agent_reviewed",
+                       "verdict": "upheld", "suggestion_id": "ia-1", "learner_decision": decision, "rationale": rationale, "transcript_lines": []}]}]}}
+
+    base = cg.anchor_revision(lecture())
+    assert len(base) == 16 and int(base, 16) >= 0 and base == cg.anchor_revision(lecture())
+    assert len({base, cg.anchor_revision(lecture("confirmed")), cg.anchor_revision(lecture("rejected")), cg.anchor_revision(lecture(pages=(12, 13)))}) == 4   # a decision or a changed anchor
+    reordered = lecture()
+    reordered["questions"]["all"].reverse()
+    assert cg.anchor_revision(reordered) == base and cg.anchor_revision(lecture(rationale="Other words for the same link.")) == base   # what is tied where, not how it is worded or listed
+    unenriched = {"questions": {"all": [{"question_id": "Q1", "anchors": [anchor("L1", "deck-1", [22], "stated")]}]}}   # a lecture view without ties: the course's own anchors
+    moved = {"questions": {"all": [{"question_id": "Q1", "anchors": [anchor("L1", "deck-1", [23], "stated")]}]}}
+    assert cg.anchor_revision(unenriched) not in {None, base, cg.anchor_revision(moved)}
+    assert cg.anchor_revision({}) is None and cg.anchor_revision(None) is None   # no lecture view: no revision is claimed
 
 
 # ---- node detail (R2-C7) --------------------------------------------------------------------------------------------------------
@@ -435,18 +652,23 @@ def test_node_detail_follows_the_joins_for_sources_questions_and_evidence():
     detail = cg.node_detail(model, "c.valve", course_id="demo", sources_of=sources_of, evidence=reader)
     assert set(detail) == {"sources", "sources_total", "questions", "questions_total", "evidence", "definition"}
     assert detail["sources"] == [   # the skill's own reference and the first question's anchor name the same file with the same kind of tie: one row, pages joined, both origins named
-        {"lecture_id": "L1", "source_id": "deck-1", "pages": [22, 23], "label": "PDF pages 22–23 of 40", "tie": "stated", "logical_slide_ids": [GROUP], "href": "/courses/demo/lectures/L1?page=22",
-         "basis": "question anchor (stated); skill source reference", "from": ["Q1", "s.valve.explain"]},
-        {"lecture_id": "L2", "source_id": "deck-2", "pages": [3], "label": "PDF page 3 of 12", "tie": "exact", "logical_slide_ids": [], "href": "/courses/demo/lectures/L2?page=3",
-         "basis": "question anchor (exact)", "from": ["Q4"]}]
+        {"kind": "pages", "lecture_id": "L1", "source_id": "deck-1", "pages": [22, 23], "ranges": [[22, 23]], "locator_text": None, "label": "PDF pages 22–23 of 40", "tie": "stated",
+         "logical_slide_ids": [GROUP], "href": "/courses/demo/lectures/L1?page=22", "basis": "question anchor (stated); skill source reference", "from": ["Q1", "s.valve.explain"]},
+        {"kind": "pages", "lecture_id": "L2", "source_id": "deck-2", "pages": [3], "ranges": [[3, 3]], "locator_text": None, "label": "PDF page 3 of 12", "tie": "exact",
+         "logical_slide_ids": [], "href": "/courses/demo/lectures/L2?page=3", "basis": "question anchor (exact)", "from": ["Q4"]}]
     assert detail["questions"] == [
         {"question_id": "Q1", "title": "Valve and pump", "collection": "L1", "tie_to_node": "assessment", "criterion_ids": ["Q1.C01"], "evidence": reader.question("Q1")},
         {"question_id": "Q4", "title": "Valve again", "collection": "L2", "tie_to_node": "assessment", "criterion_ids": ["Q4.C01"], "evidence": reader.question("Q4")}]
     assert detail["sources_total"] == 2 and detail["questions_total"] == 2 and detail["evidence"] == reader.node("c.valve")
     assert detail["definition"]["state"] == "coverage_gap" and detail["definition"]["text"] is None and "catalog" in detail["definition"]["reason"]
     topic = cg.node_detail(model, "t.control", course_id="demo", sources_of=sources_of, evidence=reader)   # read through what the outline lists under it: the valve concept sits under both topics
-    assert [s["from"] for s in topic["sources"]] == [["Q1", "s.valve.explain"], ["Q4"]] and topic["definition"] is None
-    assert [(q["question_id"], q["criterion_ids"]) for q in topic["questions"]] == [("Q1", ["Q1.C01"]), ("Q3", ["Q3.C01"]), ("Q4", ["Q4.C01"])]
+    # the valve concept sits under both topics; the orphan skill is filed under this topic, so its question (Q5) is a question of the topic, as the outline lists and counts it
+    assert [(s["kind"], s["from"]) for s in topic["sources"]] == [("pages", ["Q1", "s.valve.explain"]), ("pages", ["Q4"]), ("pages", ["Q5"]), ("transcript_lines", ["Q3"])] and topic["definition"] is None
+    assert [(q["question_id"], q["criterion_ids"]) for q in topic["questions"]] == [("Q1", ["Q1.C01"]), ("Q3", ["Q3.C01"]), ("Q4", ["Q4.C01"]), ("Q5", ["Q5.C01"])]
+    assert topic["questions_total"] == cg.node_counts(model, cg.resolve_scope(model, "course", DECKS.get), "t.control")["questions"] == 4
+
+
+SOURCE_ROW_KEYS = {"kind", "lecture_id", "source_id", "pages", "ranges", "locator_text", "label", "tie", "logical_slide_ids", "href", "basis", "from"}
 
 
 def test_a_source_row_opens_the_exact_file_and_page_and_other_anchor_kinds_are_not_pages():
@@ -454,11 +676,13 @@ def test_a_source_row_opens_the_exact_file_and_page_and_other_anchor_kinds_are_n
     reader = EvidenceReader({"attempts": {}, "revisions": {}, "effective": {}}, model)
     plain = cg.catalog_sources(model)   # nothing known about decks or page counts: nothing is claimed about them
     orphan = cg.node_detail(model, "Q5", course_id="demo", sources_of=plain, evidence=reader)
-    assert orphan["sources"] == [{"lecture_id": "L2", "source_id": "sheet-9", "pages": [1], "label": "PDF page 1", "tie": "stated", "logical_slide_ids": [], "href": "/courses/demo/sources/sheet-9?page=1",
-                                  "basis": "question anchor (stated)", "from": ["Q5"]}]   # not the deck the lecture is shown with: the file itself is opened
+    assert orphan["sources"] == [{"kind": "pages", "lecture_id": "L2", "source_id": "sheet-9", "pages": [1], "ranges": [[1, 1]], "locator_text": None, "label": "PDF page 1", "tie": "stated",
+                                  "logical_slide_ids": [], "href": "/courses/demo/sources/sheet-9?page=1", "basis": "question anchor (stated)", "from": ["Q5"]}]   # not the deck the lecture is shown with: the file itself is opened
     assert orphan["questions"][0]["tie_to_node"] == "self" and orphan["definition"] is None
     loop = cg.node_detail(model, "c.loop", course_id="demo", sources_of=plain, evidence=reader)
-    assert loop["sources"] == [] and loop["sources_total"] == 0   # its only anchor is a range of transcript lines
+    # its only anchor is a range of transcript lines: listed as lines of that transcript, never as pages and never dropped
+    assert loop["sources"] == [{"kind": "transcript_lines", "lecture_id": "L1", "source_id": "tr-1", "pages": [], "ranges": [[4, 9]], "locator_text": None, "label": "Transcript lines 4–9", "tie": "stated",
+                                "logical_slide_ids": [], "href": "/courses/demo/lectures/L1?line=4", "basis": "question anchor (stated)", "from": ["Q3"]}] and loop["sources_total"] == 1
     assert loop["definition"] == {"state": "catalog", "text": "A synthetic definition the catalog records.", "reason": None}
     criterion_detail = cg.node_detail(model, "Q1.C02", course_id="demo", sources_of=plain, evidence=reader)
     assert criterion_detail["questions"] == [{"question_id": "Q1", "title": "Valve and pump", "collection": "L1", "tie_to_node": "criterion_of_question", "criterion_ids": ["Q1.C02"],
@@ -467,6 +691,71 @@ def test_a_source_row_opens_the_exact_file_and_page_and_other_anchor_kinds_are_n
         {"lecture_id": "L1", "source_id": "deck-1", "pages": [30, 22, 24], "tie": "agent_inferred", "on_displayed_deck": True, "page_count": 40, "basis": "suggested link"}] if node == "Q1" else [])
     assert scattered["sources"][0]["label"] == "PDF pages 22, 24, 30 of 40" and scattered["sources"][0]["href"].endswith("?page=22") and scattered["sources"][0]["tie"] == "agent_inferred"
     assert cg.node_detail(model, "no-such-node", course_id="demo", sources_of=plain, evidence=reader) is None
+
+
+def test_references_that_are_not_pages_stay_listed_as_what_they_are():
+    """R2-C7 with the anchor rule (a line range and a broad text locator stay what they are). The reviewed defect: such references were
+    dropped, so a node whose catalog record names a source showed an empty Sources list."""
+    model = build_model()
+    reader = EvidenceReader({"attempts": {}, "revisions": {}, "effective": {}}, model)
+    model.skills["s.loop.tune"]["source_refs"] = [{"source_id": "notes-7", "locator": "Section 3.2, the tuning rules"},      # a broad text locator
+                                                   {"source_id": "deck-1", "locator": "slides 30-31; transcript lines 40-44"},  # pages of the cited file AND lines of the unit's transcript
+                                                   {"source_id": "notes-7", "locator": "Section 3.2, the tuning rules"},      # the same reference twice: one row
+                                                   {"source_id": None, "locator": ""}]                                         # nothing recorded: no row
+    model.skills["s.gauge.read"]["source_refs"] = [{"source_id": "deck-1"}, {"source_id": None, "locator": "the handout from week 2"}]   # a file and no place in it; a place and no file
+    model.bank["questions"]["Q2"]["anchors"] = [{"kind": "pages", "ranges": [[2, 3]], "pages": [2, 3], "basis": "stated", "from": "locator", "lecture_id": "L1", "source_id": None,
+                                                 "page_basis": "one_based_physical_page", "named_source": "in_class_question_sheet", "resolution": "named_source_not_unique_in_unit",
+                                                 "on_displayed_deck": False},
+                                                {"kind": "transcript_lines", "ranges": [[70, 72], [80, 80]], "basis": "stated", "from": "locator", "lecture_id": "L1", "source_id": None,
+                                                 "resolution": "transcript_not_unique"}]
+    known = dict(deck_source_id_of=DECKS.get, lecture_of_source={"deck-1": "L1"}.get, page_count_of={"deck-1": 40}.get)
+    loop = cg.node_detail(model, "s.loop.tune", course_id="demo", sources_of=cg.catalog_sources(model, **known), evidence=reader)["sources"]
+    assert all(set(row) == SOURCE_ROW_KEYS for row in loop)
+    assert [(s["kind"], s["lecture_id"], s["source_id"], s["pages"], s["ranges"], s["locator_text"], s["label"], s["href"], s["from"]) for s in loop] == [
+        ("pages", "L1", "deck-1", [30, 31], [[30, 31]], None, "PDF pages 30–31 of 40", "/courses/demo/lectures/L1?page=30", ["s.loop.tune"]),
+        ("transcript_lines", "L1", None, [], [[40, 44]], None, "Transcript lines 40–44", None, ["s.loop.tune"]),   # which transcript is not known here: named as lines, opened as nothing
+        ("transcript_lines", "L1", "tr-1", [], [[4, 9]], None, "Transcript lines 4–9", "/courses/demo/lectures/L1?line=4", ["Q3"]),
+        ("text", None, "notes-7", [], [], "Section 3.2, the tuning rules", "Section 3.2, the tuning rules", "/courses/demo/sources/notes-7", ["s.loop.tune"])]
+    assert {s["tie"] for s in loop} == {"stated"} and {s["basis"] for s in loop} == {"skill source reference", "question anchor (stated)"}
+    resolved = cg.node_detail(model, "s.loop.tune", course_id="demo", evidence=reader, sources_of=cg.catalog_sources(model, transcript_of={"L1": "tr-1"}.get, **known))["sources"]
+    assert [(s["kind"], s["source_id"], s["ranges"], s["label"], s["href"], s["from"]) for s in resolved if s["kind"] == "transcript_lines"] == [
+        ("transcript_lines", "tr-1", [[4, 9], [40, 44]], "Transcript lines 4–9, 40–44", "/courses/demo/lectures/L1?line=4", ["Q3", "s.loop.tune"])]   # the same transcript, the same kind of tie: one row
+    gauge = cg.node_detail(model, "c.gauge", course_id="demo", sources_of=cg.catalog_sources(model, **known), evidence=reader)
+    assert [(s["kind"], s["source_id"], s["pages"], s["ranges"], s["locator_text"], s["label"], s["href"]) for s in gauge["sources"]] == [
+        ("pages", None, [2, 3], [[2, 3]], None, "PDF pages 2–3", None),                                             # pages of a file the record does not identify: listed, not openable
+        ("transcript_lines", None, [], [[70, 72], [80, 80]], None, "Transcript lines 70–72, 80", None),
+        ("text", None, [], [], "the handout from week 2", "the handout from week 2", None),                         # a place in words and no file: listed as written
+        ("text", "deck-1", [], [], "", "No place in the file is named", "/courses/demo/sources/deck-1")]            # a file and no place: the file itself
+    assert gauge["sources_total"] == 4 and all(s["pages"] == [] for s in gauge["sources"] if s["kind"] != "pages")   # a line is not a page
+    # every node whose catalog record names a source has a Sources row
+    sources_of = cg.catalog_sources(model, **known)
+    for node in [*model.topics, *model.concepts, *model.skills, *model.questions, *model.criteria]:
+        own = ev_skills_under(model, node) if model.kind_of(node) in {"topic", "concept"} else set(model.skills_of(node))   # a question and a criterion: the skills they assess
+        recorded = [r for s in own for r in model.skills[s].get("source_refs") or [] if r.get("source_id") or r.get("locator")]
+        recorded += [a for q in model.questions_of(node) for a in model.bank["questions"][q]["anchors"]]
+        assert bool(cg.node_detail(model, node, course_id="demo", sources_of=sources_of, evidence=reader)["sources"]) is bool(recorded), node
+    lined = cg.tie_sources([{"tie": "stated", "lecture_id": "L1", "source_id": "tr-1", "pages": [], "logical_slide_ids": [], "transcript_lines": [[4, 9]], "criteria": None, "on_displayed_deck": False}])
+    assert [(r["kind"], r["source_id"], r["ranges"], r["pages"]) for r in lined] == [("transcript_lines", "tr-1", [[4, 9]], [])]   # a question the course anchors to transcript lines only
+
+
+def test_a_question_and_a_criterion_also_list_where_the_skill_they_assess_is_taught_apart_from_their_own_anchors():
+    """The join question → criterion → skill → the skill's source reference (as the R1 detail listed it). The reviewed defect: a question
+    or criterion without an anchor of its own showed no source although its skill names one."""
+    model = build_model()
+    reader = EvidenceReader({"attempts": {}, "revisions": {}, "effective": {}}, model)
+    sources_of = cg.catalog_sources(model, deck_source_id_of=DECKS.get, lecture_of_source={"deck-1": "L1"}.get, page_count_of={"deck-1": 40}.get)
+
+    def listed(node):
+        return [(s["kind"], s["pages"], s["basis"], s["from"]) for s in cg.node_detail(model, node, course_id="demo", sources_of=sources_of, evidence=reader)["sources"]]
+
+    # the same file and the same kind of tie, and still two rows: the question's own anchor is not blurred by where its skill is taught
+    assert listed("Q1") == [("pages", [22], "question anchor (stated)", ["Q1"]), ("pages", [22, 23], "skill source reference", ["s.valve.explain"])]
+    assert listed("Q1.C01") == [("pages", [22], "question anchor (stated)", ["Q1"]), ("pages", [22, 23], "skill source reference", ["s.valve.explain"])]
+    assert listed("Q1.C02") == [("pages", [22], "question anchor (stated)", ["Q1"])]   # only the skill of THIS criterion; the pump skill names no source
+    assert listed("Q4") == [("pages", [3], "question anchor (exact)", ["Q4"]), ("pages", [22, 23], "skill source reference", ["s.valve.explain"])]
+    assert listed("c.valve")[0] == ("pages", [22, 23], "question anchor (stated); skill source reference", ["Q1", "s.valve.explain"])   # a concept's sources stay joined per file and tie
+    model.bank["questions"]["Q1"]["anchors"] = []   # a question the course anchors nowhere still says where the skill it assesses is taught
+    assert listed("Q1") == [("pages", [22, 23], "skill source reference", ["s.valve.explain"])] == listed("Q1.C01") and listed("Q1.C02") == []
 
 
 def test_a_suggested_link_is_a_source_only_of_what_its_listed_criteria_assess():
@@ -533,6 +822,58 @@ def test_the_fixture_course_reads_the_same_through_outline_and_graph(projector, 
     assert cg.public_scope(cg.resolve_scope(model, "lecture:lecture-01", decks.get))["questions_without_slide_anchor"] == ["BE505-L01-Q04"]
     text = json.dumps([course, lecture, slide])
     assert "observable" not in text and not [q["answer"] for q in content.BE505_QUESTIONS if q["answer"] in text] and not [q["prompt"] for q in content.BE505_QUESTIONS if q["prompt"] and q["prompt"] in text]
+
+
+def test_the_wired_views_list_every_revision_they_were_built_from(projector, be505, settings):
+    course = cg.view(projector, "be505")
+    lecture = cg.view(projector, "be505", scope="lecture:lecture-04")
+    on_slide = cg.view(projector, "be505", scope="slide:lecture-04:1")
+    assert set(course["revisions"]) == set(lecture["revisions"]) == set(on_slide["revisions"]) == REVISION_KEYS
+    skills_sha = projector._catalogs("be505")["skills"]["sha256"]
+    assert course["revisions"]["skills_sha256"] == skills_sha == lecture["revisions"]["skills_sha256"] and len(skills_sha) == 64   # the skills catalog: a moved or renamed skill keeps its id
+    assert course["revisions"]["policy_revision"] == settings.policy_revision == on_slide["revisions"]["policy_revision"]
+    assert course["revisions"]["anchor_revision"] is None   # the course graph draws no anchor
+    assert len(lecture["revisions"]["anchor_revision"]) == 16 and on_slide["revisions"]["anchor_revision"] == lecture["revisions"]["anchor_revision"]
+    assert cg.view(projector, "be505", scope="lecture:lecture-01")["revisions"]["anchor_revision"] != lecture["revisions"]["anchor_revision"]   # each lecture has its own
+
+
+def test_the_wired_node_detail_has_one_question_count_and_keeps_references_that_are_not_pages(projector, be505):
+    bank = projector._bank("be505")
+    # the fixture question anchored to transcript lines of a unit without a linked transcript: listed as what the record says, opened as nothing
+    lined = projector.outline_node("be505", "BE505-L04-Q02")
+    assert lined["sources_total"] == 2 and [(s["kind"], s["pages"], s["ranges"], s["source_id"], s["href"], s["tie"], s["basis"], s["from"]) for s in lined["sources"]] == [
+        ("pages", [1, 2], [[1, 2]], "src-lecture-02-slides", "/courses/be505/lectures/lecture-02?page=1", "stated", "skill source reference", ["be505.skill.inducible-control.explain"]),   # where the skill it assesses is taught
+        ("transcript_lines", [], [[3, 5]], None, None, "exact", "question anchor (exact)", ["BE505-L04-Q02"])]
+    unanchored = projector.outline_node("be505", "BE505-L01-Q04")   # the course anchors this question nowhere; its Sources are not empty for that
+    assert bank["questions"]["BE505-L01-Q04"]["anchors"] == [] and [(s["kind"], s["pages"], s["basis"]) for s in unanchored["sources"]] == [("pages", [2, 3], "skill source reference")]
+    model, _bank, decks, _catalogs = projector._outline("be505")
+    resolved = cg.resolve_scope(model, "course", decks.get)
+    for row in walk(model, resolved):   # outline row, graph node and node detail through the Projector: one count per node
+        if row["kind"] in {"topic", "concept", "skill"}:
+            detail = projector.outline_node("be505", row["node_id"])
+            assert detail["questions_total"] == cg.node_counts(model, resolved, row["node_id"])["questions"] == len(detail["questions"]), row["node_id"]
+            assert all(s["kind"] in cg.SOURCE_KINDS for s in detail["sources"])
+    rows = projector.outline_view("be505", scope="course", parent="be505.topic.plasmids")["rows"]
+    assert all(r["questions"] == projector.outline_node("be505", r["node_id"])["questions_total"] for r in rows if r["kind"] == "concept") and rows
+
+
+def test_a_page_past_the_end_of_the_fixture_deck_is_an_unknown_scope_in_graph_and_outline(projector, be505, settings):
+    assert projector.lecture_view("be505", "lecture-04")["page_count"] == 3
+    assert "error" not in cg.view(projector, "be505", scope="slide:lecture-04:3")
+    for page in (4, 99999):
+        assert cg.view(projector, "be505", scope=f"slide:lecture-04:{page}")["error"]["code"] == "unknown_scope"
+        with pytest.raises(ValueError):
+            projector.outline_view("be505", scope=f"slide:lecture-04:{page}")
+    for scope in ("slide:lecture-04:0", "slide:lecture-04:01"):
+        assert cg.view(projector, "be505", scope=scope)["error"]["code"] == "unknown_scope"
+        with pytest.raises(ValueError):
+            projector.outline_view("be505", scope=scope)
+    runtime = _Runtime(settings, projector)
+    app = FastAPI()
+    cg.register(app, runtime, runtime.with_lock)
+    client = TestClient(app)
+    assert client.get("/api/courses/be505/concept-graph", params={"scope": "slide:lecture-04:3"}).status_code == 200
+    assert [client.get("/api/courses/be505/concept-graph", params={"scope": f"slide:lecture-04:{page}"}).status_code for page in (4, 99999, 0, "01")] == [404, 404, 422, 422]
 
 
 class _Runtime:

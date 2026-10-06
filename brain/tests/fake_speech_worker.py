@@ -17,8 +17,13 @@ it loops again), ``decode_error_at`` (chunk index whose audio "cannot be decoded
 ``startup_error`` (fail before any chunk, as a runtime that cannot start), ``mute_at`` (go silent inside that chunk:
 no heartbeat, deaf to the stop file and the lease), ``short_chunks`` (chunk indexes whose result is written two
 seconds short of the range asked for without saying the recording ended: a result the supervisor does not accept),
+``odd_chunks`` with ``odd_shape`` (chunk indexes whose result is complete and well addressed but has an inside no
+merge can read: ``"words_number"`` puts the number 5 where the second segment's list of words belongs,
+``"decoding_text"`` a text where the decoding record belongs), ``collapsed_loop_chunks`` (chunk indexes whose second
+segment is replaced by a repetition loop whose twenty copies all sit at ONE instant: a failing segment without a span),
 ``only_work`` (limit ``fail_at`` / ``hang_at`` / ``die_at`` / ``mute_at`` / ``loop_chunks`` / ``decode_error_at`` /
-``short_chunks`` to one recording's work id), ``log`` (a file that gets one line per chunk started and finished).
+``short_chunks`` / ``odd_chunks`` / ``collapsed_loop_chunks`` to one recording's work id), ``log`` (a file that gets
+one line per chunk started and finished).
 
 When a chunk is "decoded" twice the fake keeps the pass with more accepted words, as the real worker does, and
 writes the job's second-pass identity into the result.
@@ -189,6 +194,16 @@ def main() -> int:
                 decoding["selection"] = {"rule": "most-accepted-words-1", "kept": kept, "why": "FAKE: decided by the labelled fake worker with the real worker's rule"}
                 if kept == "second":
                     segments, decoding["pass"] = retried, "second"
+        if job["index"] in special.get("collapsed_loop_chunks", []) and len(segments) >= 2:  # a loop whose copies carry one instant: the failing segment has no span
+            at = segments[1]["start"]
+            copies = [{"text": "okay,", "start": at, "end": at, "probability": 0.9} for _ in range(20)]
+            segments = [segments[0], {"start": at, "end": at, "text": " ".join(w["text"] for w in copies), "avg_logprob": -0.07, "no_speech_prob": 0.0, "compression_ratio": 31.9, "words": copies},
+                        *segments[2:]]
+        if job["index"] in special.get("odd_chunks", []):  # well addressed, complete — and unreadable inside
+            if special.get("odd_shape") == "words_number" and len(segments) >= 2:
+                segments = [segments[0], {**segments[1], "words": 5}, *segments[2:]]
+            elif special.get("odd_shape") == "decoding_text":
+                decoding = "FAKE: a decoding record written as a text"
         decoded_ms = job["end_ms"] - job["start_ms"] - (2_000 if job["index"] in special.get("short_chunks", []) else 0)  # two seconds short: a result the supervisor must not accept
         write_atomic(Path(job["out_path"]), {
             "document": "speech-chunk/1", "work_id": job["work_id"], "index": job["index"], "offset_ms": job["start_ms"], "end_ms": job["end_ms"],

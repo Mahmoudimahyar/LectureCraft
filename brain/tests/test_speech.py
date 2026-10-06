@@ -26,7 +26,9 @@ from lecture_brain.speech import runner as rn
 from lecture_brain.speech.ledger import Allowance, LedgerRefused
 
 FAKE_WORKER = Path(__file__).with_name("fake_speech_worker.py")
-FAST = {"poll_seconds": 0.02, "heartbeat_seconds": 0.1, "lease_seconds": 1.5, "stall_seconds": 30.0, "terminate_wait_seconds": 0.5}
+# The lease is longer than one refresh can be held up on a loaded machine (a file that cannot be replaced is retried for 1.2 s before the refresh gives up
+# for this look): at 1.5 s a single held-up refresh ended a run in about one of ten fresh processes while other work ran on this machine.
+FAST = {"poll_seconds": 0.02, "heartbeat_seconds": 0.1, "lease_seconds": 3.0, "stall_seconds": 30.0, "terminate_wait_seconds": 0.5}
 GRANT = "synthetic-test-grant-1"
 L1 = "be505/src-lecture-01-recording"  # 60 s synthetic tone, registered in the fixture course index
 
@@ -173,14 +175,124 @@ def test_withheld_text_is_cut_at_the_splice_and_the_merge_states_what_is_covered
     assert [w[0] for w in merged_words(merged)] == "a real sentence here back again".split()
     by_text = {w["text"]: w for s in merged["segments"] for w in s["words"]}
     assert (by_text["back"]["start_ms"], by_text["again"]["end_ms"]) == (26_030, 26_930)  # both from the second chunk: the splice is at "back", whose middle lies after 26 s
-    assert merged["unresolved"] == [{"start_ms": 8_000, "end_ms": 25_500, "reason": "repetition_check_failed"}, {"start_ms": 35_000, "end_ms": 45_000, "reason": "repetition_check_failed"}]
+    # Each withheld run is unresolved from the accepted text before it to the accepted text after it: in the first chunk from the end of "here"
+    # (2.5 s) to the start of "back" (26 s); in the second from the end of "again" (26.93 s) to the end of its audio, because nothing follows its loop.
+    assert merged["unresolved"] == [{"start_ms": 2_500, "end_ms": 26_000, "reason": "repetition_check_failed"}, {"start_ms": 26_930, "end_ms": 52_000, "reason": "repetition_check_failed"}]
     # Covered is exactly the processed stretch minus what was withheld; the two never overlap and together they are the window.
-    assert merged["covered"] == [{"start_ms": 0, "end_ms": 8_000}, {"start_ms": 25_500, "end_ms": 35_000}, {"start_ms": 45_000, "end_ms": 52_000}]
-    assert merged["stats"]["unresolved_ms"] == 27_500 and merged["stats"]["covered_ms"] == 24_500 and merged["window"] == {"start_ms": 0, "end_ms": 52_000}
+    assert merged["covered"] == [{"start_ms": 0, "end_ms": 2_500}, {"start_ms": 26_000, "end_ms": 26_930}]
+    assert merged["stats"]["unresolved_ms"] == 48_570 and merged["stats"]["covered_ms"] == 3_430 and merged["window"] == {"start_ms": 0, "end_ms": 52_000}
+    assert not [w for w in merged_words(merged) if any(i["start_ms"] < (w[1] + w[2]) / 2 < i["end_ms"] for i in merged["unresolved"])]  # no published word lies in unresolved time
     assert ch.subtract_intervals({"start_ms": 0, "end_ms": 10}, []) == [{"start_ms": 0, "end_ms": 10}]
     assert ch.subtract_intervals({"start_ms": 0, "end_ms": 10}, [{"start_ms": 0, "end_ms": 10}]) == []
     assert ch.subtract_intervals({"start_ms": 5, "end_ms": 20}, [{"start_ms": 0, "end_ms": 7}, {"start_ms": 9, "end_ms": 11}, {"start_ms": 18, "end_ms": 30}]) == [
         {"start_ms": 7, "end_ms": 9}, {"start_ms": 11, "end_ms": 18}]
+
+
+def collapsed_loop(at: float | None, *, word="okay,", count=20) -> dict:
+    """A repetition loop whose copies all sit at ONE instant, or carry no time at all: the failing segment has no span of its own."""
+    stamp = {} if at is None else {"start": at, "end": at}
+    return {**stamp, "text": " ".join([word] * count), "compression_ratio": 31.9, "words": [{"text": word, **stamp, "probability": 0.9} for _ in range(count)]}
+
+
+def test_time_around_withheld_text_is_unresolved_from_the_accepted_text_before_it_to_the_accepted_text_after_it():
+    """What a recogniser emits around a repetition loop cannot be read as silence. Where text is withheld, nothing is
+    known from the end of the accepted text before it to the start of the accepted text after it — whatever times the
+    failing segments carry themselves: a span, one instant for every copy, an end before the start, or no time at all.
+    (A failing run without a span of its own used to leave NO unresolved time: the recording read as fully covered.)"""
+    plan = ch.plan_chunks(60_000, 25_000, 2_000)
+
+    def alone(*segments) -> dict:
+        return ch.merge_prefix(plan, [{"index": 0, "offset_ms": 0, "end_ms": 27_000, "decoded_ms": 27_000, "segments": list(segments)}], duration_ms=60_000, tolerance_ms=500,
+                               repetition_threshold=2.4)
+
+    before, after = spoken(1.0, "a real sentence here"), spoken(20.0, "and it goes on")  # "here" ends at 2.5 s; "and" starts at 20 s
+    for name, middle in (("a loop with a span of its own", [loop_segment(8.0, 12.0)]), ("every copy at one instant", [collapsed_loop(12.0)]), ("no times at all", [collapsed_loop(None)]),
+                         ("an end before the start", [{**loop_segment(12.0, 12.0), "end": 9.0}]), ("two failing segments in a row", [collapsed_loop(9.0), loop_segment(11.0, 13.0)])):
+        merged = alone(before, *middle, after)
+        assert merged["unresolved"] == [{"start_ms": 2_500, "end_ms": 20_000, "reason": "repetition_check_failed"}], name
+        assert [w[0] for w in merged_words(merged)] == "a real sentence here and it goes on".split(), name
+        assert merged["covered"] == [{"start_ms": 0, "end_ms": 2_500}, {"start_ms": 20_000, "end_ms": 27_000}] and merged["stats"]["unresolved_ms"] == 17_500, name
+        assert merged["stats"]["withheld_repetition_words"] >= 20 and merged["stats"]["withheld_repetition_runs"] == 1 and merged["stats"]["withheld_runs_without_time"] == 0, name
+        assert not [w for w in merged_words(merged) if 2_500 < (w[1] + w[2]) / 2 < 20_000], name  # no published word lies in unresolved time
+    # No accepted text before the withheld text in its chunk: unresolved from the chunk's start. None after it: to the end of the chunk's audio.
+    assert alone(collapsed_loop(12.0), after)["unresolved"] == [{"start_ms": 0, "end_ms": 20_000, "reason": "repetition_check_failed"}]
+    assert alone(before, collapsed_loop(12.0))["unresolved"] == [{"start_ms": 2_500, "end_ms": 27_000, "reason": "repetition_check_failed"}]
+    nothing_else = alone(collapsed_loop(12.0))
+    assert nothing_else["unresolved"] == [{"start_ms": 0, "end_ms": 27_000, "reason": "repetition_check_failed"}] and nothing_else["covered"] == [] and nothing_else["stats"]["covered_ms"] == 0
+    # In a later chunk "the chunk's start" is where that chunk starts supplying the recording (here the middle of an overlap neither chunk heard a word in).
+    first = {"index": 0, "offset_ms": 0, "end_ms": 27_000, "decoded_ms": 27_000, "segments": [before, after]}  # its last word ends at 21.5 s
+    second = {"index": 1, "offset_ms": 25_000, "end_ms": 52_000, "decoded_ms": 27_000, "segments": [collapsed_loop(3.0), spoken(10.0, "speech goes on again")]}  # 35 s of the recording
+    both = ch.merge_prefix(plan, [first, second], duration_ms=60_000, tolerance_ms=500, repetition_threshold=2.4)
+    assert both["unresolved"] == [{"start_ms": 26_000, "end_ms": 35_000, "reason": "repetition_check_failed"}] and both["stats"]["overlap_boundaries_at_midpoint"] == 1
+    # Withheld text between two accepted words that touch stands for no time: nothing is unresolved, and the merge says that it withheld a run without time.
+    def said(text: str, start: float, end: float) -> dict:
+        return {"start": start, "end": end, "text": text, "compression_ratio": 1.2, "words": [{"text": text, "start": start, "end": end, "probability": 0.9}]}
+
+    touching = alone(said("one", 1.0, 2.0), collapsed_loop(2.0), said("two", 2.0, 3.0))
+    assert touching["unresolved"] == [] and [w[0] for w in merged_words(touching)] == ["one", "two"]
+    assert (touching["stats"]["withheld_repetition_runs"], touching["stats"]["withheld_runs_without_time"], touching["stats"]["withheld_repetition_words"]) == (1, 1, 20)
+    assert "accepted text" in ch.UNRESOLVED_RULE
+
+
+def test_an_overlap_in_which_only_one_chunk_has_accepted_text_is_supplied_by_that_chunk():
+    """No word of an overlap can match when one of the two chunks has no accepted text there at all: it heard nothing,
+    or what it heard is withheld. The bare middle then dropped the other chunk's words on the far side of it."""
+    plan = ch.plan_chunks(60_000, 25_000, 2_000)  # overlap [25, 27] s, its middle at 26 s
+
+    def seams(merged) -> tuple:
+        return tuple(merged["stats"][key] for key in ("overlap_boundaries_spliced", "overlap_boundaries_one_sided", "overlap_boundaries_at_midpoint", "dropped_overlap_words"))
+
+    # 1. The later chunk has nothing in the overlap: the earlier chunk's words on both sides of the middle are published.
+    first = chunk(plan, 0, [("a", 1.0, 1.5, 0.1), ("x", 25.2, 25.6, 0.1), ("y", 26.2, 26.6, 0.1)])
+    merged = ch.merge_prefix(plan, [first, chunk(plan, 1, [("c", 10.0, 10.5, 0.2)])], duration_ms=60_000, tolerance_ms=500)
+    assert [w[0] for w in merged_words(merged)] == ["a", "x", "y", "c"] and seams(merged) == (0, 1, 0, 0)
+    # 2. The earlier chunk has nothing in the overlap: the later chunk's words there are published.
+    later = chunk(plan, 1, [("p", 0.3, 0.7, 0.2), ("q", 1.3, 1.7, 0.2), ("c", 10.0, 10.5, 0.2)])
+    merged = ch.merge_prefix(plan, [chunk(plan, 0, [("a", 1.0, 1.5, 0.1)]), later], duration_ms=60_000, tolerance_ms=500)
+    assert [w[0] for w in merged_words(merged)] == ["a", "p", "q", "c"] and seams(merged) == (0, 1, 0, 0)
+    # 3. The earlier chunk's text in the overlap is WITHHELD (a loop up to its end): the later chunk's accepted words there are published, and the
+    #    unresolved time ends where the later chunk takes over. No stretch is reported unresolved while words of it are published.
+    looping = {"index": 0, "offset_ms": 0, "end_ms": 27_000, "decoded_ms": 27_000, "segments": [spoken(1.0, "a real sentence here"), loop_segment(22.0, 26.9)]}
+    merged = ch.merge_prefix(plan, [looping, later], duration_ms=60_000, tolerance_ms=500, repetition_threshold=2.4)
+    assert [w[0] for w in merged_words(merged)] == "a real sentence here p q c".split() and seams(merged) == (0, 1, 0, 0)
+    assert merged["unresolved"] == [{"start_ms": 2_500, "end_ms": 25_000, "reason": "repetition_check_failed"}]
+    assert merged["covered"] == [{"start_ms": 0, "end_ms": 2_500}, {"start_ms": 25_000, "end_ms": 52_000}]
+    # 4. A word that straddles the edge of the overlap is whole in one chunk and cut short in the other; it is still published once.
+    first = chunk(plan, 0, [("a", 1.0, 1.5, 0.1), ("x", 25.2, 25.6, 0.1), ("lon", 26.7, 27.0, 0.1)])  # the beginning of a word, at the very end of this chunk
+    second = chunk(plan, 1, [("longer", 1.7, 2.5, 0.2), ("c", 10.0, 10.5, 0.2)])  # the whole word, 26.7 s .. 27.5 s: its middle lies past the overlap
+    merged = ch.merge_prefix(plan, [first, second], duration_ms=60_000, tolerance_ms=500)
+    assert [w[0] for w in merged_words(merged)] == ["a", "x", "longer", "c"] and seams(merged) == (0, 1, 0, 1)
+    first = chunk(plan, 0, [("a", 1.0, 1.5, 0.1), ("before", 24.4, 25.2, 0.1)])  # the whole word; its middle lies before the overlap
+    second = chunk(plan, 1, [("fore", 0.0, 0.2, 0.2), ("q", 1.3, 1.7, 0.2), ("c", 10.0, 10.5, 0.2)])  # its tail, at the very start of this chunk
+    merged = ch.merge_prefix(plan, [first, second], duration_ms=60_000, tolerance_ms=500)
+    assert [w[0] for w in merged_words(merged)] == ["a", "before", "q", "c"] and seams(merged) == (0, 1, 0, 1)
+    # 5. Neither chunk has anything in the overlap: its middle divides them, and nothing is dropped.
+    merged = ch.merge_prefix(plan, [chunk(plan, 0, [("a", 1.0, 1.5, 0.1)]), chunk(plan, 1, [("c", 10.0, 10.5, 0.2)])], duration_ms=60_000, tolerance_ms=500)
+    assert [w[0] for w in merged_words(merged)] == ["a", "c"] and seams(merged) == (0, 0, 1, 0)
+    assert "only one" in ch.OVERLAP_RULE
+
+
+def test_a_chunk_result_the_merge_could_not_read_is_named_before_anything_is_merged():
+    """The supervisor's acceptance check let through results whose inside the merge then failed on (a number where the
+    list of words belongs, a text where the decoding record belongs): an error in every later run instead of one
+    refused result. What the merge and the publication read of a chunk result has a shape, and that shape is checked."""
+    plan = ch.plan_chunks(60_000, 25_000, 2_000)
+    good = chunk(plan, 0, [("a", 1.0, 1.5, 0.1), ("b", 3.0, 3.5, 0.1), ("c", 5.0, 5.5, 0.1), ("d", 7.0, 7.5, 0.1)])  # two segments
+
+    def second_segment(**change) -> dict:
+        return {**good, "segments": [good["segments"][0], {**good["segments"][1], **change}]}
+
+    for fine in (good, {**good, "decoding": None}, {**good, "decoding": {"pass": "primary", "policy": "any"}}, second_segment(words=None), second_segment(words=[]), second_segment(text=None)):
+        assert ch.result_problem(fine) is None, fine
+    for bad, phrase in (({**good, "segments": "none"}, "list of segments"), ({**good, "segments": [good["segments"][0], "odd"]}, "segment 1 is not an object"), (second_segment(words=5), "segment 1: words"),
+                        (second_segment(words={"text": "x"}), "segment 1: words"), (second_segment(words=[{"text": "x"}, "odd"]), "segment 1: a word"), (second_segment(text=7), "segment 1: text"),
+                        ({**good, "decoding": "made by a later worker that writes this field differently"}, "decoding")):
+        problem = ch.result_problem(bad)
+        assert isinstance(problem, str) and phrase in problem, (bad, problem)
+    # What the merge has always tolerated stays tolerated: times that are no numbers, words without a text, a word without times.
+    tolerated = second_segment(start="soon", words=[{"text": None, "start": None, "end": "x"}, {"start": 1.0, "end": 1.2}, {"text": "kept", "start": 5.0, "end": 5.5}])
+    assert ch.result_problem(tolerated) is None
+    assert [w[0] for w in merged_words(ch.merge_prefix(plan, [tolerated], duration_ms=60_000, tolerance_ms=500, repetition_threshold=2.4))] == ["a", "b", "c", "kept"]
 
 
 # ---- output of a repetition loop is not text of the recording ---------------------------------------------------------
@@ -216,13 +328,15 @@ def test_text_that_fails_the_repetition_check_is_withheld_and_its_time_is_report
     merged = ch.merge_prefix(plan, [first, second], duration_ms=60_000, tolerance_ms=500, repetition_threshold=2.4)
 
     assert [w[0] for w in merged_words(merged)] == "a real sentence here speech goes on again and it is fine".split()
-    # ONE interval, from where the loop starts to where this chunk's share of the recording ends (the 26 s dividing line).
-    assert merged["unresolved"] == [{"start_ms": 8_000, "end_ms": 26_000, "reason": "repetition_check_failed"}]
-    assert merged["stats"]["withheld_repetition_segments"] == 3 and merged["stats"]["withheld_repetition_words"] == 60 and merged["stats"]["unresolved_ms"] == 18_000
+    # ONE interval for the three failing segments in a row: from the end of the accepted text before them (2.5 s) to where this chunk's share of the
+    # recording ends. Nothing accepted follows in the chunk, and the next chunk — the only one with accepted text in the overlap — supplies from 25 s on.
+    assert merged["unresolved"] == [{"start_ms": 2_500, "end_ms": 25_000, "reason": "repetition_check_failed"}]
+    assert merged["stats"]["withheld_repetition_segments"] == 3 and merged["stats"]["withheld_repetition_words"] == 60 and merged["stats"]["unresolved_ms"] == 22_500
+    assert merged["stats"]["withheld_repetition_runs"] == 1 and merged["stats"]["overlap_boundaries_one_sided"] == 1
     assert merged["stats"]["words"] == 12 and merged["stats"]["words_in"] == 72 and merged["window"]["end_ms"] == 52_000
-    # As the last chunk of a prefix the interval runs to the end of the looped text.
+    # As the last chunk of a prefix the interval runs to the end of the chunk's audio.
     alone = ch.merge_prefix(plan, [first], duration_ms=60_000, tolerance_ms=500, repetition_threshold=2.4)
-    assert alone["unresolved"] == [{"start_ms": 8_000, "end_ms": 26_900, "reason": "repetition_check_failed"}] and [w[0] for w in merged_words(alone)] == "a real sentence here".split()
+    assert alone["unresolved"] == [{"start_ms": 2_500, "end_ms": 27_000, "reason": "repetition_check_failed"}] and [w[0] for w in merged_words(alone)] == "a real sentence here".split()
     # Without a threshold nothing is checked and nothing is withheld.
     unchecked = ch.merge_prefix(plan, [first, second], duration_ms=60_000, tolerance_ms=500)
     assert unchecked["unresolved"] == [] and unchecked["stats"]["unresolved_ms"] == 0 and unchecked["stats"]["withheld_repetition_segments"] == 0
@@ -750,7 +864,7 @@ def test_a_changed_recording_is_a_source_conflict_that_is_skipped_while_the_rest
     from lecture_brain.fixtures.builder import write_wav
 
     first = make_runner(settings, journal, tmp_path).run(chunk_seconds=25, max_chunks=1)
-    assert first["state"] == "max_chunks_reached"
+    assert first["state"] == "max_chunks_reached", first
     listed = recordings(settings)
     second = next(key for key in listed if key.startswith("be505/unreg-"))
     frozen = queue_items(settings)
@@ -975,30 +1089,32 @@ def test_a_chunk_caught_in_a_repetition_loop_is_decoded_once_more_and_what_still
     control(loop_chunks=[0], only_work=items[be562]["work_id"])
     second = make_runner(settings, journal, tmp_path).run(chunk_seconds=25, courses=["be562"])
     assert second["state"] == "completed" and second["chunks_completed"] == 1
-    # Every chunk is merged ("complete"), and still the recording is not covered whole: four of its six seconds are unresolved.
+    # Every chunk is merged ("complete"), and still the recording is not covered at all: the chunk holds nothing but withheld text, so nothing in
+    # it is known. (The loop's own times, 1 s .. 5 s, are not what is unresolved: no accepted text bounds it, so the whole chunk is.)
     assert [(p["unresolved_seconds"], p["covered_seconds"], p["withheld_repetition_words"], p["words"], p["complete"], p["covers_whole_recording"]) for p in second["published"]] == [
-        (4.0, 2.0, 40, 0, True, False)]
+        (6.0, 0.0, 40, 0, True, False)]
     stored = json.loads((speech_dir(settings) / "work" / items[be562]["work_id"] / "chunk-0000.json").read_text(encoding="utf-8"))
     assert stored["decoding"]["pass"] == "primary" and stored["decoding"]["second"]["failed_words"] == 40 and stored["decoding"]["second_pass_sha256"] == rn.SECOND_PASS_SHA256
     quiet = derived.current("be562", "src-lecture-01-audio")
     assert quiet["segments"] == [] and quiet["window"] == {"start_ms": 0, "end_ms": 6_000} and "okay" not in json.dumps(quiet["segments"])
-    assert quiet["provenance"]["unresolved_intervals"] == [{"start_ms": 1_000, "end_ms": 5_000, "reason": "repetition_check_failed"}]
-    assert quiet["provenance"]["merge"]["withheld_repetition_words"] == 40 and quiet["provenance"]["counts"]["words"] == 0
-    # The reader does not take the withheld four seconds for covered speech or for silence: they are unresolved, and the recording is not whole.
-    assert quiet["unresolved_intervals"] == [{"start_ms": 1_000, "end_ms": 5_000, "reason": "repetition_check_failed"}] and quiet["unresolved_seconds"] == 4.0
-    assert quiet["covered_intervals"] == [{"start_ms": 0, "end_ms": 1_000}, {"start_ms": 5_000, "end_ms": 6_000}] and quiet["covers_whole_recording"] is False
-    assert quiet["coverage_fraction"] == pytest.approx(2 / 6) and quiet["processed_fraction"] == pytest.approx(1.0) and quiet["provenance"]["covers_whole_recording"] is False
+    assert quiet["provenance"]["unresolved_intervals"] == [{"start_ms": 0, "end_ms": 6_000, "reason": "repetition_check_failed"}]
+    assert quiet["provenance"]["merge"]["withheld_repetition_words"] == 40 and quiet["provenance"]["counts"]["words"] == 0 and quiet["provenance"]["decoding"]["merge_policy"] == "withhold-repetition-3"
+    assert quiet["provenance"]["publication"]["unresolved_rule"] == ch.UNRESOLVED_RULE and quiet["provenance"]["merge"]["withheld_repetition_runs"] == 1
+    # The reader does not take the withheld six seconds for covered speech or for silence: they are unresolved, and the recording is not whole.
+    assert quiet["unresolved_intervals"] == [{"start_ms": 0, "end_ms": 6_000, "reason": "repetition_check_failed"}] and quiet["unresolved_seconds"] == 6.0
+    assert quiet["covered_intervals"] == [] and quiet["covers_whole_recording"] is False
+    assert quiet["coverage_fraction"] == 0.0 and quiet["processed_fraction"] == pytest.approx(1.0) and quiet["provenance"]["covers_whole_recording"] is False
     assert quiet["provenance"]["decoding"]["chunks_decoded_twice"] == 1 and quiet["provenance"]["decoding"]["chunks_kept_from_second_pass"] == 0
     assert quiet["provenance"]["decoding"]["second_pass_sha256"] == rn.SECOND_PASS_SHA256 and quiet["provenance"]["decoding"]["chunks_with_other_second_pass"] == []
     assert quiet["provenance"]["chunks"][0]["second_pass_sha256"] == rn.SECOND_PASS_SHA256 and quiet["provenance"]["chunks"][0]["selection"]["kept"] == "primary"
     assert queue_items(settings)[be562]["state"] == "complete_with_unresolved"  # every chunk is published, but this is not plain complete
     status = make_runner(settings, journal, tmp_path).status()
     row = status["courses"]["be562"]["recordings"][0]
-    assert (row["state"], row["seconds_processed"], row["seconds_published"], row["seconds_covered"], row["unresolved_seconds"]) == ("complete_with_unresolved", 6.0, 6.0, 2.0, 4.0)
+    assert (row["state"], row["seconds_processed"], row["seconds_published"], row["seconds_covered"], row["unresolved_seconds"]) == ("complete_with_unresolved", 6.0, 6.0, 0.0, 6.0)
     assert row["covered_intervals"] == quiet["covered_intervals"] and row["unresolved_intervals"] == quiet["unresolved_intervals"]
-    assert row["coverage_fraction"] == pytest.approx(2 / 6) and row["covers_whole_recording"] is False and status["totals"]["unresolved_seconds"] == 4.0
+    assert row["coverage_fraction"] == 0.0 and row["covers_whole_recording"] is False and status["totals"]["unresolved_seconds"] == 6.0
     assert status["totals"]["states"]["complete_with_unresolved"] == 1 and status["courses"]["be562"]["totals"]["complete"] == 0
-    assert status["courses"]["be562"]["totals"]["unresolved_seconds"] == 4.0 and status["courses"]["be562"]["totals"]["seconds_covered"] == 2.0 and "withheld" in status["note"]
+    assert status["courses"]["be562"]["totals"]["unresolved_seconds"] == 6.0 and status["courses"]["be562"]["totals"]["seconds_covered"] == 0.0 and "withheld" in status["note"]
     assert make_runner(settings, journal, tmp_path).run(chunk_seconds=25, courses=["be562"])["state"] == "no_change"  # nothing to do again: it is finished, just not whole
 
     # 3. A chunk on disk that is mostly loop output and was made WITHOUT this policy (an older worker) is not a finished chunk: it is done again.
@@ -1372,19 +1488,20 @@ def test_a_recording_whose_every_chunk_is_withheld_is_processed_but_neither_cove
     control(loop_chunks=[0, 1, 2])
     result = make_runner(settings, journal, tmp_path).run(chunk_seconds=25, courses=["be505"])
     assert result["state"] == "completed" and result["chunks_completed"] == 5
-    assert queue_items(settings)[L1]["state"] == "complete_with_unresolved" and queue_items(settings)[L1]["unresolved_seconds"] == 58.0
+    assert queue_items(settings)[L1]["state"] == "complete_with_unresolved" and queue_items(settings)[L1]["unresolved_seconds"] == 60.0
     current = Derived(settings, journal).current("be505", "src-lecture-01-recording")
     assert current["segments"] == [] and current["window"] == {"start_ms": 0, "end_ms": 60_000}
-    assert current["unresolved_intervals"] == [{"start_ms": 1_000, "end_ms": 59_000, "reason": "repetition_check_failed"}] and current["unresolved_seconds"] == 58.0
-    assert current["covered_intervals"] == [{"start_ms": 0, "end_ms": 1_000}, {"start_ms": 59_000, "end_ms": 60_000}]
-    assert current["coverage_fraction"] == pytest.approx(2 / 60) and current["processed_fraction"] == 1.0 and current["covers_whole_recording"] is False
+    # No chunk holds any accepted text: nothing of the recording is known, from its first millisecond to its last.
+    assert current["unresolved_intervals"] == [{"start_ms": 0, "end_ms": 60_000, "reason": "repetition_check_failed"}] and current["unresolved_seconds"] == 60.0
+    assert current["covered_intervals"] == []
+    assert current["coverage_fraction"] == 0.0 and current["processed_fraction"] == 1.0 and current["covers_whole_recording"] is False
     status = make_runner(settings, journal, tmp_path).status()
     row = next(r for r in status["courses"]["be505"]["recordings"] if r["source_id"] == "src-lecture-01-recording")
-    assert (row["state"], row["seconds_processed"], row["seconds_covered"], row["unresolved_seconds"], row["covers_whole_recording"]) == ("complete_with_unresolved", 60.0, 2.0, 58.0, False)
+    assert (row["state"], row["seconds_processed"], row["seconds_covered"], row["unresolved_seconds"], row["covers_whole_recording"]) == ("complete_with_unresolved", 60.0, 0.0, 60.0, False)
     assert row["covered_intervals"] == current["covered_intervals"] and row["unresolved_intervals"] == current["unresolved_intervals"]
     assert status["courses"]["be505"]["totals"]["complete"] == 0 and status["courses"]["be505"]["totals"]["complete_with_unresolved"] == 2
     derived_row = next(r for r in Derived(settings, journal).status("be505")["recordings"] if r["source_id"] == "src-lecture-01-recording")
-    assert derived_row["covers_whole_recording"] is False and derived_row["unresolved_seconds"] == 58.0 and Derived(settings, journal).status("be505")["totals"]["whole_recording_covered"] == 0
+    assert derived_row["covers_whole_recording"] is False and derived_row["unresolved_seconds"] == 60.0 and Derived(settings, journal).status("be505")["totals"]["whole_recording_covered"] == 0
     assert rn.MERGE_POLICY in sys.modules["lecture_brain.derived"].SERVED_MERGE_POLICIES  # what the runner publishes is what the reader serves
 
 
@@ -1392,9 +1509,12 @@ def test_silent_chunks_and_words_outside_the_bounds_come_through_the_runner_and_
     control(silent_chunks=[1])  # the fake worker finds no word in the second chunk of each recording
     assert make_runner(settings, journal, tmp_path).run(chunk_seconds=25, courses=["be505"])["state"] == "completed"
     current = Derived(settings, journal).current("be505", "src-lecture-01-recording")
-    # Silence is a finished chunk without words: nothing fails, nothing is unresolved, and the time it supplies simply has no text.
-    assert [w[0] for w in words_of(current)] == [f"w{j}" for j in (*range(13), *range(26, 30))] and current["covers_whole_recording"] is True and current["unresolved_intervals"] == []
-    assert current["provenance"]["merge"]["silent_chunks"] == 1 and current["provenance"]["merge"]["overlap_boundaries_at_midpoint"] == 2 and queue_items(settings)[L1]["state"] == "complete"
+    # Silence is a finished chunk without words: nothing fails, nothing is unresolved, and the time it supplies simply has no text. What its
+    # neighbours heard in the two overlaps (w13 before it, w25 after it) is published: the silent chunk has nothing there, so they supply the overlaps.
+    assert [w[0] for w in words_of(current)] == [f"w{j}" for j in (*range(14), *range(25, 30))] and current["covers_whole_recording"] is True and current["unresolved_intervals"] == []
+    merge = current["provenance"]["merge"]
+    assert (merge["silent_chunks"], merge["overlap_boundaries_one_sided"], merge["overlap_boundaries_at_midpoint"], merge["dropped_overlap_words"]) == (1, 2, 0, 0)
+    assert queue_items(settings)[L1]["state"] == "complete"
     control(out_of_bounds=True)  # one word before each chunk and one far past its end
     assert make_runner(settings, journal, tmp_path).run(chunk_seconds=25, courses=["be562"])["state"] == "completed"
     short = Derived(settings, journal).current("be562", "src-lecture-01-audio")
@@ -1435,13 +1555,14 @@ def test_outside_the_fixture_profile_a_grant_has_one_ledger_in_the_state_directo
     again = runner(bound).run(chunk_seconds=25)
     assert (again["state"], again["chunks_completed"]) == ("ceiling_reached", 0) and again["allowance"]["used_before"] == used and len(fake_log(tmp_path)) == starts
     assert runner(bound).status()["binding"]["status"] == "ok" and runner(bound).status()["binding"]["state_dir"] == str(bound)
-    # A path that is not absolute is taken from the repository, as the app's own state directory setting is.
+    # A path that is not absolute names another directory in every copy of the working tree: outside the fixture profile it binds nothing
+    # (see test_outside_the_fixture_profile_the_bound_state_directory_is_an_absolute_path), also when it happens to point at the right place.
     import dataclasses
 
     moved = dataclasses.replace(load_settings("local", env={}, planner_config=planner, state_dir=bound), repo=tmp_path)  # as if the repository were tmp_path
-    relative = rn.SpeechRunner(moved, None, binding={**fake_binding(tmp_path, **limits), "state_dir": "state-a"}, worker_script=FAKE_WORKER, timings=rn.Timings(**FAST))
-    assert relative.status()["binding"]["status"] == "ok"
-    assert rn.SpeechRunner(moved, None, binding={**fake_binding(tmp_path, **limits), "state_dir": "state-b"}, worker_script=FAKE_WORKER).status()["binding"]["status"] == "state_dir_not_bound"
+    for named in ("state-a", "state-b"):
+        relative = rn.SpeechRunner(moved, None, binding={**fake_binding(tmp_path, **limits), "state_dir": named}, worker_script=FAKE_WORKER, timings=rn.Timings(**FAST)).status()
+        assert relative["binding"]["status"] == "state_dir_not_bound" and "absolute" in relative["binding"]["detail"]
     # The fixture profile needs no state directory in its test binding; one that is named is held to all the same.
     elsewhere = make_runner(settings, journal, tmp_path, state_dir=str(other)).run(chunk_seconds=25)
     assert (elsewhere["state"], elsewhere["reason"]) == ("refused", "state_dir_not_bound") and not speech_dir(settings).exists()
@@ -1650,3 +1771,263 @@ def test_the_status_reports_the_lecture_ids_the_inventory_links_now_and_keeps_th
     (listed[gone]["root"] / listed[gone]["path"]).unlink()
     row = next(row for row in make_runner(settings, journal, tmp_path).status()["courses"]["ds551"]["recordings"])
     assert (row["lecture_ids"], row["lecture_ids_from"], row["listed_now"]) == ([], "frozen_queue", False)
+
+
+# ---- closing round: what an independent review of the fixed runner still found ----------------------------------------
+def test_text_withheld_from_a_loop_whose_copies_sit_at_one_instant_leaves_unresolved_time_in_reader_and_status(settings, journal, tmp_path, control):
+    """Through worker, supervisor, importer and reader: a failing segment without a span of its own (every copy at one
+    instant) used to be withheld without any unresolved time — the recording read ``complete``, fully covered."""
+    control(collapsed_loop_chunks=[1])  # in the second chunk of each recording the words w18..w22 are replaced by twenty copies of one word at 36.3 s
+    result = make_runner(settings, journal, tmp_path).run(chunk_seconds=25, courses=["be505"])
+    assert result["state"] == "completed" and result["chunks_completed"] == 5, result
+    current = Derived(settings, journal).current("be505", "src-lecture-01-recording")
+    assert [w[0] for w in words_of(current)] == [f"w{j}" for j in (*range(18), *range(23, 30))] and current["provenance"]["merge"]["withheld_repetition_words"] == 20
+    # Unresolved from the end of w17 (34.7 s) to the start of w23 (46.3 s): where the five missing words were said.
+    assert current["unresolved_intervals"] == [{"start_ms": 34_700, "end_ms": 46_300, "reason": "repetition_check_failed"}] and current["unresolved_seconds"] == 11.6
+    assert current["covers_whole_recording"] is False and current["coverage_fraction"] == pytest.approx(48.4 / 60)
+    row = next(r for r in make_runner(settings, journal, tmp_path).status()["courses"]["be505"]["recordings"] if r["source_id"] == "src-lecture-01-recording")
+    assert (row["state"], row["seconds_covered"], row["unresolved_seconds"], row["covers_whole_recording"]) == ("complete_with_unresolved", 48.4, 11.6, False)
+    assert row["unresolved_intervals"] == current["unresolved_intervals"] and queue_items(settings)[L1]["state"] == "complete_with_unresolved"
+
+
+@pytest.mark.parametrize("shape,phrase", [("words_number", "segment 1: words is not a list"), ("decoding_text", "the decoding record is not an object")])
+def test_a_result_with_an_inside_no_merge_can_read_is_a_failed_attempt_and_the_queue_goes_on(shape, phrase, settings, journal, tmp_path, control):
+    """Well addressed, complete, made from the right bytes under the right settings — and unreadable inside. The
+    supervisor accepted such a result, the merge failed on it, and every later run ended ``internal_error`` before any
+    job was started: the whole queue stood still. It is a refused result like any other: counted, shown, bounded."""
+    control(odd_chunks=[1], odd_shape=shape)
+    first = make_runner(settings, journal, tmp_path).run(chunk_seconds=25)
+    assert (first["state"], first["reason"], first["chunks_completed"]) == ("completed", None, 4), first  # the first chunk of the two long recordings, and the two short ones
+    items = queue_items(settings)
+    second_key = next(key for key in items if key.startswith("be505/unreg-"))
+    for key in (L1, second_key):
+        assert (items[key]["state"], items[key]["chunks_done"], items[key]["failures"]) == ("partial", 1, {"1": 1})
+        assert "the worker's result was not accepted" in items[key]["last_error"] and phrase in items[key]["last_error"]
+    assert {items[key]["state"] for key in items if key not in (L1, second_key)} == {"complete"} and ledger_doc(settings)["open"] is None
+
+    again = make_runner(settings, journal, tmp_path).run(chunk_seconds=25)  # the same again: both are set aside, visibly
+    assert (again["state"], again["reason"], again["chunks_completed"]) == ("completed", None, 0) and again["remaining"] == {"recordings": 0, "chunks": 0, "source_conflict": 0, "failed": 2}
+    assert (queue_items(settings)[L1]["state"], queue_items(settings)[L1]["reason"], queue_items(settings)[L1]["failures"]) == ("failed", "chunk_failed", {"1": 2})
+    used = ledger_doc(settings)["used_seconds"]
+    for _ in range(2):  # and then nothing is started any more
+        idle = make_runner(settings, journal, tmp_path).run(chunk_seconds=25)
+        assert (idle["state"], idle["wall_seconds"]) == ("no_change", 0.0)
+    assert ledger_doc(settings)["used_seconds"] == used and [r["reason"] for r in receipts(journal)] == [None] * 4  # never an internal error
+
+    control()  # a healthy worker, and the owner says to try again
+    fixed = make_runner(settings, journal, tmp_path).run(chunk_seconds=25, retry_failed=True)
+    assert (fixed["state"], fixed["chunks_completed"]) == ("completed", 2) and {item["state"] for item in queue_items(settings).values()} == {"complete"}
+    assert words_of(Derived(settings, journal).current("be505", "src-lecture-01-recording")) == [(f"w{j}", j * 2_000 + 300, j * 2_000 + 700) for j in range(30)]
+
+
+def test_chunk_results_that_cannot_be_merged_set_their_recording_aside_and_the_other_recordings_go_on(settings, journal, tmp_path, control, monkeypatch):
+    """The backstop behind the acceptance check: whatever makes the merge of ONE recording fail is that recording's
+    problem — set aside with the reason, tried again by the next run — and never an error that ends the run."""
+    listed = recordings(settings)
+    broken = hashlib.sha256(f"{L1}/{hashlib.sha256((listed[L1]['root'] / listed[L1]['path']).read_bytes()).hexdigest()}".encode("utf-8")).hexdigest()[:12]  # the work id of L1
+    real_merge = ch.merge_prefix
+
+    def failing_merge(plan, results, **arguments):
+        if results[0].get("work_id") == broken:
+            raise TypeError("SYNTHETIC: a chunk result this merge cannot read")
+        return real_merge(plan, results, **arguments)
+
+    monkeypatch.setattr(ch, "merge_prefix", failing_merge)
+    first = make_runner(settings, journal, tmp_path).run(chunk_seconds=25)
+    assert (first["state"], first["reason"], first["chunks_completed"]) == ("failed", "publish_rejected", 7), first  # every chunk was transcribed; one recording could not be published
+    items = queue_items(settings)
+    assert items[L1]["work_id"] == broken and (items[L1]["state"], items[L1]["reason"], items[L1]["chunks_done"], items[L1]["published_chunks"]) == ("failed", "publish_rejected", 3, 0)
+    assert "could not be merged" in items[L1]["last_error"] and "SYNTHETIC" in items[L1]["last_error"] and "TypeError" in items[L1]["last_error"]
+    assert {item["state"] for key, item in items.items() if key != L1} == {"complete"} and ledger_doc(settings)["open"] is None
+    assert Derived(settings, journal).current("be505", "src-lecture-01-recording") is None
+    refused = [p for p in first["published"] if p["status"] == "failed"]
+    assert refused and all((p["source_id"], p["reason"]) == ("src-lecture-01-recording", "merge_failed") for p in refused)
+    used = ledger_doc(settings)["used_seconds"]
+    again = make_runner(settings, journal, tmp_path).run(chunk_seconds=25)  # the next run tries the publication once more: no worker, no charge, the same answer
+    assert (again["state"], again["reason"], again["chunks_completed"], again["wall_seconds"]) == ("failed", "publish_rejected", 0, 0.0) and ledger_doc(settings)["used_seconds"] == used
+    monkeypatch.setattr(ch, "merge_prefix", real_merge)
+    mended = make_runner(settings, journal, tmp_path).run(chunk_seconds=25)
+    assert (mended["state"], mended["chunks_completed"]) == ("completed", 0) and [(p["status"], p["chunks"]) for p in mended["published"]] == [("imported", 3)]
+    item = queue_items(settings)[L1]
+    assert (item["state"], item["reason"], item["last_error"]) == ("complete", None, None) and ledger_doc(settings)["used_seconds"] == used
+    assert words_of(Derived(settings, journal).current("be505", "src-lecture-01-recording")) == [(f"w{j}", j * 2_000 + 300, j * 2_000 + 700) for j in range(30)]
+
+
+def test_a_generation_id_stands_for_the_bytes_that_are_stored_whatever_code_assembled_them(settings, journal, tmp_path, control, monkeypatch):
+    """The id's suffix was a digest of segments, provenance, producer and window. The stored bytes are also decided by
+    how a generation is ASSEMBLED and by the consumer version it is written for: after an edit of either the same id
+    came out with other bytes — refused as a conflict, every recording set aside, not cleared by ``--retry-failed`` —
+    and after a new consumer version nothing was served and nothing could be published. The suffix is now a digest of
+    the assembled generation itself."""
+    import lecture_brain.derived as dv
+
+    def run(**arguments) -> dict:
+        return make_runner(settings, journal, tmp_path).run(chunk_seconds=25, **arguments)
+
+    def published() -> dict[str, str]:
+        return {key: item["published_generation"] for key, item in queue_items(settings).items()}
+
+    def served() -> dict | None:
+        return Derived(settings, journal).current("be505", "src-lecture-01-recording")
+
+    assert run()["state"] == "completed"
+    derived = Derived(settings, journal)
+    before = published()
+
+    # 1. The assembly is edited (here: one more file in every generation) and the queue is frozen anew over the same chunk files.
+    real_assembly = rn.assemble_generation
+    monkeypatch.setattr(rn, "assemble_generation", lambda **arguments: real_assembly(**arguments, extra_files={"note.txt": (b"SYNTHETIC: a file a later edit of the assembly adds\n", "text/plain")}))
+    (speech_dir(settings) / "queue.json").unlink()
+    again = run()
+    assert (again["state"], again["reason"], again["chunks_completed"]) == ("completed", None, 0), again
+    assert [(p["status"], p["reason"]) for p in again["published"]] == [("imported", None)] * 4 and again["remaining"]["failed"] == 0
+    after = published()
+    assert all(after[key] != before[key] and after[key].rsplit("-", 1)[0] == before[key].rsplit("-", 1)[0] for key in before)  # the same recording and chunk count, other bytes: another id
+    assert (derived.store_dir("be505") / "src-lecture-01-recording" / after[L1] / "note.txt").is_file() and served()["generation"] == after[L1]
+    assert run()["state"] == "no_change"
+    monkeypatch.setattr(rn, "assemble_generation", real_assembly)
+
+    # 2. A new consumer version. What is stored was written for the old one and is not served; the SAME queue publishes it again for this consumer.
+    monkeypatch.setattr(dv, "CONSUMER_VERSION", "derived-consumer-2")
+    assert served() is None
+    bumped = run()
+    assert (bumped["state"], bumped["chunks_completed"], bumped["wall_seconds"]) == ("completed", 0, 0.0) and [(p["status"], p["reason"]) for p in bumped["published"]] == [("imported", None)] * 4, bumped
+    current = served()
+    assert current is not None and current["consumer_version"] == "derived-consumer-2" and current["generation"] == published()[L1] and current["generation"] not in (before[L1], after[L1])
+    assert {item["state"] for item in queue_items(settings).values()} == {"complete"} and run()["state"] == "no_change"
+
+    # 3. A stored generation that was damaged afterwards does not stand in the way of publishing the same content: a stored generation is never
+    #    replaced or repaired, so the content goes into the next name, once, and that one is served.
+    damaged_id = published()[L1]
+    (derived.store_dir("be505") / "src-lecture-01-recording" / damaged_id / "segments.json").write_bytes(b"{}")
+    assert served() is None  # the only generation written for this consumer is damaged: nothing is served
+    (speech_dir(settings) / "queue.json").unlink()
+    repaired = run()
+    assert (repaired["state"], repaired["reason"]) == ("completed", None), repaired
+    by_source = {p["source_id"]: p["status"] for p in repaired["published"]}
+    assert by_source["src-lecture-01-recording"] == "imported" and sorted(by_source.values()) == ["imported", "reused", "reused", "reused"]
+    fresh = published()[L1]
+    assert fresh != damaged_id and fresh.rsplit("-", 1)[0] == damaged_id.rsplit("-", 1)[0] and served()["generation"] == fresh
+    listed = {g["generation"]: g["state"] for r in derived.status("be505")["recordings"] if r["source_id"] == "src-lecture-01-recording" for g in r["generations"]}
+    assert listed[damaged_id] == "invalid" and listed[fresh] == "current"
+    (speech_dir(settings) / "queue.json").unlink()
+    settled = run()  # the same content once more: the same second name, nothing new
+    assert settled["state"] == "completed" and [p["status"] for p in settled["published"]] == ["reused"] * 4 and published()[L1] == fresh
+
+
+def test_outside_the_fixture_profile_the_bound_state_directory_is_an_absolute_path(workspace, tmp_path, control):
+    """A state directory named relative to the repository is another directory in every copy of the working tree: the
+    same private binding in a copied tree opened a second ledger, and a second allowance, under the same grant."""
+    import dataclasses
+
+    from lecture_brain.config import load_settings
+
+    planner = workspace / "University" / "Fixture Brain" / "planner-config.yaml"
+    limits = {"ceiling_seconds": 3.0, "safety_margin_seconds": 1.2}
+
+    def runner(tree: Path, named: str) -> rn.SpeechRunner:
+        local = dataclasses.replace(load_settings("local", env={}, planner_config=planner, state_dir=tree / ".local" / "state" / "real-local"), repo=tree)  # the repository the command runs from
+        return rn.SpeechRunner(local, None, binding={**fake_binding(tmp_path, **limits), "state_dir": named}, worker_script=FAKE_WORKER, timings=rn.Timings(**FAST))
+
+    control(delay_seconds=0.4)
+    tree_a, tree_b = tmp_path / "tree-a", tmp_path / "tree-b"
+    for tree_ in (tree_a, tree_b):  # the binding as it was spelled: relative to whichever tree the command runs from
+        refused = runner(tree_, ".local/state/real-local").run(chunk_seconds=25)
+        assert (refused["state"], refused["reason"], refused["wall_seconds"]) == ("refused", "state_dir_not_bound", 0.0) and "absolute" in refused["detail"], refused
+        assert not (tree_ / ".local" / "state" / "real-local" / "speech").exists()
+        assert runner(tree_, ".local/state/real-local").status()["binding"]["status"] == "state_dir_not_bound"
+    assert fake_log(tmp_path) == []
+    # Named absolutely, the grant has its ledger in tree A only: the copy is refused and nothing is started there.
+    bound = str(tree_a / ".local" / "state" / "real-local")
+    first = runner(tree_a, bound).run(chunk_seconds=25)
+    assert first["state"] == "ceiling_reached" and first["chunks_completed"] > 0, first
+    starts = len(fake_log(tmp_path))
+    copy = runner(tree_b, bound).run(chunk_seconds=25)
+    assert (copy["state"], copy["reason"]) == ("refused", "state_dir_not_bound") and len(fake_log(tmp_path)) == starts
+    assert not (tree_b / ".local" / "state" / "real-local" / "speech").exists() and (tree_a / ".local" / "state" / "real-local" / "speech" / "allowance.json").is_file()
+    assert runner(tree_a, bound).run(chunk_seconds=25)["state"] == "ceiling_reached" and runner(tree_a, bound).status()["binding"]["status"] == "ok"
+
+
+def test_a_lease_that_cannot_be_refreshed_for_a_moment_does_not_end_the_run(settings, journal, tmp_path, control, monkeypatch):
+    """Seen on this machine under load: for more than a second the lease file could not be replaced (another process
+    had it open), the refresh raised, and the run ended ``failed/internal_error`` with the worker stopped inside a
+    chunk — although the lease written before was still good. A refresh that fails is tried again at the next look;
+    the run gives up only when no refresh went through for a whole lease."""
+    real_write = rn.write_json
+    refused = {"left": 0, "count": 0}
+
+    def flaky_write(path, value):
+        if Path(path).name == "lease.json" and refused["left"] > 0 and any(line.startswith("start") for line in fake_log(tmp_path)[log_before:]):
+            refused["left"] -= 1
+            refused["count"] += 1
+            raise PermissionError(5, "SYNTHETIC: access is denied, as when another process has the file open")
+        return real_write(path, value)
+
+    monkeypatch.setattr(rn, "write_json", flaky_write)
+    timings = rn.Timings(**{**FAST, "lease_seconds": 4.0})
+
+    def run() -> dict:
+        return rn.SpeechRunner(settings, journal, binding=fake_binding(tmp_path), worker_script=FAKE_WORKER, timings=timings).run(chunk_seconds=25)
+
+    control(delay_seconds=0.25)
+    log_before, refused["left"] = len(fake_log(tmp_path)), 4  # four refreshes in a row fail while the worker is inside a chunk
+    done = run()
+    assert (done["state"], done["reason"], done["chunks_completed"]) == ("completed", None, 7) and refused["count"] == 4, done
+    assert ledger_doc(settings)["open"] is None and {item["state"] for item in queue_items(settings).values()} == {"complete"}
+
+    # No refresh goes through for a whole lease: a worker that looks at its lease has stopped by itself by then (``worker_lease_lost``); here it
+    # does not look, so it is the supervisor that gives up. Either way the child is stopped and the time that passed is settled.
+    (speech_dir(settings) / "queue.json").unlink()
+    for path in (speech_dir(settings) / "work").rglob("chunk-*.json"):
+        path.unlink()
+    control(mute_at=0)
+    timings = rn.Timings(**{**FAST, "lease_seconds": 0.6})
+    log_before, refused["left"] = len(fake_log(tmp_path)), 10_000
+    lost = run()
+    assert (lost["state"], lost["outcome"], lost["reason"]) == ("failed", "ran", "internal_error") and "PermissionError" in lost["detail"], lost
+    assert ledger_doc(settings)["open"] is None and lost["allowance"]["used_after"] == ledger_doc(settings)["used_seconds"] and receipts(journal)[-1]["reason"] == "internal_error"
+
+
+def test_a_worker_that_keeps_dying_without_a_word_pauses_the_queue_at_the_second_recording(settings, journal, tmp_path, control):
+    """A worker that dies or stalls without saying why is counted against the chunk it was in: it may be that
+    recording's audio. When the same happens in the NEXT recording with no chunk finished in between, the cause is the
+    machine: the queue pauses, and a wrapper that repeats the command does not set recording after recording aside."""
+    control(die_at=0)  # every recording: the worker dies in its first chunk, without a result
+    first = make_runner(settings, journal, tmp_path).run(chunk_seconds=25)
+    assert (first["state"], first["reason"], first["pause"]) == ("failed", "worker_died", None) and queue_items(settings)[L1]["failures"] == {"0": 1}
+    second = make_runner(settings, journal, tmp_path).run(chunk_seconds=25)
+    assert (second["state"], second["reason"], second["pause"]) == ("failed", "worker_died", None)
+    assert (queue_items(settings)[L1]["state"], queue_items(settings)[L1]["reason"]) == ("failed", "chunk_failed")  # twice in the same chunk: that recording is set aside
+    third = make_runner(settings, journal, tmp_path).run(chunk_seconds=25)  # and now the next recording, at once
+    items = queue_items(settings)
+    next_key = list(items)[1]
+    assert (third["state"], third["reason"], third["chunks_completed"]) == ("paused", "worker_died", 0), third
+    assert (third["pause"]["reason"], third["pause"]["worker_reason"], third["pause"]["recording"], third["pause"]["chunk"]) == ("resource_failure", "worker_died", next_key, 0)
+    assert "--retry-failed" in third["detail"] and third["resume_command"].endswith("--retry-failed")
+    assert items[next_key]["failures"] == {} and items[next_key]["state"] == "queued" and items[next_key]["resource_failures"] == {"0": 1}  # not counted against it
+    assert [item["state"] for item in items.values()].count("failed") == 1
+    used, starts = ledger_doc(settings)["used_seconds"], len(fake_log(tmp_path))
+    for _ in range(3):  # run after run: paused, no worker, no charge, nothing more set aside
+        idle = make_runner(settings, journal, tmp_path).run(chunk_seconds=25)
+        assert (idle["state"], idle["reason"], idle["wall_seconds"]) == ("paused", "resource_failure", 0.0)
+    assert ledger_doc(settings)["used_seconds"] == used and len(fake_log(tmp_path)) == starts
+    assert [item["state"] for item in queue_items(settings).values()].count("failed") == 1 and len(ledger_doc(settings)["settled"]) == 3
+
+    # The cause is gone and the owner says go on: everything is done, the recording that had been set aside included.
+    control()
+    done = make_runner(settings, journal, tmp_path).run(chunk_seconds=25, retry_failed=True)
+    assert (done["state"], done["chunks_completed"], done["pause"]) == ("completed", 7, None) and {item["state"] for item in queue_items(settings).values()} == {"complete"}
+    assert all("resource_failures" not in item for item in queue_items(settings).values())
+
+    # A recording whose own audio kills the worker is that recording's problem: the others go on, and nothing pauses.
+    (speech_dir(settings) / "queue.json").unlink()
+    for path in (speech_dir(settings) / "work").rglob("chunk-*.json"):
+        path.unlink()
+    control(die_at=0, only_work=items[L1]["work_id"])
+    for _ in range(2):
+        died = make_runner(settings, journal, tmp_path).run(chunk_seconds=25)
+        assert (died["state"], died["reason"], died["pause"]) == ("failed", "worker_died", None)
+    assert queue_items(settings)[L1]["state"] == "failed" and queue_items(settings)[L1]["work_id"] == items[L1]["work_id"]
+    rest = make_runner(settings, journal, tmp_path).run(chunk_seconds=25)
+    assert (rest["state"], rest["chunks_completed"], rest["pause"]) == ("completed", 4, None)
+    assert sorted(item["state"] for item in queue_items(settings).values()) == ["complete", "complete", "complete", "failed"]

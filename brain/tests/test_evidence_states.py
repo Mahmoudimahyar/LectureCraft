@@ -14,7 +14,11 @@ from lecture_brain.ownerio.attempts import read_attempt_records
 
 QUESTION_KEYS = {"state", "assistance", "prior_exposure", "attempts", "last_at"}
 NODE_KEYS = {"state", "assistance", "prior_exposure", "attempts"}
-OBSERVATION_KEYS = {"attempt_id", "recorded_at", "outcome", "state", "assistance", "prior_exposure", "question_id", "skill_id"}
+OBSERVATION_KEYS = {"attempt_id", "recorded_at", "outcome", "state", "assistance", "prior_exposure", "question_id", "skill_id", "help_recorded", "attempt_assessed", "revised", "conflict"}
+
+
+def summary(**counts):
+    return {"independent": 0, "assisted": 0, "not_separately_observed": 0, "unknown": 0, "observations": 0, "attempts": 0, "exchanges_without_assessment": 0, "unit": "observation", **counts}
 
 
 # ---- synthetic builders ------------------------------------------------------------------------------------
@@ -81,6 +85,8 @@ def model():
     (obs(assistance="worked_example"), "unseen", "assisted", "worked_example", "unseen"),
     (obs(assistance="mixed"), "unknown", "assisted", "mixed", "unknown"),
     (obs(reference="notes"), "unseen", "assisted", "reference_notes", "unseen"),
+    (obs(reference="tools"), "seen_exact", "assisted", "reference_tools", "seen"),
+    (obs(reference="mixed"), "unseen", "assisted", "reference_mixed", "unseen"),
     (obs(assistance="hint", reference="notes"), "unseen", "assisted", "hint", "unseen"),
     (obs(assistance="unknown"), "unseen", "unknown", None, "unseen"),
     (obs(reference="unknown"), "unseen", "unknown", None, "unseen"),
@@ -147,9 +153,62 @@ def test_receiving_an_answer_or_asking_for_help_is_not_an_assessment_and_erases_
     assert question_evidence(after, "Q1") == before
     node = node_evidence(after, model(), "s.valve.explain")
     assert {k: node[k] for k in NODE_KEYS} == {"state": "independent", "assistance": None, "prior_exposure": "unseen", "attempts": 1}
-    assert node["summary"]["independent"] == 1 and node["summary"]["not_separately_observed"] == 1 and node["summary"]["assisted"] == 0
+    assert node["summary"] == summary(independent=1, not_separately_observed=1, observations=2, attempts=1, exchanges_without_assessment=1)
     assert [o["outcome"] for o in node["observations"]] == ["not_observed", "demonstrated"]  # the earlier record is still there, newest first
     assert "fail" not in json.dumps(node).lower()
+
+
+def test_an_exchange_that_assessed_nothing_moves_no_state_also_when_it_is_the_only_record():
+    """Receiving an answer is not being assessed. The reviewed defect: as the ONLY record such an exchange moved the question, its
+    criteria, skills, concept and topic from unknown to not separately observed, and its row dropped the help that was recorded."""
+    answer_given = att("a1", "2026-09-10T10:00:00Z", [obs(outcome="not_observed", assistance="solution_shown"), obs("s.pump.size", outcome="not_observed", assistance="solution_shown")],
+                       question_id="Q1", exposure="seen_exact")
+    recs, m = records(answer_given), model()
+    nothing = records()
+    assert question_evidence(recs, "Q1") == question_evidence(nothing, "Q1") == {"state": "unknown", "assistance": None, "prior_exposure": "unknown", "attempts": 0, "last_at": None}
+    for node in ("Q1", "Q1.C01", "Q1.C02", "s.valve.explain", "s.pump.size", "c.valve", "c.pump", "t.flow", "t.control"):
+        full, before = node_evidence(recs, m, node), node_evidence(nothing, m, node)
+        assert {k: full[k] for k in (*NODE_KEYS, "last_at")} == {k: before[k] for k in (*NODE_KEYS, "last_at")}, node   # every state as it was
+        assert full["state"] == "unknown" and EvidenceReader(recs, m).compact(node) == EvidenceReader(nothing, m).compact(node), node
+    valve = node_evidence(recs, m, "s.valve.explain")
+    assert valve["summary"] == summary(not_separately_observed=1, observations=1, exchanges_without_assessment=1)   # the exchange is listed and counted as what it is
+    row = valve["observations"][0]
+    assert set(row) == OBSERVATION_KEYS and (row["outcome"], row["state"], row["assistance"]) == ("not_observed", "not_separately_observed", None)
+    assert (row["help_recorded"], row["attempt_assessed"], row["prior_exposure"]) == ("solution_shown", False, "seen")   # the supplied solution stays on the record
+    # an assessment that covered a skill and did not observe it on its own is a different thing: that IS not separately observed
+    part = records(att("a2", "2026-09-11T10:00:00Z", [obs(assistance="hint"), obs("s.pump.size", outcome="not_observed", assistance="hint")], question_id="Q1"))
+    assert node_evidence(part, m, "s.pump.size")["state"] == "not_separately_observed" and node_evidence(part, m, "Q1.C02")["state"] == "not_separately_observed"
+    assert node_evidence(part, m, "s.pump.size")["summary"] == summary(not_separately_observed=1, observations=1)
+    # both recorded: the assessment decides, the exchange changes nothing
+    both = records(answer_given, part["attempts"]["a2"])
+    assert node_evidence(both, m, "s.pump.size")["state"] == "not_separately_observed" and node_evidence(both, m, "s.pump.size")["summary"]["exchanges_without_assessment"] == 1
+    assert question_evidence(both, "Q1") == question_evidence(part, "Q1")
+
+
+@pytest.mark.parametrize("assistance,reference", [("no", "none"), ("n/a", "none"), ("None", "none"), ("NONE", "none"), ("none", "n/a"), ("none", "no"), ("none", "open_book"), (7, "none"), ("none", ["notes"])])
+def test_a_token_outside_the_recorded_vocabularies_is_neither_help_nor_its_absence(assistance, reference):
+    observation = obs(assistance=assistance, reference=reference)
+    result = observation_state(observation, att("a1", "2026-09-01T10:00:00Z", [observation]))
+    assert result == {"state": "unknown", "assistance": None, "prior_exposure": "unseen"} and ev.recorded_help(observation) is None   # not readable: never a named help, never independence
+
+
+@pytest.mark.parametrize("exposure,expected", [("new", "unknown"), ("never", "unknown"), ("not_seen", "unknown"), ("Seen_Exact", "unknown"), (3, "unknown"), ("", "unknown"),
+                                               ("seen_exact", "seen"), ("same_family", "seen"), ("unseen", "unseen")])
+def test_prior_exposure_is_read_only_from_the_recorded_vocabulary(exposure, expected):
+    assert ev.exposure_of(att("a1", "2026-09-01T10:00:00Z", [obs()], exposure=exposure)) == expected
+
+
+def test_a_row_says_when_its_outcome_comes_from_a_regrade_and_when_the_regrades_disagree():
+    a1 = att("a1", "2026-09-01T10:00:00Z", [obs()], question_id="Q1")
+    plain = evidence_rows(records(a1))[0]
+    assert (plain["outcome"], plain["revised"], plain["conflict"]) == ("demonstrated", False, False)
+    regraded = evidence_rows(records(a1, regrades=[("r1", "a1", "2026-09-03T10:00:00Z", [obs(outcome="partial")])]))
+    assert len(regraded) == 1 and (regraded[0]["outcome"], regraded[0]["revised"], regraded[0]["conflict"]) == ("partial", True, False)
+    branched = records(a1)   # two regrades replace the same assessment: the reader keeps the original and marks the chain as conflicting
+    branched["effective"]["a1"] = {"assessment_id": "a1", "observations": a1["observations"], "chain": ["a1"], "conflict": True, "assessed_at": a1["recorded_at"]}
+    row = evidence_rows(branched)[0]
+    assert (row["outcome"], row["revised"], row["conflict"]) == ("demonstrated", False, True)
+    assert node_evidence(branched, model(), "s.valve.explain")["observations"][0]["conflict"] is True and node_evidence(branched, model(), "s.valve.explain")["state"] == "independent"
 
 
 def test_a_regrade_is_the_same_performance_and_a_new_response_is_another(be505):
@@ -167,7 +226,8 @@ def test_a_skill_an_assessment_did_not_separately_observe_is_exactly_that():
     recs = records(att("a1", "2026-09-01T10:00:00Z", [obs(assistance="hint"), obs("s.pump.size", outcome="not_observed", assistance="hint")], question_id="Q1"))
     pump = node_evidence(recs, model(), "s.pump.size")
     assert {k: pump[k] for k in NODE_KEYS} == {"state": "not_separately_observed", "assistance": None, "prior_exposure": "unseen", "attempts": 0}
-    assert pump["summary"] == {"independent": 0, "assisted": 0, "not_separately_observed": 1, "unknown": 0, "observations": 1, "attempts": 0, "unit": "observation"}
+    assert pump["summary"] == summary(not_separately_observed=1, observations=1)
+    assert pump["observations"][0]["help_recorded"] == "hint" and pump["observations"][0]["attempt_assessed"] is True   # the help recorded with it is kept beside the state, not as the state
     assert node_evidence(recs, model(), "c.pump")["state"] == "not_separately_observed"   # the concept is read through its skill
     assert node_evidence(recs, model(), "s.loop.tune")["state"] == "unknown"              # nothing recorded at all is a different state
     assert node_evidence(recs, model(), "s.valve.explain")["state"] == "assisted"
@@ -191,7 +251,7 @@ def test_concept_topic_and_question_nodes_follow_the_catalog_joins_and_count_eac
     m = model()
     valve = node_evidence(recs, m, "c.valve")
     assert valve["state"] == "unknown" and valve["attempts"] == 2 and valve["last_at"] == "2026-09-05T10:00:00Z"   # the latest attempt's conditions were not recorded
-    assert valve["summary"] == {"independent": 1, "assisted": 0, "not_separately_observed": 0, "unknown": 1, "observations": 2, "attempts": 2, "unit": "observation"}
+    assert valve["summary"] == summary(independent=1, unknown=1, observations=2, attempts=2)
     flow = node_evidence(recs, m, "t.flow")   # the valve skill and the pump skill; a1 carries one observation of each
     assert flow["summary"]["observations"] == 3 and flow["summary"]["attempts"] == 2 and flow["summary"]["assisted"] == 1
     assert [(o["attempt_id"], o["skill_id"]) for o in flow["observations"]] == [("a2", "s.valve.explain"), ("a1", "s.pump.size"), ("a1", "s.valve.explain")]
@@ -200,7 +260,7 @@ def test_concept_topic_and_question_nodes_follow_the_catalog_joins_and_count_eac
     assert control["state"] == "independent" and control["observations"][0]["question_id"] is None
     # a topic is read through what the outline lists under it: the valve concept sits under both topics, so its skill counts under both
     assert [(o["attempt_id"], o["skill_id"]) for o in control["observations"]] == [("a3", "s.loop.tune"), ("a2", "s.valve.explain"), ("a1", "s.valve.explain")]
-    assert control["summary"] == {"independent": 2, "assisted": 0, "not_separately_observed": 0, "unknown": 1, "observations": 3, "attempts": 3, "unit": "observation"}
+    assert control["summary"] == summary(independent=2, unknown=1, observations=3, attempts=3)
     question = node_evidence(recs, m, "Q1")
     assert question["state"] == "assisted" and question["summary"]["observations"] == 2 and question["attempts"] == 1
     assert node_evidence(recs, m, "Q3")["state"] == "unknown"   # the family-only attempt is no performance on this question

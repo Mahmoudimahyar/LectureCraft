@@ -117,22 +117,47 @@ def facet_summary(skill_rows: list[dict], mapping: dict) -> dict[str, Any]:
 # * ``not_applicable`` — the catalog binds nothing assessable to the node.
 #
 # Prior exposure (``unseen`` | ``seen`` | ``unknown``) is a separate recorded condition reported beside the state. It
-# never changes the state: a seen question is not a shown solution. An exchange that carries no observation — an answer
-# that was given, a request for help — is not an assessment: it adds no attempt and leaves every state as it was.
+# never changes the state: a seen question is not a shown solution.
+#
+# An exchange in which nothing was separately observed — an answer that was given (every observation ``not_observed``),
+# a request for help that carries no observation — is not an assessment: it adds no attempt and leaves every state as
+# it was, ALSO when it is the only record (a node with nothing else stays ``unknown``). Its rows are still listed, as
+# what they are: ``attempt_assessed`` is false on them and ``help_recorded`` keeps the help the record states, so a
+# solution that was supplied is not lost although no performance was observed under it. A ``not_observed`` row of an
+# attempt that DID observe something else is the other case: an assessment covered it without observing it on its own.
+#
+# The conditions are read from the owner's own vocabularies only. A token outside them is not readable: it is neither
+# help nor its absence, so the observation is ``unknown`` — never a named help and never independence.
 # Nothing here expresses mastery or a probability; summaries are counts beside their denominators.
 EVIDENCE_STATES_VERSION = "evidence-states/1"
 EVIDENCE_STATES = ("unknown", "not_applicable", "not_separately_observed", "assisted", "independent")
 PRIOR_EXPOSURE_VALUES = ("unseen", "seen", "unknown")
+# The owner's attempt contract (course-learning-v1) enumerates: assistance none | hint | formula_provided | worked_example |
+# solution_shown | mixed | unknown; reference_access none | notes | tools | mixed | unknown; prior_exposure unseen | same_family |
+# seen_exact | unknown. The absence tokens of R1 (``_NONE``, ``_UNEXPOSED``) keep their meaning.
+ASSISTANCE_KINDS = ("hint", "formula_provided", "worked_example", "solution_shown", "mixed")  # the assistance values that are help
+REFERENCE_KINDS = ("notes", "tools", "mixed")  # reference access that is help; reported as ``reference_<value>``
 MAX_OBSERVATIONS = 200
+_SEEN = {"seen_exact", "same_family"}
 _PRECEDENCE = ("assisted", "unknown", "independent")  # one attempt claims no more independence than its least certain observation
 
 
 def exposure_of(attempt: dict) -> str:
-    """``unseen`` | ``seen`` | ``unknown`` from the attempt's own record. Any recorded earlier contact (the same question, its family) is ``seen``."""
+    """``unseen`` | ``seen`` | ``unknown`` from the attempt's own record. A recorded earlier contact (the same question, its family)
+    is ``seen``; a value outside the recorded vocabulary is ``unknown``."""
     value = (attempt.get("question") or {}).get("prior_exposure")
-    if not isinstance(value, str) or value in _UNKNOWN:
+    if not isinstance(value, str):
         return "unknown"
-    return "unseen" if value in _UNEXPOSED else "seen"
+    return "unseen" if value in _UNEXPOSED else ("seen" if value in _SEEN else "unknown")
+
+
+def recorded_help(observation: dict) -> str | None:
+    """The kind of help the record states for one observation, whatever its outcome: the assistance, else ``reference_<value>``
+    for a reference that was open, else ``None`` (none recorded, not recorded, or not readable)."""
+    assistance, reference = observation.get("assistance"), observation.get("reference_access")
+    if isinstance(assistance, str) and assistance in ASSISTANCE_KINDS:
+        return assistance
+    return f"reference_{reference}" if isinstance(reference, str) and reference in REFERENCE_KINDS else None
 
 
 def observation_state(observation: dict, attempt: dict) -> dict[str, Any]:
@@ -140,14 +165,13 @@ def observation_state(observation: dict, attempt: dict) -> dict[str, Any]:
     exposure = exposure_of(attempt)
     if observation.get("outcome") == "not_observed":
         return {"state": "not_separately_observed", "assistance": None, "prior_exposure": exposure}
-    assistance, reference = (value if isinstance(value, str) else None for value in (observation.get("assistance"), observation.get("reference_access")))
-    if assistance not in _NONE | _UNKNOWN:
-        return {"state": "assisted", "assistance": assistance, "prior_exposure": exposure}
-    if reference not in _NONE | _UNKNOWN:  # a reference that was open is help too; the kind says that it was a reference
-        return {"state": "assisted", "assistance": f"reference_{reference}", "prior_exposure": exposure}
-    if assistance in _UNKNOWN or reference in _UNKNOWN:
-        return {"state": "unknown", "assistance": None, "prior_exposure": exposure}
-    return {"state": "independent", "assistance": None, "prior_exposure": exposure}
+    helped = recorded_help(observation)
+    if helped is not None:  # assistance outranks a reference; a reference that was open is help too, and the kind says that it was a reference
+        return {"state": "assisted", "assistance": helped, "prior_exposure": exposure}
+    assistance, reference = observation.get("assistance"), observation.get("reference_access")
+    if isinstance(assistance, str) and assistance in _NONE and isinstance(reference, str) and reference in _NONE:
+        return {"state": "independent", "assistance": None, "prior_exposure": exposure}
+    return {"state": "unknown", "assistance": None, "prior_exposure": exposure}  # a condition is not recorded, or its token is not one of the vocabulary
 
 
 def _instant(text: Any) -> float:
@@ -160,12 +184,21 @@ def _instant(text: Any) -> float:
 
 def evidence_rows(records: dict) -> list[dict[str, Any]]:
     """One row per EFFECTIVE observation, newest attempt first. A regrade replaces the observations of its attempt, so a
-    performance is listed once however often it was reassessed; an attempt without observations yields no row."""
+    performance is listed once however often it was reassessed; an attempt without observations yields no row.
+
+    Beside the state a row carries ``help_recorded`` (the help the record states, also when nothing was observed under
+    it), ``attempt_assessed`` (false when its attempt separately observed nothing: an answer that was given), ``revised``
+    (the outcome is that of a regrade) and ``conflict`` (the regrades of the attempt disagree or branch; the reader then
+    kept the last unambiguous assessment)."""
     rows = []
     for attempt_id, attempt in (records.get("attempts") or {}).items():
         effective = (records.get("effective") or {}).get(attempt_id) or {}
-        for observation in effective.get("observations", attempt.get("observations")) or []:
+        observations = effective.get("observations", attempt.get("observations")) or []
+        assessed = any(observation.get("outcome") != "not_observed" for observation in observations)
+        revised, conflict = len(effective.get("chain") or []) > 1, effective.get("conflict") is True
+        for observation in observations:
             rows.append({"attempt_id": attempt_id, "recorded_at": attempt.get("recorded_at"), "outcome": observation.get("outcome"), **observation_state(observation, attempt),
+                         "help_recorded": recorded_help(observation), "attempt_assessed": assessed, "revised": revised, "conflict": conflict,
                          "question_id": (attempt.get("question") or {}).get("question_id"), "skill_id": observation.get("skill_id"), "criterion_id": observation.get("criterion_id")})
     rows.sort(key=lambda row: str(row["skill_id"] or ""))
     rows.sort(key=lambda row: (_instant(row["recorded_at"]), row["attempt_id"]), reverse=True)
@@ -184,9 +217,12 @@ def evidence_revision(records: dict) -> str:
 
 
 def _summarise(rows: list[dict]) -> dict[str, Any]:
-    """State and counts of a set of rows (newest first). The state is that of the latest attempt that separately observed anything."""
+    """State and counts of a set of rows (newest first). The state is that of the latest attempt that separately observed the
+    thing; failing that, ``not_separately_observed`` when an assessment covered it without observing it on its own. Rows of an
+    exchange that assessed nothing move no state: with nothing else recorded the state stays ``unknown``."""
     counts = Counter(row["state"] for row in rows)
     observed = [row for row in rows if row["state"] != "not_separately_observed"]
+    covered = [row for row in rows if row["state"] == "not_separately_observed" and row.get("attempt_assessed", True)]
     out: dict[str, Any] = {"state": "unknown", "assistance": None, "prior_exposure": "unknown", "attempts": len({row["attempt_id"] for row in observed}), "last_at": None}
     if observed:
         latest = [row for row in observed if row["attempt_id"] == observed[0]["attempt_id"]]
@@ -194,10 +230,11 @@ def _summarise(rows: list[dict]) -> dict[str, Any]:
         kinds = sorted({row["assistance"] for row in latest if row["state"] == "assisted"})
         out.update(state=state, assistance=(kinds[0] if len(kinds) == 1 else "mixed") if state == "assisted" else None, prior_exposure=latest[0]["prior_exposure"],
                    last_at=latest[0]["recorded_at"])
-    elif rows:
-        out.update(state="not_separately_observed", prior_exposure=rows[0]["prior_exposure"])
+    elif covered:
+        out.update(state="not_separately_observed", prior_exposure=covered[0]["prior_exposure"])
     out["summary"] = {"independent": counts["independent"], "assisted": counts["assisted"], "not_separately_observed": counts["not_separately_observed"], "unknown": counts["unknown"],
-                      "observations": len(rows), "attempts": out["attempts"], "unit": "observation"}
+                      "observations": len(rows), "attempts": out["attempts"],
+                      "exchanges_without_assessment": len({row["attempt_id"] for row in rows if not row.get("attempt_assessed", True)}), "unit": "observation"}
     return out
 
 

@@ -2,7 +2,7 @@
 // return, tabs with roving focus, toggle groups, accordions); these wrappers add the app's look through the classes
 // of src/styles.css, so a link or a router element can wear the same class as the component. Components are written
 // here in the shadcn composition style on top of the `radix-ui` package: no template or registry copy.
-import { forwardRef, useRef, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from "react";
+import { forwardRef, useRef, type ButtonHTMLAttributes, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { Accordion as RAccordion, Dialog as RDialog, Tabs as RTabs, ToggleGroup as RToggleGroup } from "radix-ui";
 import { Check, ChevronDown, ChevronRight, Flag, Loader2, Minus, X } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
@@ -184,15 +184,47 @@ export function StaleNotice({ children, onRefresh, actionLabel = R2_ACTION.refre
 }
 
 // ---- segmented choice ---------------------------------------------------------------------------------
+const RADIO_STEP: Record<string, 1 | -1 | "first" | "last"> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1, Home: "first", End: "last" };
+/**
+ * Arrow keys, Home and End in a group of radios: go to the neighbour AND choose it, as a group of native radios does
+ * (the ends wrap around, a disabled radio is stepped over). Use it as `onKeyDownCapture` on the group or on anything
+ * around it. Radix moves focus on these keys and chooses only while it still sees the key held down when focus
+ * arrives, which a key press of no length (a switch, a voice command, a script) never is, and its toggle group never
+ * chooses at all. So the key is handled here, once, and goes no further: neither Radix nor a page that pages on arrow
+ * keys sees it. Choosing is a click on the radio, so whatever the group does on a press it does here.
+ */
+export function chooseWithArrows(event: ReactKeyboardEvent<HTMLElement>): void {
+  const step = RADIO_STEP[event.key];
+  if (step === undefined || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+  const from = event.target instanceof Element ? event.target.closest<HTMLElement>('[role="radio"]') : null;
+  const group = from?.closest('[role="radiogroup"]');
+  if (!from || !group) return;
+  const radios = Array.from(group.querySelectorAll<HTMLElement>('[role="radio"]:not(:disabled):not([aria-disabled="true"])')).filter((radio) => radio.closest('[role="radiogroup"]') === group);
+  const at = radios.indexOf(from);
+  if (at < 0) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const next = radios[step === "first" ? 0 : step === "last" ? radios.length - 1 : (at + step + radios.length) % radios.length];
+  if (!next || next === from) return;
+  next.focus();
+  if (next.getAttribute("aria-checked") !== "true") next.click();
+}
+/** The same for every segmented control under an element (the shell uses it), also one a page drew itself with the `ll-seg` classes. Other groups of radios keep their own keys. */
+export function chooseInSegmented(event: ReactKeyboardEvent<HTMLElement>): void {
+  if (event.target instanceof Element && event.target.closest('.ll-seg[role="radiogroup"]')) chooseWithArrows(event);
+}
+
 /**
  * One choice of a few: a pad track, the chosen segment drawn with the selection idiom (tint, accent text, a 1.5 px
- * ring). Arrow keys move. Never placed directly under a tab row.
+ * ring). Arrow keys move and choose. A segment may wait disabled; say why in its `title` and in a sentence nearby.
+ * Never placed directly under a tab row.
  */
-export function Segmented<T extends string>({ value, onChange, options, label, className }: { value: T; onChange: (value: T) => void; options: Array<{ value: T; label: string; icon?: ReactNode }>; label: string; className?: string }) {
+export function Segmented<T extends string>({ value, onChange, options, label, className }: { value: T; onChange: (value: T) => void;
+  options: Array<{ value: T; label: string; icon?: ReactNode; disabled?: boolean; title?: string }>; label: string; className?: string }) {
   return (
-    <RToggleGroup.Root type="single" value={value} onValueChange={(v) => v && onChange(v as T)} aria-label={label} className={cn("ll-seg", className)}>
+    <RToggleGroup.Root type="single" value={value} onValueChange={(v) => v && onChange(v as T)} aria-label={label} className={cn("ll-seg", className)} onKeyDownCapture={chooseWithArrows}>
       {options.map((option) => (
-        <RToggleGroup.Item key={option.value} value={option.value} className="ll-seg-item">
+        <RToggleGroup.Item key={option.value} value={option.value} disabled={option.disabled} title={option.title} className="ll-seg-item">
           {option.icon}
           {option.label}
         </RToggleGroup.Item>

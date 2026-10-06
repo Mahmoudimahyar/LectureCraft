@@ -8,12 +8,12 @@
 // its picture stacked); the current group (a tint block with a strip of its member pages). The current page is the one
 // selection idiom: tint, accent text, a 2 px ring on its picture. Nothing here says "Slide N": a row is named by its
 // physical page. Only the list scrolls; it keeps the current row in view and centres it when the lecture is opened.
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { BAND_CLASS } from "@/app/WorkspaceFrame";
 import { cn, ToolbarButton } from "@/components/ui";
 import { dotJoin } from "@/lib/format";
-import { NO_RANGE_OUTLINE_LINE, ROLE_LABEL, countLabel, groupRowLabel, noRangeInOutline, pagesRef } from "@/lib/labels";
+import { NBSP, NO_RANGE_OUTLINE_LINE, ROLE_LABEL, countLabel, groupRowLabel, noRangeInOutline, pagesRef } from "@/lib/labels";
 import { logicalSlides, type LogicalSlideRow } from "@/lib/r2";
 import { useFirstPageShape, useNearViewport, useThumb } from "@/lib/thumbs";
 import type { LectureView, SlideView } from "@/lib/types";
@@ -35,27 +35,67 @@ export function outlineRows(lecture: LectureView, pageCount: number): LogicalSli
 }
 
 export interface OutlineFacts {
-  /** Plain figures: "2 questions · 1 range". null when there is nothing to count. */
+  /** Plain figures: "2 questions · 1 range · 3 for its section". null when there is nothing to count. */
   figures: string | null;
   /** The page has a recording that holds nothing for it (the first four no-range states of 9.5); never on a structural page. */
   noRange: boolean;
+  /**
+   * The rows the range list shows for the page the row stands on, as the figures word them: ranges of that page or of
+   * its whole group, and ranges of its section. Their sum is the length of that list.
+   */
+  listed: { own: number; section: number };
 }
 
 /**
- * What a row says under its title. A question and a range are each counted once per row, however many member pages
- * carry them; a section range (the course's pairing of a part of the lecture with transcript lines) gives no time for
- * the page alone and is not counted. A view without R2 fields is counted from what it does carry.
+ * The ranges of a page in the words of the outline, counted as its range list shows them: "2 ranges"; with ranges of
+ * its section too, "1 range · 3 for its section" (four rows); with those alone, "3 ranges for its section only" (the
+ * course's study map pairs a part of the lecture with the recording: no time of this page alone). null for none.
  */
-export function outlineFacts(row: LogicalSlideRow, slides: ReadonlyMap<number, SlideView>): OutlineFacts {
+export function rangeNote({ own, section }: { own: number; section: number }): string | null {
+  if (own > 0) return dotJoin([countLabel(own, "range"), section > 0 ? `${section}${NBSP}for its section` : null]);
+  return section > 0 ? `${countLabel(section, "range")} for its section only` : null;
+}
+
+const SECTION_SCOPE = "section";
+/** The ids of a page's ranges as its range list holds them: its own (the page, its group, a region of it) and its section's. A view without R2 fields has its timed links. */
+function listedRanges(slide: SlideView | undefined): { own: string[]; section: string[] } {
+  if (!slide) return { own: [], section: [] };
+  if (slide.ranges === undefined) return { own: [...new Set((slide.occurrences ?? []).map((link) => link.annotation_id))], section: [] };
+  return { own: slide.ranges.filter((range) => range.support?.scope !== SECTION_SCOPE).map((range) => range.range_id),
+    section: slide.ranges.filter((range) => range.support?.scope === SECTION_SCOPE).map((range) => range.range_id) };
+}
+
+/**
+ * What a row says under its title. A question is counted once per row, however many member pages carry it. Ranges are
+ * counted as the range list of ONE page shows them, so the outline and the list never give two numbers: the page the row
+ * stands on (`shownPage`: the page on screen when it is one of the row's, else the row's first page). A range that only
+ * another page of the row carries is named with its page ("1 range on p. 7"). A view without R2 fields is counted from
+ * what it does carry.
+ */
+export function outlineFacts(row: LogicalSlideRow, slides: ReadonlyMap<number, SlideView>, shownPage: number = row.firstPage): OutlineFacts {
   const members = row.pages.map((page) => slides.get(page)).filter((slide): slide is SlideView => !!slide);
   const tied = members.some((slide) => slide.question_ties !== undefined);
   const ranged = members.some((slide) => slide.ranges !== undefined);
   const questions = tied ? row.counts.questions : new Set(members.flatMap((slide) => (slide.questions ?? []).map((question) => question.question_id))).size;
-  const ranges = ranged ? row.counts.ranges : new Set(members.flatMap((slide) => (slide.occurrences ?? []).map((link) => link.annotation_id))).size;
-  const first = members[0];
-  const noRange = !row.structural && ranged && members.every((slide) => (slide.ranges ?? []).length === 0) && !!first?.no_range && noRangeInOutline(first.no_range.state);
-  const figures = dotJoin([questions > 0 ? countLabel(questions, "question") : null, ranges > 0 ? countLabel(ranges, "range") : null]);
-  return { figures: figures || null, noRange };
+  const shown = slides.get(row.pages.includes(shownPage) ? shownPage : row.firstPage);
+  const here = listedRanges(shown);
+  const listed = { own: here.own.length, section: here.section.length };
+  // What the other pages of the row carry and this one does not: each range once, with the pages that carry it.
+  const elsewhere = new Set<string>();
+  const elsewherePages = new Set<number>();
+  for (const member of members) {
+    if (member === shown) continue;
+    for (const id of listedRanges(member).own) {
+      if (here.own.includes(id)) continue;
+      elsewhere.add(id);
+      elsewherePages.add(member.page);
+    }
+  }
+  const more = elsewhere.size > 0 ? `${listed.own > 0 ? `${elsewhere.size}${NBSP}more` : countLabel(elsewhere.size, "range")} on ${pagesRef([...elsewherePages])}` : null;
+  const state = (shown ?? members[0])?.no_range;
+  const noRange = !row.structural && ranged && members.every((slide) => (slide.ranges ?? []).length === 0) && !!state && noRangeInOutline(state.state);
+  const figures = dotJoin([questions > 0 ? countLabel(questions, "question") : null, rangeNote(listed), more]);
+  return { figures: figures || null, noRange, listed };
 }
 
 /** The rows a search for a page number or a part of a title keeps; every row for an empty search. */
@@ -70,6 +110,45 @@ export function rowName(row: LogicalSlideRow, title: string | null): string {
   const group = row.pages.length > 1;
   const groupLine = group ? groupRowLabel(row.kind, row.pages, row.grouping?.state ?? null) ?? `${countLabel(row.pages.length, "page")}, ${pagesRef(row.pages)}` : null;
   return `${group ? `Pages ${row.pages[0]}–${row.pages[row.pages.length - 1]}` : `Page ${row.firstPage}`}: ${title ?? NO_TITLE}${groupLine ? `, ${groupLine}` : ""}${row.structural ? `, ${ROLE_LABEL[row.role] ?? row.role}` : ""}`;
+}
+
+// ---- keyboard (pure) ---------------------------------------------------------------------------------------------------------
+/** One place the arrow keys stop at, in the order drawn: a row, or a page of the open group's strip. */
+export interface OutlineStop {
+  kind: "row" | "member";
+  /** A row of several pages. */
+  group?: boolean;
+  /** A group whose strip of pages is shown. */
+  open?: boolean;
+}
+export type OutlineKeyAction = { type: "focus"; index: number } | { type: "open"; index: number } | { type: "close"; index: number } | { type: "stay" };
+/**
+ * What a key does on the stop at `index`. The outline is ONE Tab stop: Up and Down move through what is shown, Home and
+ * End go to its ends, Right opens a closed group and from an open one goes to its first page, Left closes an open group
+ * and from one of its pages goes back to its row. `stay`: the key belongs to the outline and does nothing here (so
+ * Left and Right never turn the page while focus is inside it). null: not the outline's key (Enter and Space press the
+ * row, Tab leaves).
+ */
+export function outlineKeyAction(key: string, index: number, stops: readonly OutlineStop[]): OutlineKeyAction | null {
+  const stop = stops[index];
+  if (!stop) return null;
+  const focus = (target: number): OutlineKeyAction => (target >= 0 && target < stops.length && target !== index ? { type: "focus", index: target } : { type: "stay" });
+  switch (key) {
+    case "ArrowDown": return focus(index + 1);
+    case "ArrowUp": return focus(index - 1);
+    case "Home": return focus(0);
+    case "End": return focus(stops.length - 1);
+    case "ArrowRight":
+      if (stop.kind !== "row" || !stop.group) return { type: "stay" };
+      return stop.open ? (stops[index + 1]?.kind === "member" ? focus(index + 1) : { type: "stay" }) : { type: "open", index };
+    case "ArrowLeft": {
+      if (stop.kind === "row") return stop.group && stop.open ? { type: "close", index } : { type: "stay" };
+      let parent = index - 1;
+      while (parent >= 0 && stops[parent]!.kind !== "row") parent -= 1;
+      return focus(parent);
+    }
+    default: return null;
+  }
 }
 
 // ---- pictures --------------------------------------------------------------------------------------------------------------
@@ -91,8 +170,8 @@ function PageThumb({ url, page, width, fallbackShape, current, root, className }
 const ROW = "grid w-full flex-none items-start gap-x-2 gap-y-1 rounded-control border-0 bg-transparent p-2 pl-0.5 text-left transition-colors duration-[var(--ll-motion-small)]";
 /** A number column of 22 px (26 from 1920) and the content column. In rem, so the columns grow with the learner's text size as the figures and the small picture do. */
 const COLUMNS = "grid-cols-[1.375rem_minmax(0,1fr)] min-[1920px]:grid-cols-[1.625rem_minmax(0,1fr)]";
-/** The quiet row: number, small picture (56 px, 64 from 1920), words beside it from a list 216 px wide (an outline of 232 px); under it below that. */
-const QUIET_COLUMNS = `${COLUMNS} @min-[13.5rem]/outline:grid-cols-[1.375rem_3.5rem_minmax(0,1fr)] @min-[13.5rem]/outline:items-center @min-[13.5rem]/outline:gap-y-0 min-[1920px]:@min-[13.5rem]/outline:grid-cols-[1.625rem_4rem_minmax(0,1fr)]`;
+/** The quiet row: number, small picture (56 px, 64 from 1920), words beside it from a list 240 px wide (an outline of 256 px), where an ordinary title word still fits beside the picture; under it below that. */
+const QUIET_COLUMNS = `${COLUMNS} @min-[15rem]/outline:grid-cols-[1.375rem_3.5rem_minmax(0,1fr)] @min-[15rem]/outline:items-center @min-[15rem]/outline:gap-y-0 min-[1920px]:@min-[15rem]/outline:grid-cols-[1.625rem_4rem_minmax(0,1fr)]`;
 /** A title wraps in full, between words: no clamp, no ellipsis, no hyphen put into a word; only a word longer than the column is broken. */
 const TITLE = "block break-words text-ui leading-[1.125rem]";
 
@@ -152,13 +231,52 @@ export function LectureOutline({ lecture, page, pageCount, pdfUrl, onSelect, lay
   const fade = edges.top && edges.bottom ? "linear-gradient(to bottom, transparent, #000 32px, #000 calc(100% - 40px), transparent)"
     : edges.bottom ? "linear-gradient(to bottom, #000 calc(100% - 40px), transparent)" : edges.top ? "linear-gradient(to bottom, transparent, #000 32px)" : undefined;
 
+  // ---- keyboard: the list is ONE Tab stop; the arrow keys move inside it (`outlineKeyAction`) --------------------------------
+  const currentRow = rows.find((row) => row.pages.includes(page)) ?? null;
+  /** The group on screen whose strip of pages the learner closed (Left on its row). Another row on screen forgets it. */
+  const [closedGroup, setClosedGroup] = useState<string | null>(null);
+  /** The stop that holds the Tab stop: the one last focused; the row on screen after the page has changed. */
+  const [activeStop, setActiveStop] = useState<string | null>(null);
+  useEffect(() => setClosedGroup(null), [currentRow?.id]);
+  useEffect(() => setActiveStop(null), [page]);
+  const rowStop = (row: LogicalSlideRow): string => `row:${row.id}`;
+  const isOpen = (row: LogicalSlideRow): boolean => row.pages.length > 1 && row.id === currentRow?.id && closedGroup !== row.id;
+  const stopKeys = shown.flatMap((row) => [rowStop(row), ...(isOpen(row) ? row.pages.map((member) => `member:${member}`) : [])]);
+  const tabStop = activeStop !== null && stopKeys.includes(activeStop) ? activeStop : currentRow && stopKeys.includes(rowStop(currentRow)) ? rowStop(currentRow) : stopKeys[0] ?? null;
+  const tabIndexOf = (stop: string): 0 | -1 => (stop === tabStop ? 0 : -1);
+  const onListKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.altKey || event.ctrlKey || event.metaKey || !list) return;
+    const from = (event.target as HTMLElement).closest<HTMLElement>("[data-stop]");
+    if (!from) return;
+    const nodes = [...list.querySelectorAll<HTMLElement>("[data-stop]")];
+    const stops: OutlineStop[] = nodes.map((node) => (node.dataset.stop!.startsWith("member:") ? { kind: "member" } : { kind: "row", group: node.dataset.row === "group", open: node.getAttribute("aria-expanded") === "true" }));
+    const action = outlineKeyAction(event.key, nodes.indexOf(from), stops);
+    if (!action) return;
+    event.preventDefault(); // the key is the outline's: the list is not scrolled by the browser and the page is not turned
+    event.stopPropagation();
+    if (action.type === "stay") return;
+    const node = nodes[action.index]!;
+    if (action.type === "focus") {
+      setActiveStop(node.dataset.stop!);
+      node.focus();
+      return;
+    }
+    const row = shown.find((entry) => rowStop(entry) === node.dataset.stop);
+    if (!row) return;
+    if (action.type === "close") setClosedGroup(row.id);
+    else if (row.id === currentRow?.id) setClosedGroup(null);
+    else onSelect(row.firstPage); // a group opens by going to it
+  };
+
   const renderRow = (row: LogicalSlideRow) => {
     const current = row.pages.includes(page);
     const title = row.title ?? slides.get(row.firstPage)?.title ?? null;
-    const facts = outlineFacts(row, slides);
     const group = row.pages.length > 1;
+    const open = isOpen(row);
     const groupLine = group ? groupRowLabel(row.kind, row.pages, row.grouping?.state ?? null) ?? `${countLabel(row.pages.length, "page")}, ${pagesRef(row.pages)}` : null;
     const shownPage = current ? page : row.firstPage;
+    const facts = outlineFacts(row, slides, shownPage);
+    const stop = rowStop(row);
     const number = <span className={cn("ll-num pt-px text-right text-micro", current ? "font-semibold text-accent-text" : "text-muted")}>{shownPage}</span>;
     const name = rowName(row, title);
     const role = ROLE_LABEL[row.role] ?? String(row.role).replace(/_/g, " ");
@@ -169,13 +287,15 @@ export function LectureOutline({ lecture, page, pageCount, pdfUrl, onSelect, lay
     if (row.structural && !group && !grid) {
       return (
         <div key={row.id} ref={current ? currentRef : undefined} className="flex-none">
-          <button type="button" onClick={() => onSelect(row.firstPage)} aria-current={current ? "true" : undefined} aria-label={name} data-row="structural"
+          <button type="button" onClick={() => onSelect(row.firstPage)} aria-current={current ? "true" : undefined} aria-label={name} data-row="structural" data-stop={stop} tabIndex={tabIndexOf(stop)}
             className={cn(ROW, QUIET_COLUMNS, current ? "bg-tint hover:bg-tint-strong" : "hover:bg-pad")}>
             {number}
             <PageThumb url={pdfUrl} page={row.firstPage} width={64} fallbackShape={firstShape} current={current} root={list} className="w-14 min-[1920px]:w-16" />
-            <span className="col-start-2 min-w-0 @min-[13.5rem]/outline:col-start-3 @min-[13.5rem]/outline:row-start-1">
+            <span className="col-start-2 min-w-0 @min-[15rem]/outline:col-start-3 @min-[15rem]/outline:row-start-1">
               <span className={cn(TITLE, "font-semibold", current ? "text-accent-text" : "text-muted")}>{title ?? NO_TITLE}</span>
               <span className="block text-ui leading-[1.125rem] text-muted">{role}</span>
+              {/* Talk that is supported over a title or housekeeping page stays listed there, so its row counts it too. */}
+              {facts.figures && <span className="ll-num block text-ui leading-[1.125rem] text-muted" data-row-figures="">{facts.figures}</span>}
             </span>
           </button>
         </div>
@@ -183,16 +303,16 @@ export function LectureOutline({ lecture, page, pageCount, pdfUrl, onSelect, lay
     }
     const quiet = row.structural && !group;
     const body = (
-      <button type="button" onClick={() => onSelect(current ? page : row.firstPage)} aria-current={current && !group ? "true" : undefined} aria-expanded={group ? current : undefined} aria-label={name}
-        data-row={group ? "group" : quiet ? "structural" : "page"} className={cn(ROW, COLUMNS, !(current && group) && (current ? "bg-tint hover:bg-tint-strong" : "hover:bg-pad"))}>
+      <button type="button" onClick={() => { if (current && group) setClosedGroup(null); onSelect(current ? page : row.firstPage); }} aria-current={current && !group ? "true" : undefined} aria-expanded={group ? open : undefined}
+        aria-label={name} data-row={group ? "group" : quiet ? "structural" : "page"} data-stop={stop} tabIndex={tabIndexOf(stop)} className={cn(ROW, COLUMNS, !(current && group) && (current ? "bg-tint hover:bg-tint-strong" : "hover:bg-pad"))}>
         {number}
         <PageThumb url={pdfUrl} page={shownPage} width={thumbWidth} fallbackShape={firstShape} current={current} root={list} className={cn(group && !current && PILE)} />
-        {group ? (current ? <ChevronUp aria-hidden className="mt-px size-4 justify-self-end text-accent-text" /> : <ChevronDown aria-hidden className="mt-px size-4 justify-self-end text-muted" />) : <span />}
+        {group ? (open ? <ChevronUp aria-hidden className="mt-px size-4 justify-self-end text-accent-text" /> : <ChevronDown aria-hidden className={cn("mt-px size-4 justify-self-end", current ? "text-accent-text" : "text-muted")} />) : <span />}
         <span className="min-w-0">
           <span className={cn(TITLE, current ? "font-semibold text-accent-text" : quiet ? "font-semibold text-muted" : !title && "text-muted")}>{title ?? NO_TITLE}</span>
           {quiet && <span className="block text-ui leading-[1.125rem] text-muted">{role}</span>}
           {groupLine && <span className={cn("ll-num block text-ui leading-[1.125rem]", current ? "text-ink" : "text-muted")}>{groupLine}</span>}
-          {facts.figures && <span className="ll-num block text-ui leading-[1.125rem] text-muted">{facts.figures}</span>}
+          {facts.figures && <span className="ll-num block text-ui leading-[1.125rem] text-muted" data-row-figures="">{facts.figures}</span>}
           {facts.noRange && <span className="block text-ui leading-[1.125rem] text-muted">{NO_RANGE_OUTLINE_LINE}</span>}
         </span>
       </button>
@@ -202,10 +322,11 @@ export function LectureOutline({ lecture, page, pageCount, pdfUrl, onSelect, lay
       <div key={row.id} ref={current ? currentRef : undefined} className={cn("flex-none rounded-control", current && "bg-tint", grid && current && "col-span-2 max-[599px]:col-span-full")} aria-current={current ? "true" : undefined}
         data-group={row.kind}>
         {body}
-        {current && (
+        {open && (
           <div role="group" aria-label="Pages of this slide" className="grid grid-cols-3 gap-2 px-2 pb-2 pl-8 min-[1920px]:pl-9" data-testid="outline-builds">
             {row.pages.map((member, index) => (
               <button key={member} type="button" onClick={() => onSelect(member)} aria-current={member === page ? "true" : undefined} aria-label={`Page ${member}, ${index + 1} of ${row.pages.length}`}
+                data-stop={`member:${member}`} tabIndex={tabIndexOf(`member:${member}`)}
                 className={cn("grid justify-items-center gap-0.5 rounded-thumb border-0 bg-transparent p-[3px] pb-px text-micro transition-colors duration-[var(--ll-motion-small)]",
                   member === page ? "font-semibold text-accent-text" : "text-muted hover:bg-pad")}>
                 <PageThumb url={pdfUrl} page={member} width={grid ? 120 : 64} fallbackShape={firstShape} current={member === page} root={list} className="w-full" />
@@ -240,7 +361,8 @@ export function LectureOutline({ lecture, page, pageCount, pdfUrl, onSelect, lay
         )}
         <ToolbarButton onClick={() => { setFinding((on) => !on); setNeedle(""); }} aria-expanded={finding} className="flex-none">{finding ? "Close" : "Find"}</ToolbarButton>
       </div>
-      <div ref={setList} onScroll={measureEdges} role="navigation" aria-label="Pages"
+      <div ref={setList} onScroll={measureEdges} role="navigation" aria-label="Pages" onKeyDown={onListKey}
+        onFocus={(event) => { const stop = (event.target as HTMLElement).closest<HTMLElement>("[data-stop]")?.dataset.stop; if (stop) setActiveStop(stop); }}
         className={cn("@container/outline min-h-0 flex-1 overflow-y-auto overflow-x-hidden [scrollbar-width:thin]",
           // 160 px cells at the ordinary text size; in rem, so that enlarged text gets wider cells and fewer columns.
           grid ? "grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] content-start gap-2 p-3" : "flex flex-col gap-1 px-2 pb-4 pt-2")}

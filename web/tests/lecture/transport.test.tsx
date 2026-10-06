@@ -2,25 +2,35 @@
 // DockedTransport.tsx; design specification 5.5, 5.6, 4.4, 9.4, 9.5): what each state says and offers. Rendered in
 // jsdom with the synthetic sample of web/src/lib/fixtures/r2-sample.ts; the media element is a LABELED DOUBLE (jsdom
 // plays nothing: `play` and `pause` are stubbed). Real playback is checked in a browser (.local/preview/l2/range-check.mjs).
-import { createRef, type ReactElement } from "react";
+import { createRef, useState, type ReactElement } from "react";
 import { MemoryRouter } from "react-router";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DockedTransport } from "@/features/lecture/DockedTransport";
-import { CANDIDATE_WORDS, RangeList, candidateId, qualityLine, rangeKindParts, rangeKindWords } from "@/features/lecture/RangeList";
-import { Transport, barLayout, noRangeLine, playLabel, processedShare, rangesFromLinks, scrubberValueText, shareLabel, spokenTime, trackSegments } from "@/features/lecture/Transport";
+import { POSITION_STORAGE_PREFIX, readStoredPosition } from "@/features/lecture/ClipPlayer";
+import { CANDIDATE_WORDS, RangeList, candidateId, qualityLine, rangeKindParts, rangeKindWords, rangeListLead, rangesOverlap } from "@/features/lecture/RangeList";
+import {
+  Transport, barLayout, noRangeLine, playLabel, processedSpan, rangesFromLinks, scrubberValueText, sessionLinkNote, spokenTime, trackSegments,
+} from "@/features/lecture/Transport";
 import { WHOLE_RECORDING, type LecturePlayerHandle } from "@/features/lecture/contracts";
 import {
   sampleLectureView, sampleLectureViewWithoutR2, sampleNoRange, sampleRangeBuildGroup, sampleRangeConfirmed, sampleRangeFirstVisit, sampleRangeManual, sampleRangeSecondVisit, sampleRangeSection,
 } from "@/lib/fixtures/r2-sample";
 import { NBSP } from "@/lib/labels";
+import { rangesForPage } from "@/lib/r2";
 import type { LectureView, NoRange, Occurrence, TimingRange } from "@/lib/types";
 
 const text = (element: Element | null): string => (element?.textContent ?? "").split(NBSP).join(" ").replace(/\s+/g, " ").trim();
+/** A label with its non-breaking spaces as plain ones. */
+const plain = (value: string): string => value.split(NBSP).join(" ");
 const recordings = sampleLectureView.recordings;
 const DURATION = recordings[0]!.duration_ms!;
+/** The sample lecture as the Brain sends one whose session the course's index does not link (r2-read-api 1.4, D79). Synthetic file names. */
+const offeredByFileName = { ...sampleLectureView, session_link: "suggested_by_file_name", session_link_evidence: { state: "suggested", rule: "lecture number in the recording or transcript file name equals the unit number",
+  number: 90, session_id: "session-sample-90", files: ["Sample Lec 90.m4a", "Sample Lec 90.txt"], note: "Synthetic sample." } } as LectureView;
 
 beforeEach(() => {
+  window.localStorage.clear(); // the position of a lecture is kept on the device: no test starts from another's
   vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(function play(this: HTMLMediaElement) {
     Object.defineProperty(this, "paused", { configurable: true, value: false });
     return Promise.resolve();
@@ -98,44 +108,64 @@ describe("the one line of a page without a range", () => {
     expect(new Set(Object.values(lines).map((line) => line!.name)).size).toBe(6); // the same name never serves two states
   });
 
-  it("says how much was processed when talk was looked for in a processed part only", () => {
+  it("says in times how much was transcribed when talk was looked for in that part only, and never as a percentage", () => {
     // 0:00 – 40:00 of a recording of 1 h 20 min
-    expect(processedShare(sampleNoRange.audio_unprocessed, recordings)).toBeCloseTo(0.5, 6);
-    expect(text({ textContent: noRangeLine(sampleNoRange.audio_unprocessed, recordings).name } as Element)).toBe("Not found in the processed part of the recording (50.0 %)");
-    const almost: NoRange = { state: "audio_unprocessed", text: "Timing covers 1:19:46 of the recording's 1:20:00; nothing was found for this page in that part.",
+    expect(processedSpan(sampleNoRange.audio_unprocessed, recordings)).toEqual({ coveredMs: 2_400_000, totalMs: DURATION });
+    expect(plain(noRangeLine(sampleNoRange.audio_unprocessed, recordings).name)).toBe("Not found in the transcribed 40:00 of 1:20:00");
+    // 1 h 19 min 45.6 s of 1 h 20 min: whole seconds counted down, as the Brain's own sentence writes them
+    const almost: NoRange = { state: "audio_unprocessed", text: "Timing covers 1:19:45 of the recording's 1:20:00; nothing was found for this page in that part.",
       detail: { processed: [[recordings[0]!.source_id, 0, 2_000_000], [recordings[0]!.source_id, 2_014_400, DURATION]], reason: "partly_processed" } };
-    expect(text({ textContent: noRangeLine(almost, recordings).name } as Element)).toBe("Not found in the processed part of the recording (99.7 %)");
-    expect(text({ textContent: noRangeLine(almost, recordings).brief } as Element)).toBe("Not found in 99.7 %"); // a phone-wide bar still says how much
-    expect(noRangeLine(almost, recordings).action).toBe("open_whole_recording");
+    const line = noRangeLine(almost, recordings);
+    expect(plain(line.name)).toBe("Not found in the transcribed 1:19:45 of 1:20:00");
+    expect(line.sentence).toContain(plain(line.name).replace("Not found in the transcribed ", "").replace(" of ", " of the recording's ")); // the line and the sentence it opens agree to the second
+    expect(line.brief).toBe("Not found in the transcribed part"); // the figures leave a bar too narrow for them; they are in the full text
+    expect(line.short).toBe("The rest has no speech timing yet.");
+    expect(line.sentence).toBe(almost.text); // the Brain's sentence, verbatim, opens in full
+    expect(line.action).toBe("open_whole_recording");
+    expect(JSON.stringify(line)).not.toContain("%");
+  });
+
+  it("never writes a part under the whole as the whole", () => {
+    const nearly: NoRange = { state: "audio_unprocessed", text: "Nearly all of it has timing.", detail: { processed: [[recordings[0]!.source_id, 0, DURATION - 400]], reason: "partly_processed" } };
+    expect(plain(noRangeLine(nearly, recordings).name)).toBe("Not found in the transcribed 1:19:59 of 1:20:00");
   });
 
   it("keeps the contract's name while nothing of the recording has timing", () => {
     const none: NoRange = { state: "audio_unprocessed", text: "The recording has not been processed yet.", detail: { processed: [], reason: "no_generated_timing" } };
-    expect(noRangeLine(none, recordings)).toEqual({ name: "Audio not processed yet", brief: "Audio not processed yet", sentence: "The recording has not been processed yet.", action: "open_whole_recording" });
+    expect(noRangeLine(none, recordings)).toEqual({ name: "Audio not processed yet", brief: "Audio not processed yet", short: "This recording has no speech timing yet.", sentence: "The recording has not been processed yet.",
+      action: "open_whole_recording" });
   });
 
-  it("states no share that it cannot work out", () => {
+  it("states no figure that it cannot work out", () => {
     const unknownLength: NoRange = { state: "audio_unprocessed", text: "Only part has timing.", detail: { processed: [["some-other-recording", 0, 60_000]], reason: "partly_processed" } };
-    expect(processedShare(unknownLength, recordings)).toBeNull();
-    expect(noRangeLine(unknownLength, recordings).name).toBe("Not found in the processed part of the recording");
+    expect(processedSpan(unknownLength, recordings)).toBeNull();
+    expect(noRangeLine(unknownLength, recordings).name).toBe("Not found in the transcribed part of the recording");
+    // a stated share of a recording whose length is known gives the two times; of one whose length is not known, nothing
     const stated: NoRange = { state: "audio_unprocessed", text: "Only part has timing.", detail: { processed: [["some-other-recording", 0, 60_000]], reason: "partly_processed",
-      coverage: [{ recording_source_id: "some-other-recording", coverage_fraction: 0.25, covers_whole_recording: false, unresolved_ms: 0, lines_aligned: null, lines_total: null }] } };
-    expect(processedShare(stated, recordings)).toBe(0.25);
-    expect(processedShare(sampleNoRange.not_discussed, recordings)).toBeNull();
+      coverage: [{ recording_source_id: recordings[0]!.source_id, coverage_fraction: 0.25, covers_whole_recording: false, unresolved_ms: 0, lines_aligned: null, lines_total: null }] } };
+    expect(processedSpan(stated, recordings)).toEqual({ coveredMs: DURATION / 4, totalMs: DURATION });
+    expect(processedSpan(sampleNoRange.not_discussed, recordings)).toBeNull();
   });
 
-  it("never writes a share under the whole as 100, nor one above nothing as 0", () => {
-    expect(text({ textContent: shareLabel(0.9997) } as Element)).toBe("99.9 %");
-    expect(text({ textContent: shareLabel(0.99999) } as Element)).toBe("99.9 %");
-    expect(text({ textContent: shareLabel(1) } as Element)).toBe("100 %");
-    expect(text({ textContent: shareLabel(0.00001) } as Element)).toBe("0.1 %");
-    expect(text({ textContent: shareLabel(0) } as Element)).toBe("0.0 %");
-    expect(text({ textContent: shareLabel(0.9466666) } as Element)).toBe("94.7 %");
+  it("has a second clause short enough for a bar of 560 px for every state, each its own", () => {
+    const shorts = (Object.keys(sampleNoRange) as Array<keyof typeof sampleNoRange>).filter((state) => state !== "recording_unavailable").map((state) => noRangeLine(sampleNoRange[state], recordings));
+    for (const line of shorts) {
+      expect(line.short).toMatch(/\.$/);
+      expect(line.name.length).toBeLessThanOrEqual(48); // the name alone is what a bar of 560 px holds beside the action
+      expect(line.brief.length).toBeLessThanOrEqual(34);
+      expect(line.short.length).toBeLessThanOrEqual(46);
+      expect(line.short).not.toContain("%");
+    }
+    expect(new Set(shorts.map((line) => line.short)).size).toBe(shorts.length);
+    expect(noRangeLine(sampleNoRange.association_not_run, recordings).short).toBe("Its inputs changed since slide matching ran.");
+    expect(plain(noRangeLine(sampleNoRange.ambiguous, recordings).short)).toBe("2 candidates, none clear enough to show.");
+    expect(noRangeLine(sampleNoRange.no_range_expected, recordings).short).toBe("No recording range is expected here.");
+    expect(noRangeLine(sampleNoRange.not_discussed, recordings).short).toBe("No talk about this slide was found.");
   });
 
   it("shows a state this build has no words for as recorded, with its sentence and no action", () => {
     const later = { state: "held_for_review", text: "A later Brain says this.", detail: {} } as unknown as NoRange;
-    expect(noRangeLine(later, recordings)).toEqual({ name: "Held for review", brief: "Held for review", sentence: "A later Brain says this.", action: null });
+    expect(noRangeLine(later, recordings)).toEqual({ name: "Held for review", brief: "Held for review", short: "", sentence: "A later Brain says this.", action: null });
   });
 });
 
@@ -305,7 +335,7 @@ describe("the transport bar with a range selected", () => {
 });
 
 describe("the transport bar on a page without a range", () => {
-  it("shows the one line of the state and one action; nothing can be played until the whole recording is opened", () => {
+  it("shows the one line of the state and one action; the action opens the whole recording, paused", () => {
     const { element } = bar(sampleLectureView, 8, WHOLE_RECORDING);
     render(element);
     const noRange = screen.getByTestId("no-range-line");
@@ -313,36 +343,71 @@ describe("the transport bar on a page without a range", () => {
     expect(text(noRange)).toContain("Not discussed (searched)");
     expect(text(noRange)).toContain("The whole recording was processed and matched; nothing was found for this page.");
     expect(within(noRange).getAllByRole("button").filter((button) => !button.getAttribute("aria-label")?.startsWith("Read in full"))).toHaveLength(1);
-    expect(screen.getByTestId("play-toggle")).toBeDisabled();
     expect(screen.queryByRole("slider")).toBeNull();
     expect(screen.getByRole("button", { name: "Repeat this range" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Open whole recording" }));
-    expect(screen.getByTestId("play-toggle")).toBeEnabled();
-    expect(screen.getByTestId("play-toggle")).toHaveAccessibleName("Play the whole recording");
+    expect(screen.getByTestId("transport")).toHaveAttribute("data-mode", "opened");
+    expect(screen.getByTestId("play-toggle")).toHaveAccessibleName("Play the whole recording"); // opened, not started
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
     expect(screen.getByRole("slider", { name: "Position in the whole recording" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Whole recording" })).toHaveAttribute("aria-pressed", "true");
     expect(text(screen.getByTestId("no-range-line"))).toContain("Not discussed (searched)"); // the reason stays
   });
 
-  it("says how much of the recording was processed when nothing was found in that part", () => {
+  it("never has a dead play control while the recording can be read: Play opens the whole recording and plays it", async () => {
+    for (const page of [8, 9, 10, 1, 6]) { // not discussed, partly transcribed, not matched, structural, ambiguous
+      const { element } = bar(sampleLectureView, page, WHOLE_RECORDING);
+      const view = render(element);
+      expect(screen.getByTestId("transport")).toHaveAttribute("data-mode", "idle");
+      const play = screen.getByTestId("play-toggle");
+      expect(play).toBeEnabled();
+      expect(play).toHaveAccessibleName("Play the whole recording");
+      await act(async () => { fireEvent.click(play); });
+      expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("transport")).toHaveAttribute("data-mode", "opened");
+      expect(screen.getByTestId("play-toggle")).toHaveAccessibleName("Pause");
+      expect(screen.getByRole("slider", { name: "Position in the whole recording" })).toBeInTheDocument();
+      expect(text(screen.getByTestId("no-range-line"))).toContain(plain(noRangeLine(sampleLectureView.slides.find((slide) => slide.page === page)!.no_range!, recordings).name)); // the state stays said
+      view.unmount();
+      vi.mocked(HTMLMediaElement.prototype.play).mockClear();
+    }
+  });
+
+  it("shows where the player stands on a page without a range, not 0:00", async () => {
+    const { probe, element } = bar(sampleLectureView, 8, WHOLE_RECORDING);
+    render(element);
+    await act(async () => probe.player.current!.seekTo(118_000));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Whole recording" })); }); // closed again: nothing is selected
+    expect(screen.getByTestId("transport")).toHaveAttribute("data-mode", "idle");
+    expect(text(screen.getByTestId("time-readout"))).toBe("1:58 / 1:20:00");
+  });
+
+  it("says in times how much of the recording was transcribed when nothing was found in that part", () => {
     const { element } = bar(sampleLectureView, 9, WHOLE_RECORDING);
     render(element);
     expect(screen.getByTestId("no-range-line")).toHaveAttribute("data-state", "audio_unprocessed");
-    expect(text(screen.getByTestId("no-range-line"))).toContain("Not found in the processed part of the recording (50.0 %)");
+    expect(text(screen.getByTestId("no-range-line"))).toContain("Not found in the transcribed 40:00 of 1:20:00");
+    expect(text(screen.getByTestId("no-range-line"))).not.toContain("%");
     expect(screen.getByRole("button", { name: "Open whole recording" })).toBeInTheDocument();
   });
 
-  it("offers Next content on a structural page, and Show candidates on an ambiguous one", () => {
+  it("offers Next content on a structural page, and Show candidates on an ambiguous one; the Whole recording toggle stays on the line", () => {
     const structural = bar(sampleLectureView, 1, WHOLE_RECORDING);
     const first = render(structural.element);
     expect(text(screen.getByTestId("no-range-line"))).toContain("Structural page");
     fireEvent.click(screen.getByRole("button", { name: "Next content" }));
     expect(structural.probe.next).toBe(1);
     expect(screen.queryByRole("button", { name: "Open whole recording" })).toBeNull();
+    const toggle = within(screen.getByTestId("no-range-line")).getByRole("button", { name: "Whole recording" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(toggle);
+    expect(within(screen.getByTestId("no-range-line")).getByRole("button", { name: "Whole recording" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Next content" })).toBeInTheDocument(); // the one action of the state stays
     first.unmount();
     render(bar(sampleLectureView, 6, WHOLE_RECORDING).element);
     expect(text(screen.getByTestId("no-range-line"))).toContain("Ambiguous");
     expect(screen.getByRole("button", { name: "Show candidates" })).toBeInTheDocument();
+    expect(within(screen.getByTestId("no-range-line")).getByRole("button", { name: "Whole recording" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("draws no control when the recording is unavailable: the name and the sentence only", () => {
@@ -361,12 +426,13 @@ describe("the transport bar on a page without a range", () => {
     expect(document.querySelectorAll("audio, video")).toHaveLength(0);
   });
 
-  it("opens the whole recording when the workspace asks the idle player to play or to go to a time", () => {
+  it("opens the whole recording when the workspace asks the idle player to play or to go to a time", async () => {
     const { probe, element } = bar(sampleLectureView, 8, WHOLE_RECORDING);
     render(element);
-    expect(screen.getByTestId("play-toggle")).toBeDisabled();
-    act(() => probe.player.current!.seekTo(90_000));
-    expect(screen.getByTestId("play-toggle")).toBeEnabled();
+    expect(screen.getByTestId("transport")).toHaveAttribute("data-mode", "idle");
+    await act(async () => probe.player.current!.seekTo(90_000));
+    expect(screen.getByTestId("transport")).toHaveAttribute("data-mode", "opened");
+    expect(screen.getByRole("slider", { name: "Position in the whole recording" })).toHaveAttribute("aria-valuetext", "1 minute 30 seconds of 1 hour 20 minutes");
   });
 });
 
@@ -378,6 +444,157 @@ describe("the transport bar without range data (an older Brain)", () => {
     expect(screen.queryByTestId("range-stepper")).toBeNull();
     expect(screen.getByTestId("play-toggle")).toBeEnabled();
     expect(screen.getByTestId("play-toggle")).toHaveAccessibleName("Play the whole recording");
+  });
+});
+
+// ---- a recording that was only offered to the lecture ------------------------------------------------------------------------
+describe("a lecture whose recording was only offered to it by its file name", () => {
+  beforeEach(() => {
+    vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("is worded from the evidence, with the file names; a session the course's index links says nothing", () => {
+    expect(sessionLinkNote(sampleLectureView)).toBeNull();
+    expect(sessionLinkNote({ ...sampleLectureView, session_link: "none_recorded" })).toBeNull();
+    const note = sessionLinkNote(offeredByFileName)!;
+    expect(note.short).toBe("recording offered by its file name");
+    expect(note.full).toContain("(Sample Lec 90.m4a, Sample Lec 90.txt)");
+    expect(sessionLinkNote({ ...offeredByFileName, session_link_evidence: null } as LectureView)!.full).toBe("The recording was offered to this lecture by its file name; the course's index does not link it. Every range of this lecture rests on that suggestion.");
+  });
+
+  it("says so on the range line, in the Whole recording row and at the head of the list, once in each", () => {
+    const ranged = render(bar(offeredByFileName, 2, sampleRangeFirstVisit.range_id).element);
+    expect(text(screen.getByTestId("range-line"))).toContain("Suggestion (wording match)· this page · recording offered by its file name");
+    fireEvent.click(screen.getByTestId("range-list-toggle"));
+    expect(text(screen.getByTestId("range-list-note"))).toContain("offered to this lecture by its file name (Sample Lec 90.m4a, Sample Lec 90.txt)");
+    ranged.unmount();
+    render(bar(offeredByFileName, 2, WHOLE_RECORDING).element);
+    expect(text(screen.getByTestId("range-line"))).toContain("The recording was offered to this lecture by its file name.");
+    expect(text(screen.getByTestId("range-line")).match(/offered/g)).toHaveLength(1);
+  });
+
+  it("says so in the full text of a page without a range", () => {
+    render(bar(offeredByFileName, 8, WHOLE_RECORDING).element);
+    fireEvent.click(screen.getByRole("button", { name: /^Read in full: Not discussed \(searched\)\. / }));
+    expect(text(screen.getByTestId("range-line-full"))).toContain("The whole recording was processed and matched; nothing was found for this page.The recording was offered to this lecture by its file name (Sample Lec 90.m4a, Sample Lec 90.txt)");
+  });
+
+  it("says nothing of the kind for a lecture whose session the course's index links", () => {
+    render(bar(sampleLectureView, 2, sampleRangeFirstVisit.range_id).element);
+    expect(text(screen.getByTestId("range-line"))).not.toContain("offered");
+    fireEvent.click(screen.getByTestId("range-list-toggle"));
+    expect(screen.queryByTestId("range-list-note")).toBeNull();
+  });
+});
+
+// ---- where the learner was -----------------------------------------------------------------------------------------------
+/** A workspace in small: it holds the selection as the lecture workspace does (the page's first range until the learner chooses). */
+function Workspace({ view, page, player, chosen }: { view: LectureView; page: number; player: { current: LecturePlayerHandle | null }; chosen?: string[] }) {
+  const [selection, setSelection] = useState<{ page: number; value: string } | null>(null);
+  const fallback = rangesForPage(view, page).selectedDefault?.range_id ?? WHOLE_RECORDING;
+  return (
+    <MemoryRouter>
+      <Transport lecture={view} page={page} slide={view.slides.find((slide) => slide.page === page)} selection={selection?.page === page ? selection.value : fallback}
+        onSelect={(next) => { chosen?.push(next); setSelection({ page, value: next }); }} playerRef={player} onTime={() => undefined} onAddMatch={() => undefined} />
+    </MemoryRouter>
+  );
+}
+const stored = () => readStoredPosition(`${sampleLectureView.course_id}/${sampleLectureView.lecture_id}`);
+
+describe("where the learner was, kept on this device", () => {
+  const open = async (page: number, view: LectureView = sampleLectureView) => {
+    const player = { current: null as LecturePlayerHandle | null };
+    const chosen: string[] = [];
+    let rendered!: ReturnType<typeof render>;
+    await act(async () => { rendered = render(<Workspace view={view} page={page} player={player} chosen={chosen} />); });
+    return { player, chosen, rendered };
+  };
+
+  it("puts the whole recording and the time back, paused, when the same page is opened again", async () => {
+    const first = await open(2);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Whole recording" })); });
+    await act(async () => { fireEvent.change(screen.getByRole("slider", { name: "Position in the whole recording" }), { target: { value: "108250" } }); });
+    expect(first.player.current!.currentMs()).toBe(108_250);
+    first.rendered.unmount(); // a concept or a question page is opened
+    expect(stored()).toMatchObject({ page: 2, selection: WHOLE_RECORDING, ms: 108_250, recording: recordings[0]!.source_id });
+
+    const again = await open(2); // "Back to page 2", the browser's Back, Resume
+    expect(screen.getByTestId("transport")).toHaveAttribute("data-mode", "whole");
+    expect(again.player.current!.currentMs()).toBe(108_250);
+    expect(text(screen.getByTestId("time-readout"))).toBe("1:48 / 1:20:00");
+    expect(again.player.current!.isPlaying()).toBe(false);
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled(); // never plays by itself
+  });
+
+  it("puts the selected range, the time inside it and Repeat back", async () => {
+    const first = await open(2);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Next range" })); }); // the second visit
+    expect(text(screen.getByTestId("range-times"))).toBe("41:10 – 42:05");
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Repeat this range" })); });
+    await act(async () => { fireEvent.change(screen.getByRole("slider", { name: "Position in the selected range" }), { target: { value: String(sampleRangeSecondVisit.start_ms + 4_000) } }); });
+    first.rendered.unmount();
+    expect(stored()).toMatchObject({ page: 2, selection: sampleRangeSecondVisit.range_id, ms: sampleRangeSecondVisit.start_ms + 4_000, repeat: true });
+
+    const again = await open(2);
+    expect(again.chosen).toEqual([sampleRangeSecondVisit.range_id]); // the selection is asked of the workspace, once
+    expect(text(screen.getByTestId("range-times"))).toBe("41:10 – 42:05");
+    expect(again.player.current!.currentMs()).toBe(sampleRangeSecondVisit.start_ms + 4_000); // not the start of the range
+    expect(screen.getByRole("button", { name: "Repeat this range" })).toHaveAttribute("aria-pressed", "true");
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+  });
+
+  it("puts an opened whole recording back on a page without a range", async () => {
+    const first = await open(8);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Open whole recording" })); });
+    await act(async () => { fireEvent.change(screen.getByRole("slider", { name: "Position in the whole recording" }), { target: { value: "58250" } }); });
+    first.rendered.unmount();
+    expect(stored()).toMatchObject({ page: 8, selection: WHOLE_RECORDING, whole: true, ms: 58_250 });
+    const again = await open(8);
+    expect(screen.getByTestId("transport")).toHaveAttribute("data-mode", "opened");
+    expect(again.player.current!.currentMs()).toBe(58_250);
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+  });
+
+  it("is the position of one page: another page of the lecture starts from its own first range", async () => {
+    const first = await open(2);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Whole recording" })); });
+    first.rendered.unmount();
+    const other = await open(7);
+    expect(screen.getByTestId("transport")).toHaveAttribute("data-mode", "range");
+    expect(other.player.current!.currentMs()).toBe(sampleRangeConfirmed.start_ms);
+    expect(other.chosen).toEqual([]);
+  });
+
+  it("plays a range to its end when its row in the list is pressed (UI contract R2); the stepper of the line only moves", async () => {
+    vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+    const { player, chosen } = await open(2);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Next range" })); });
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled(); // paused before, paused after
+    await act(async () => { fireEvent.click(screen.getByTestId("range-list-toggle")); });
+    const rows = () => within(screen.getByTestId("range-list")).getAllByRole("radio");
+    expect(rows()).toHaveLength(3);
+    await act(async () => { fireEvent.click(rows()[0]!); }); // the section's range
+    expect(chosen).toEqual([sampleRangeSecondVisit.range_id, sampleRangeSection.range_id]);
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1);
+    expect(player.current!.currentMs()).toBe(sampleRangeSection.start_ms);
+    await act(async () => { fireEvent.click(rows()[0]!); }); // the chosen row again: from its start
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2);
+    expect(player.current!.currentMs()).toBe(sampleRangeSection.start_ms);
+    vi.unstubAllGlobals();
+  });
+
+  it("forces nothing when the stored range is no longer listed, and reads no record it does not understand", async () => {
+    const key = `${POSITION_STORAGE_PREFIX}${sampleLectureView.course_id}/${sampleLectureView.lecture_id}`;
+    window.localStorage.setItem(key, JSON.stringify({ page: 2, selection: "a-range-of-an-earlier-build", whole: false, recording: recordings[0]!.source_id, ms: 9_000, repeat: false, saved_at: 1 }));
+    const gone = await open(2);
+    expect(gone.chosen).toEqual([]);
+    expect(gone.player.current!.currentMs()).toBe(sampleRangeFirstVisit.start_ms);
+    gone.rendered.unmount();
+    for (const record of ["not json", JSON.stringify({ page: "2", selection: "whole", ms: 5 }), JSON.stringify({ page: 2, selection: "whole", ms: -1 }), JSON.stringify([1, 2])]) {
+      window.localStorage.setItem(key, record);
+      expect(stored()).toBeNull();
+    }
   });
 });
 
@@ -405,9 +622,10 @@ describe("the range list", () => {
     list([sampleRangeSection, sampleRangeBuildGroup], sampleRangeBuildGroup.range_id);
     const dialog = screen.getByTestId("range-list");
     expect(text(dialog)).toContain("Where pages 3–5 are discussed");
-    expect(text(dialog)).toContain("2 ranges. Each is a separate visit. Playing one stops at its end.");
+    expect(text(dialog)).toContain("2 ranges: 1 for these pages, 1 for their section (pp. 2–5); some overlap. Pressing a row plays it to its end."); // counted from the data, not "separate visits"
     const rows = within(dialog).getAllByRole("radio");
     expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.getAttribute("data-scope"))).toEqual(["section", "build_group"]); // each row is marked by what it is a range of
     expect(rows[1]).toHaveAttribute("aria-checked", "true");
     expect(text(rows[1]!)).toBe("20:36 – 26:205 min 44 sSuggestion (wording match)Lecture recording · all 3 builds · Follows the wording of the slide"); // five cells: times, length, kind, then the second line
     expect(text(rows[0]!)).toContain("Suggestion (course study map)");
@@ -422,6 +640,41 @@ describe("the range list", () => {
     expect(chosen).toEqual([sampleRangeSection.range_id, sampleRangeBuildGroup.range_id]);
   });
 
+  it("says that a pressed row is to be played, and that a row reached with the arrow keys is only cued", () => {
+    const how: Array<[string, boolean | undefined]> = [];
+    list([sampleRangeSection, sampleRangeBuildGroup], sampleRangeBuildGroup.range_id, { onSelect: (next, way) => how.push([next, way?.play]) });
+    const rows = within(screen.getByTestId("range-list")).getAllByRole("radio");
+    fireEvent.click(rows[0]!); // a press on another row
+    fireEvent.click(rows[1]!); // a press on the chosen row: from its start again
+    fireEvent.keyDown(rows[1]!, { key: "ArrowUp" });
+    fireEvent.click(rows[0]!); // what the radio group does when an arrow key moves the choice
+    fireEvent.keyUp(rows[0]!, { key: "ArrowUp" });
+    expect(how).toEqual([[sampleRangeSection.range_id, true], [sampleRangeBuildGroup.range_id, true], [sampleRangeSection.range_id, false]]);
+  });
+
+  it("counts the rows from the data: by what they are ranges of, and whether any overlap", () => {
+    const lead = (ranges: TimingRange[], pages: number[]) => plain(rangeListLead(ranges, pages));
+    const section = (start: number, end: number): TimingRange => ({ ...sampleRangeSection, range_id: `sec-${start}`, start_ms: start, end_ms: end, support: { scope: "section", pages: [7, 9, 10, 11, 12, 13, 14], builds: null } });
+    const own = (start: number, end: number): TimingRange => ({ ...sampleRangeFirstVisit, range_id: `own-${start}`, start_ms: start, end_ms: end, support: { scope: "page", pages: [12], builds: null } });
+    // one range of the page inside one of three ranges of its section: two statements, not four visits
+    expect(lead([section(219_460, 277_140), section(307_700, 454_300), section(488_720, 1_027_740), own(711_520, 905_360)], [12]))
+      .toBe("4 ranges: 1 for this page, 3 for its section (pp. 7, 9–14); some overlap. Pressing a row plays it to its end.");
+    expect(lead([section(10_000, 20_000), own(30_000, 40_000)], [12])).toBe("2 ranges: 1 for this page, 1 for its section (pp. 7, 9–14). Pressing a row plays it to its end.");
+    // "separate visit" only for rows of one scope that do not overlap
+    expect(lead([sampleRangeFirstVisit, sampleRangeSecondVisit], [2])).toBe("2 ranges. Each is a separate visit. Pressing a row plays it to its end.");
+    expect(lead([own(10_000, 30_000), own(20_000, 40_000)], [12])).toBe("2 ranges; some overlap. Pressing a row plays it to its end.");
+    expect(lead([section(10_000, 20_000), section(30_000, 40_000)], [12])).toBe("2 ranges for its section (pp. 7, 9–14). Each is a separate visit. Pressing a row plays it to its end.");
+    expect(lead([sampleRangeConfirmed], [7])).toBe("1 range. Pressing the row plays it to its end.");
+    // ranges of two recordings never overlap each other
+    expect(rangesOverlap([own(10_000, 30_000), { ...own(20_000, 40_000), recording: { ...sampleRangeFirstVisit.recording, source_id: "another-recording" } }])).toBe(false);
+  });
+
+  it("says once, at its head, that the recording was only offered to the lecture by its file name", () => {
+    list([sampleRangeBuildGroup], sampleRangeBuildGroup.range_id, { note: sessionLinkNote(offeredByFileName)!.full });
+    expect(text(screen.getByTestId("range-list-note"))).toBe("The recording was offered to this lecture by its file name (Sample Lec 90.m4a, Sample Lec 90.txt); the course's index does not link it. Every range of this lecture rests on that suggestion.");
+    expect(screen.getAllByText(/offered to this lecture by its file name/)).toHaveLength(1);
+  });
+
   it("opens the three qualities on request, each on its own line, with the evidence and the correction", () => {
     const { corrected } = list([sampleRangeBuildGroup], sampleRangeBuildGroup.range_id);
     expect(screen.queryByTestId("range-qualities")).toBeNull();
@@ -429,7 +682,9 @@ describe("the range list", () => {
     const qualities = screen.getByTestId("range-qualities");
     const terms = within(qualities).getAllByRole("term").map((term) => text(term));
     expect(terms.slice(0, 3)).toEqual(["Timestamp quality (are the times of the words right)", "Association quality (is this talk about this slide)", "Group-mapping quality (is this page correctly grouped)"]);
-    expect(text(qualities)).toContain("Made by the method lexical-sequence, version 2. Nobody has checked it.");
+    expect(text(qualities)).toContain("Suggested by a wording match. Nobody has checked it."); // plain words first
+    expect(text(within(qualities).getByTestId("range-method"))).toBe("· Method: lexical-sequence 2"); // the identifier, in the evidence line only
+    expect(text(qualities).match(/lexical-sequence/g)).toHaveLength(1);
     expect(text(qualities)).toContain("It applies to the whole group, pp. 3–5; no time is given per build.");
     expect(within(qualities).getByRole("link", { name: /^transcript\slines\s165–228$/ })).toHaveAttribute("href", expect.stringContaining("panel=transcript&line=165"));
     expect(text(qualities)).toContain("Terms: sample, mechanism");

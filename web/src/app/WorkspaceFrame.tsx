@@ -12,7 +12,7 @@
 // is split from its bar.
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type HTMLAttributes, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { Group, Panel, Separator, usePanelRef, type Layout, type LayoutChangedMeta, type PanelSize } from "react-resizable-panels";
+import { Group, Panel, Separator, useGroupRef, usePanelRef, type Layout, type LayoutChangedMeta, type PanelSize } from "react-resizable-panels";
 import { clsx } from "clsx";
 
 // ---- pure layout rules (web/tests/lib/frame.test.ts) ---------------------------------------------------------------------
@@ -157,9 +157,18 @@ export interface WorkspaceFrameState {
   showPane: (pane: string) => void;
   /** A node no arrangement ever moves or re-creates: the home of the bare media element. null until the frame has mounted. */
   mediaHost: HTMLElement | null;
+  /** The measured width of the Group (the frame less its right gutter); null outside the three-zone frame. */
+  groupWidth: number | null;
+  /**
+   * A layout made for what the stage shows (the lecture's slide, features/lecture `slideFirstWidths`): the widths in
+   * pixels of the outline (0: closed) and of the context panel. Applied only while the learner has arranged nothing,
+   * that is while no layout is stored for this frame and no separator or outline toggle was used in this window; kept
+   * inside the frame's bounds and never stored, so the layout keeps following the window and the deck.
+   */
+  proposeWidths: (widths: { outline: number; context: number }) => void;
 }
 const FrameContext = createContext<WorkspaceFrameState | null>(null);
-const OUTSIDE: WorkspaceFrameState = { arrangement: "frame", outlineOpen: false, toggleOutline: () => undefined, pane: "", showPane: () => undefined, mediaHost: null };
+const OUTSIDE: WorkspaceFrameState = { arrangement: "frame", outlineOpen: false, toggleOutline: () => undefined, pane: "", showPane: () => undefined, mediaHost: null, groupWidth: null, proposeWidths: () => undefined };
 /** The frame a zone is rendered in. Outside a frame (a story, a unit test) it answers a still three-zone frame. */
 export const useWorkspaceFrame = (): WorkspaceFrameState => useContext(FrameContext) ?? OUTSIDE;
 
@@ -389,6 +398,11 @@ export function WorkspaceFrame({ kind, outline, stage, context, labels, panes, p
 
   // ---- three-zone frame: sizes, persistence, the outline toggle ------------------------------------------------------------
   const outlineRef = usePanelRef();
+  const groupRef = useGroupRef();
+  /** The learner arranged the frame in this window (a separator, the outline toggle). A stored layout says the same of an earlier one. */
+  const arranged = useRef(false);
+  /** The last widths the stage proposed: applied again once the Group exists (the stage may propose before the Group has mounted). */
+  const proposed = useRef<{ outline: number; context: number } | null>(null);
   const [groupWidth, setGroupWidth] = useState<number | null>(null);
   const [sizes, setSizes] = useState<{ outline: number; context: number } | null>(null);
   const lastOpenPx = useRef<number | null>(null);
@@ -428,11 +442,22 @@ export function WorkspaceFrame({ kind, outline, stage, context, labels, panes, p
     // Stored only when the learner changed it (a separator, or the outline toggle, which the library reports as an
     // imperative change): a layout nobody touched keeps following the window's width.
     if (meta.isUserInteraction || toggled.current) {
+      arranged.current = true;
       const kept = parseStoredLayout(JSON.stringify(meta.requestedLayout ?? layout)) ?? parseStoredLayout(JSON.stringify(layout));
       if (kept) writeStored(spec.storageKey, JSON.stringify(kept));
     }
     toggled.current = false;
   }, [spec.storageKey]);
+
+  // What the separators announce follows every step of a resize at once: the Group reports the new shares in the same
+  // turn as the key or the drag, while a panel's own onResize arrives a frame later (it is measured) and then states
+  // the exact pixels. A reader that asks right after an arrow key hears the new width, not the one before it.
+  const onLayoutChange = useCallback((layout: Layout) => {
+    const width = wrapper.current ? wrapper.current.clientWidth - FRAME_GUTTER_PX : 0;
+    if (width <= 0) return;
+    const px = layoutPixels({ outline: layout.outline ?? 0, stage: layout.stage ?? 0, context: layout.context ?? 0 }, width);
+    setSizes((current) => (current && current.outline === px.outline && current.context === px.context ? current : { outline: px.outline, context: px.context }));
+  }, []);
 
   const onOutlineResize = useCallback((size: PanelSize) => {
     if (size.inPixels > 0) lastOpenPx.current = size.inPixels;
@@ -454,14 +479,36 @@ export function WorkspaceFrame({ kind, outline, stage, context, labels, panes, p
   const current = panes.find((entry) => entry.id === pane) ?? panes.find((entry) => entry.zone === "stage") ?? panes[0];
   const shownZone: FrameZone = arrangement === "focus" ? "stage" : current?.zone ?? "stage";
 
-  const state = useMemo<WorkspaceFrameState>(() => ({ arrangement, outlineOpen, toggleOutline, pane: current?.id ?? pane, showPane: onPaneChange, mediaHost }),
-    [arrangement, outlineOpen, toggleOutline, current?.id, pane, onPaneChange, mediaHost]);
+  const proposeWidths = useCallback((widths: { outline: number; context: number }) => {
+    proposed.current = widths;
+    const group = groupRef.current;
+    if (!group || arrangement !== "frame" || groupWidth === null) return;
+    if (arranged.current || parseStoredLayout(readStored(spec.storageKey))) return; // the learner's own arrangement stands
+    const area = panelArea(groupWidth);
+    const bounds = frameBounds(kind, groupWidth);
+    const context = clamp(bounds.context.minPx, Math.round(widths.context), bounds.context.maxPx);
+    const room = Math.max(0, area - bounds.stageMinPx - context); // an open outline never takes the stage under its share
+    const outline = widths.outline > 0 && room >= bounds.outline.minPx ? clamp(bounds.outline.minPx, Math.round(widths.outline), Math.min(bounds.outline.maxPx, room)) : 0;
+    const next: FrameLayout = { outline: (outline / area) * 100, stage: ((area - outline - context) / area) * 100, context: (context / area) * 100 };
+    const now = layoutPixels({ outline: 0, stage: 0, context: 0, ...group.getLayout() }, groupWidth);
+    if (Math.abs(now.outline - outline) <= 1 && Math.abs(now.context - context) <= 1) return;
+    group.setLayout(next);
+  }, [arrangement, groupRef, groupWidth, kind, spec.storageKey]);
+  // A proposal made before the Group was there (the zones are rendered before it) is applied when it is.
+  useLayoutEffect(() => {
+    if (initialLayout && proposed.current) proposeWidths(proposed.current);
+  }, [initialLayout, proposeWidths]);
+
+  const state = useMemo<WorkspaceFrameState>(() => ({ arrangement, outlineOpen, toggleOutline, pane: current?.id ?? pane, showPane: onPaneChange, mediaHost, groupWidth, proposeWidths }),
+    [arrangement, outlineOpen, toggleOutline, current?.id, pane, onPaneChange, mediaHost, groupWidth, proposeWidths]);
 
   return (
     <FrameContext.Provider value={state}>
       <div ref={wrapper} className="flex h-full min-h-0 min-w-0 flex-col bg-bg" data-arrangement={arrangement} data-outline={outlineOpen ? "open" : "closed"} data-testid={testId}>
-        {/* Never moved, never re-created. */}
-        <div ref={setMediaHost} className="sr-only" data-ll-media-host="">{media}</div>
+        {/* Never moved, never re-created. It only holds the media element: the bar named "Recording" carries every control,
+            so nothing in here is a Tab stop or a region of its own (Media Chrome makes its controller focusable and
+            names it "video player"). Inert does not touch playback. */}
+        <div ref={setMediaHost} className="sr-only" inert data-ll-media-host="">{media}</div>
         <div ref={park} hidden inert data-ll-park="" />
         {createPortal(outline, hosts.outline)}
         {createPortal(stage, hosts.stage)}
@@ -470,7 +517,7 @@ export function WorkspaceFrame({ kind, outline, stage, context, labels, panes, p
         {arrangement === "frame" ? (
           initialLayout && (
             <div className="ll-frame flex min-h-0 flex-1 pr-3">
-              <Group id={spec.groupId} orientation="horizontal" defaultLayout={initialLayout} onLayoutChanged={onLayoutChanged} className="min-h-0 flex-1">
+              <Group id={spec.groupId} groupRef={groupRef} orientation="horizontal" defaultLayout={initialLayout} onLayoutChange={onLayoutChange} onLayoutChanged={onLayoutChanged} className="min-h-0 flex-1">
                 <Panel id="outline" panelRef={outlineRef} collapsible collapsedSize={0} minSize={spec.outline.min} maxSize={spec.outline.max} defaultSize={outlineDefaultPx(kind, windowWidth)}
                   groupResizeBehavior="preserve-pixel-size" onResize={onOutlineResize} className="flex min-h-0 min-w-0" style={{ overflow: "hidden" }}>
                   <Slot host={hosts.outline} park={park} off={!outlineOpen} role="complementary" aria-label={labels.outline}

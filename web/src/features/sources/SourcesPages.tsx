@@ -11,7 +11,7 @@ import { apiGet, apiPost, contentUrl } from "@/lib/api";
 import { dispositionLabel, kindLabel, nb, SESSION_STATE, SOURCE_STATE, TIMING_STAGE_LABEL, unlistedLabel } from "@/lib/labels";
 import { useCourse, useCourseTiming } from "@/lib/queries";
 import type { InventoryItem } from "@/lib/types";
-import { Callout, Fact, Facts, ReturnLink, StateWords } from "@/features/search/SearchOverlay";
+import { Callout, Details, Fact, Facts, Page, ReturnLink, StateWords } from "@/features/search/SearchOverlay";
 import { SlideCanvas } from "@/features/lecture/SlideCanvas";
 import { useSubmitActions } from "@/features/tutor/actions";
 
@@ -58,9 +58,9 @@ export function SourcesPage() {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  if (!courseId) return <EmptyState title="No course selected">Choose a course in the header.</EmptyState>;
-  if (course.isLoading) return <LoadingState label="Reading the source inventory…" />;
-  if (course.isError || !course.data) return <ErrorState error={course.error} retry={() => void course.refetch()} />;
+  if (!courseId) return <Page><EmptyState title="No course selected">Choose a course in the header.</EmptyState></Page>;
+  if (course.isLoading) return <Page><LoadingState label="Reading the source inventory…" /></Page>;
+  if (course.isError || !course.data) return <Page><ErrorState error={course.error} retry={() => void course.refetch()} /></Page>;
   const data = course.data;
   const stageOf = new Map((timing.data?.lectures ?? []).map((lecture) => [lecture.lecture_id, lecture.stage]));
   const driveIds = ids.split(/[\s,]+/).filter(Boolean);
@@ -80,14 +80,14 @@ export function SourcesPage() {
   };
 
   return (
-    <div className="ll-page">
+    <Page>
       <PageHeader title="Library" subtitle={`${data.display_name} — inventory, versions and preparation`} actions={<>
         <Button onClick={prepare} busy={busy === "prepare"}>Prepare a batch now</Button>
         <Button onClick={() => setHintOpen(true)}>Tell the Brain about new material</Button>
       </>} />
       {notice && <Callout tone="accent" role="status" className="mb-4" title="Preparation">{notice}</Callout>}
       {data.index.status === "ok" ? (
-        <p className="ll-measure mb-6 text-ui text-muted">Course source index revision {data.index.revision} (as of {data.index.as_of}). It is a logistics index kept by the course updater; files it has not registered are still listed here from the folder itself.</p>
+        <p className="ll-measure mb-6 text-read text-muted">Course source index revision {data.index.revision} (as of {data.index.as_of}). It is a logistics index kept by the course updater; files it has not registered are still listed here from the folder itself.</p>
       ) : <Callout tone="caution" className="mb-6" title="The published source index is temporarily not trusted">{data.index.reason}</Callout>}
       {data.enumeration_truncated && <Callout tone="caution" className="mb-6" title="Listing truncated">This course has more files than one listing shows. The total is not complete on this page.</Callout>}
 
@@ -162,7 +162,7 @@ export function SourcesPage() {
           <Field label="What is it?" htmlFor="hint-reason"><input id="hint-reason" className="ll-input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Lecture 8 slides uploaded today" /></Field>
         </div>
       </Dialog>
-    </div>
+    </Page>
   );
 }
 
@@ -184,8 +184,8 @@ export function SourceDetail() {
   const [pages, setPages] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const detail = useQuery<SourceDetailView, Error>({ queryKey: ["source", courseId, sourceId], queryFn: () => apiGet(`sources/${courseId}/${encodeURIComponent(sourceId)}`), retry: false });
-  if (detail.isLoading) return <LoadingState label="Resolving source…" />;
-  if (detail.isError || !detail.data) return <><ReturnLink /><ErrorState error={detail.error} /></>;
+  if (detail.isLoading) return <Page><LoadingState label="Resolving source…" /></Page>;
+  if (detail.isError || !detail.data) return <Page><ReturnLink /><ErrorState error={detail.error} /></Page>;
   const item = detail.data;
   const state = SOURCE_STATE[item.state] ?? { label: unlistedLabel(item.state), tone: "neutral" as const, detail: "" };
   const restricted = item.disclosure === "restricted_solution";
@@ -196,19 +196,20 @@ export function SourceDetail() {
   const isMedia = !!item.media_type && (item.media_type.startsWith("audio/") || item.media_type.startsWith("video/"));
 
   return (
-    <div className="ll-page">
+    <Page>
       <ReturnLink />
       <PageHeader title={item.filename ?? item.source_id} subtitle={`${kindLabel(item.kind)} · ${item.kind_basis === "owner_index" ? "kind from the course index" : "kind inferred from its folder"}`} />
-      <Facts className="mb-6">
+      {/* What the file is and where it stands, in words. Its identifiers (source, version, earlier versions, media type) are under "Details". */}
+      <Facts className="mb-3">
         <Fact term="State"><StateWords tone={state.tone}>{state.label}</StateWords>{state.detail && <span className="text-muted"> · {state.detail}</span>}</Fact>
-        <Fact term="Source id"><span className="select-all break-all">{item.source_id}</span></Fact>
         {item.identity === "provisional" && <Fact term="Identity" testId="identity-note">Provisional <span className="text-muted">· {item.identity_note}</span></Fact>}
-        <Fact term="Version">{item.version_id ? <span className="select-all break-all">{item.version_id}</span> : "not identified (file has not been hashed)"}</Fact>
-        <Fact term="Size / type"><span className="ll-num">{bytes(item.bytes)} · {item.media_type ?? "unknown type"}</span></Fact>
+        {!item.version_id && <Fact term="Version">not identified (file has not been hashed)</Fact>}
+        <Fact term="Size"><span className="ll-num">{bytes(item.bytes)}</span>{!item.media_type && <span className="text-muted"> · unknown type</span>}</Fact>
         {item.historical_versions.length > 0 && (
-          <Fact term="Earlier versions">{item.historical_versions.map((v) => v.version_id).join(", ")} — historical bytes are not available; only the current file can be opened.</Fact>
+          <Fact term="Earlier versions"><span className="ll-num">{item.historical_versions.length}</span> on record. Historical bytes are not available; only the current file can be opened.</Fact>
         )}
       </Facts>
+      <Details className="mb-6" rows={[["Source", item.source_id], ["Version", item.version_id], ["Earlier versions", item.historical_versions.map((v) => v.version_id).join(", ")], ["Media type", item.media_type]]} />
       {error && <Callout tone="danger" role="alert" title="Could not open" className="mb-4">{error}</Callout>}
       {!openable ? (
         <Callout tone="unassessed" title="There is nothing to open for this source">{state.detail} No substitute from another file or edition is shown.</Callout>
@@ -239,7 +240,7 @@ export function SourceDetail() {
       ) : (
         <Callout tone="unassessed" title="This file type is not displayed in the app">It stays in the course folder unchanged. {item.rendition === "needs_rendition" ? "A labelled PDF rendition can be produced when an approved converter is installed." : ""}</Callout>
       )}
-    </div>
+    </Page>
   );
 }
 

@@ -46,11 +46,47 @@ export const RANK_FOLD = 3;
 /** Below this pane width the map is one centred column. */
 export const ONE_COLUMN_BELOW = 560;
 export const MAP_GAPS = { node: 40, rank: 48, card: 16, rankLabel: 24 } as const;
+/** The least room kept between the drawing and the edge of its pane. */
+const PANE_PAD = 8;
 const clamp = (low: number, value: number, high: number): number => Math.min(Math.max(value, low), high);
-/** Node width from the pane: three columns with 40 px between them fill it; never under 160 (the drawing is then panned), never over 220. */
-export const mapNodeWidth = (paneWidth: number): number => clamp(160, Math.floor((paneWidth - 4 - 2 * MAP_GAPS.node) / RANK_FOLD), 220);
-/** A topic card at topic level: three columns with 16 px gaps, 280 px at most. */
-export const topicNodeWidth = (paneWidth: number): number => clamp(160, Math.floor((paneWidth - 4 - 2 * MAP_GAPS.card) / RANK_FOLD), 280);
+/**
+ * Node width from the pane and from what is drawn. The nodes of the widest rank (three at most: more are folded) fill
+ * the pane with 40 px between them, 320 px at most: over that the room goes to more content (a second level under a
+ * topic), not to wider nodes. A drawing whose widest rank holds two nodes therefore gets wider nodes than one with
+ * three, and a name is not wrapped into a tower while half the pane is empty. Never under 160: a pane too narrow for
+ * three columns of 160 is panned. (At the default panel sizes a 1440 px window has a 590 px pane: 273 px nodes for
+ * two to a rank, 168 for three; three columns of 200 px or more need a pane of 684 px.)
+ */
+export const MAP_NODE_WIDTH = { min: 160, max: 320, alone: 360 } as const;
+export const mapNodeWidth = (paneWidth: number, widestRank: number = RANK_FOLD): number => {
+  const columns = clamp(1, Math.floor(widestRank), RANK_FOLD);
+  return clamp(MAP_NODE_WIDTH.min, Math.floor((paneWidth - 4 - (columns - 1) * MAP_GAPS.node) / columns), MAP_NODE_WIDTH.max);
+};
+/** A rank that holds one node gives it more room for its name: up to 360 px, and never wider than the pane less its margins. */
+export const soloNodeWidth = (paneWidth: number): number => clamp(MAP_NODE_WIDTH.min, Math.floor(paneWidth - 2 * PANE_PAD), MAP_NODE_WIDTH.alone);
+/**
+ * The topic cards at topic level: as many columns as the pane holds at 174 px or more a card, three at least and five
+ * at most (three up to a 1680 px window, four at 1920, five at 2560, at the default panel sizes), 16 px apart, a card
+ * 280 px at most. With fewer cards than the pane has columns, the cards share the pane: no column is kept for nothing
+ * (never fewer than three columns, so one or two cards do not grow into banners).
+ */
+export function topicGrid(paneWidth: number, cards: number = Number.POSITIVE_INFINITY): { columns: number; width: number } {
+  const columns = Math.max(RANK_FOLD, Math.min(clamp(RANK_FOLD, Math.floor((paneWidth + 12) / 190), 5), cards));
+  return { columns, width: clamp(160, Math.floor((paneWidth - 4 - (columns - 1) * MAP_GAPS.card) / columns), 280) };
+}
+export const topicNodeWidth = (paneWidth: number): number => topicGrid(paneWidth).width;
+/** The width of every node of a drawing in a pane of this width: the card of the topic grid, the node of a full rank, or the wider node that stands alone in its rank. */
+export function nodeWidths(model: Pick<MapModel, "view" | "nodes">, paneWidth: number): Map<string, number> {
+  if (model.view === "topics") {
+    const { width } = topicGrid(paneWidth, model.nodes.length);
+    return new Map(model.nodes.map((node) => [node.id, width]));
+  }
+  const inRank = new Map<MapRank, number>();
+  for (const node of model.nodes) inRank.set(node.rank, (inRank.get(node.rank) ?? 0) + 1);
+  const width = mapNodeWidth(paneWidth, Math.max(1, ...inRank.values()));
+  const alone = soloNodeWidth(paneWidth);
+  return new Map(model.nodes.map((node) => [node.id, inRank.get(node.rank) === 1 ? alone : width]));
+}
 
 // ---- model ---------------------------------------------------------------------------------------------------------------
 export const MAP_RANKS = ["topic", "concept", "skill", "criterion", "question", "related"] as const;
@@ -135,6 +171,44 @@ export interface MapOptions {
   openedQuestion?: string | null;
   /** Topic level: also draw the concepts the catalog files under no topic. */
   showUnfiled?: boolean;
+  /**
+   * Draw the scope's own graph (one without a focus) as an overview — its topics with their concepts — instead of the
+   * topic cards: the opening view of a lecture of a few topics, so that "Concept map" opens on something drawn. A slide
+   * scope is always drawn so (with its skills and the slide).
+   */
+  overview?: boolean;
+  /** How far below a topic is drawn, in an overview and around a selected topic: 1 its concepts (the default), 2 their skills too. Questions and criteria are drawn only around a concept, a skill or a question. */
+  depth?: 1 | 2;
+  /** An overview: the node marked as the selected one (a topic of the scope). */
+  selected?: string | null;
+}
+/** A lecture or a slide of this many topics or fewer is drawn whole: its topics with their concepts, as an overview. */
+export const OVERVIEW_TOPICS = 3;
+const scopeTopics = (graph: ConceptGraphView): LayoutNode[] => graphLayoutInput(graph).nodes.filter((node) => node.kind === "topic" && node.inScope);
+/**
+ * True for the own graph (no focus, not cut by its limit) of a lecture or a slide scope that has between one and three
+ * topics: the map draws such a scope whole while nothing or one of its topics is selected.
+ */
+export function drawnWhole(graph: ConceptGraphView | null | undefined): boolean {
+  if (!graph || graph.focus || graph.truncated || (graph.dropped ?? 0) > 0 || (graph.scope?.kind ?? "course") === "course") return false;
+  const topics = scopeTopics(graph).length;
+  return topics >= 1 && topics <= OVERVIEW_TOPICS;
+}
+/**
+ * The node a scope opens on, so that the map draws something and the detail panel holds something from the start:
+ * the first topic of a lecture (in the order the map draws them; the Brain lists topics first, so a cut graph still
+ * holds it), and the first topic of a slide that is drawn whole. null for the course scope (it opens on its topic
+ * cards), for a slide of more than three topics (its own overview is drawn, nothing selected), for a scope without a
+ * topic, and for a graph that is not a scope's own.
+ */
+export function openingNode(graph: ConceptGraphView | null | undefined): string | null {
+  const kind = graph?.scope?.kind ?? "course";
+  if (!graph || graph.focus || kind === "course" || (kind === "slide" && !drawnWhole(graph))) return null;
+  return scopeTopics(graph)[0]?.id ?? null;
+}
+/** The first topic of a scope's own graph, in the order the map draws them; null when it holds none. Entering the course scope from a lecture opens on that lecture's first topic. */
+export function firstTopic(graph: ConceptGraphView | null | undefined): string | null {
+  return graphLayoutInput(graph).nodes.find((node) => node.kind === "topic" && node.inScope)?.id ?? null;
 }
 
 const foldId = (rank: MapRank): string => `ll:fold:${rank}`;
@@ -216,14 +290,27 @@ export function buildMapModel(graph: ConceptGraphView, options: MapOptions = {})
   const scopeKind = graph.scope?.kind ?? "course";
   const focus = graph.focus && input.nodes.some((node) => node.id === graph.focus) ? graph.focus : null;
   const shown = graph.nodes?.length ?? 0;
-  const base = { focus, shown, total: shown + (graph.dropped ?? 0), scopeKind };
+  const scopePage = scopeKind === "slide" ? graph.scope?.page ?? null : null;
+  const focusKind = focus ? input.nodes.find((node) => node.id === focus)?.kind ?? null : null;
+  // A topic asked two relations deep arrives with the questions and criteria of its concepts, which are not drawn
+  // around a topic. The Brain lists the concepts and skills before them, so when any of them arrived no concept or
+  // skill was left out: the cut then says nothing about what is drawn, and no "showing n of m" is claimed.
+  const beyondSkills = focusKind === "topic" && (graph.nodes ?? []).some((node) => node.kind === "question" || node.kind === "criterion");
+  const base = { focus, shown, total: shown + (beyondSkills ? 0 : graph.dropped ?? 0), scopeKind };
+  const overview = !focus && (scopeKind === "slide" || options.overview === true);
 
-  if (!focus && scopeKind !== "slide") {
+  if (!focus && !overview) {
     const nodes = topicLevel(graph, input.nodes, input.edges, options);
     return { ...base, view: "topics", nodes, edges: [], ranks: nodes.length ? ["topic"] : [], legend: [], outOfScope: false };
   }
 
-  const real = new Map(input.nodes.filter((node) => node.data).map((node) => [node.id, node]));
+  // Below a topic: its concepts, and their skills when two levels are asked for. A slide's own overview always holds
+  // its skills (a slide supports a handful). Around anything else everything the graph holds is drawn.
+  const topicDown = focus ? focusKind === "topic" : scopeKind !== "slide";
+  const depth = options.depth ?? 1;
+  const drawnKind = (kind: LayoutNode["kind"]): boolean => !topicDown || kind === "topic" || kind === "concept" || (kind === "skill" && depth >= 2);
+  const marked = focus ?? (overview ? options.selected ?? null : null);
+  const real = new Map(input.nodes.filter((node) => node.data && drawnKind(node.kind)).map((node) => [node.id, node]));
   // 1. What surrounds the focus. A topic is where a walk ends: the other concepts of the selected node's topic are not its surroundings.
   let kept: Set<string>;
   if (focus) {
@@ -254,8 +341,7 @@ export function buildMapModel(graph: ConceptGraphView, options: MapOptions = {})
     else if (edge.family === "assessment") assessedBy.set(edge.source, [...(assessedBy.get(edge.source) ?? []), edge.target]);
     else if (edge.relation === "concept_assessed_as_skill") skillsOfConcept.set(edge.source, new Set([...(skillsOfConcept.get(edge.source) ?? []), edge.target]));
   }
-  const focusKind = focus ? real.get(focus)?.kind : null;
-  const openedQuestion = options.openedQuestion !== undefined ? options.openedQuestion : focusKind === "question" ? focus : focusKind === "criterion" && focus ? questionOf.get(focus) ?? null : null;
+  const openedQuestion =options.openedQuestion !== undefined ? options.openedQuestion : focusKind === "question" ? focus : focusKind === "criterion" && focus ? questionOf.get(focus) ?? null : null;
   const assessing = new Set<string>();
   for (const [criterion, targets] of assessedBy) {
     const question = questionOf.get(criterion);
@@ -297,8 +383,26 @@ export function buildMapModel(graph: ConceptGraphView, options: MapOptions = {})
   const placed = new Map<string, string>(); // node id → the id it is drawn as (itself, or the fold of its rank)
   const nodes: MapNodeModel[] = [];
   const marker = input.nodes.find((node) => node.kind === "source_page") ?? null;
+  // The skills that are drawn stand under the concepts that are drawn: first one skill of each drawn concept, in the
+  // order of the concepts, then their second skills, and last the skills whose concept is in the fold.
+  const conceptsOf = new Map<string, string[]>();
+  for (const [concept, skills] of skillsOfConcept) for (const skill of skills) conceptsOf.set(skill, [...(conceptsOf.get(skill) ?? []), concept]);
+  const byName = (a: LayoutNode, b: LayoutNode): number => byText(a.label.toLowerCase(), b.label.toLowerCase()) || byText(a.id, b.id);
+  const turnOf = new Map<string, [number, number]>();
+  const giveTurns = (skills: LayoutNode[]): void => {
+    const conceptPlace = new Map(nodes.filter((node) => node.rank === "concept" && node.type === "node").map((node, index) => [node.id, index]));
+    const taken = new Map<string, number>();
+    for (const skill of [...skills].sort(byName)) {
+      const concept = (conceptsOf.get(skill.id) ?? []).filter((id) => conceptPlace.has(id)).sort((a, b) => conceptPlace.get(a)! - conceptPlace.get(b)!)[0];
+      if (concept === undefined) continue;
+      turnOf.set(skill.id, [taken.get(concept) ?? 0, conceptPlace.get(concept)!]);
+      taken.set(concept, (taken.get(concept) ?? 0) + 1);
+    }
+  };
+  const turn = (id: string): [number, number] => turnOf.get(id) ?? [Number.MAX_SAFE_INTEGER, 0];
   for (const rank of MAP_RANKS) {
-    const list = [...(members.get(rank) ?? [])].sort((a, b) => priority(a.id) - priority(b.id) || byText(a.label.toLowerCase(), b.label.toLowerCase()) || byText(a.id, b.id));
+    if (rank === "skill") giveTurns(members.get(rank) ?? []);
+    const list = [...(members.get(rank) ?? [])].sort((a, b) => priority(a.id) - priority(b.id) || (rank === "skill" ? turn(a.id)[0] - turn(b.id)[0] || turn(a.id)[1] - turn(b.id)[1] : 0) || byName(a, b));
     const row: MapNodeModel[] = [];
     if (rank === "concept" && marker) {
       row.push({ id: marker.id, type: "marker", rank, kind: "source_page", label: SLIDE_MARKER_LABEL, second: marker.label, where: null, supportPages: [...(input.sourcePage?.pages ?? [])], evidence: null,
@@ -308,7 +412,7 @@ export function buildMapModel(graph: ConceptGraphView, options: MapOptions = {})
     const fold = list.length > RANK_FOLD && !options.opened?.has(foldId(rank));
     const visible = fold ? list.slice(0, RANK_FOLD - 1) : list;
     for (const node of visible) {
-      const model = plainNode(node, rank, scopeKind, focus);
+      const model = plainNode(node, rank, scopeKind, marked);
       const hidden = node.kind === "question" ? hiddenCriteria.get(node.id) ?? 0 : 0;
       if (hidden > 0) model.action = { kind: "criteria", label: `Show ${countLabel(hidden, "criterion", "criteria")}` };
       row.push(model);
@@ -360,12 +464,18 @@ export function buildMapModel(graph: ConceptGraphView, options: MapOptions = {})
       continue;
     }
     if (edge.family === "source" && real.get(edge.target)?.kind === "criterion" && !placed.has(edge.target)) continue; // a folded criterion: its question carries the line
+    // A source edge starts at the logical slide, which in a build group is every build of it. The drawn line starts at
+    // the page on screen: it is drawn only for a tie that names this page, so what a later build first shows is never
+    // joined to an earlier one (the node stays, and says "elsewhere in this sequence: build 3"). A tie that states no
+    // pages is drawn as before: nothing is known against it.
+    if (edge.family === "source" && scopePage !== null && edge.supportPages?.length && !edge.supportPages.includes(scopePage)) continue;
     add(edge, placed.get(edge.source), placed.get(edge.target));
   }
 
   const drawn = [...edges.values()];
-  // What the slide's line to a node stands for is said on the node (a fold stands for several nodes and says nothing).
-  const tieOf = new Map(drawn.filter((edge) => edge.family === "source").map((edge) => [edge.target, edge.tie]));
+  // What the slide's support of a node rests on is said on the node, whichever build carries it (a fold stands for
+  // several nodes and says nothing): the strongest tie of the graph's own source lines, as the tree reads it.
+  const tieOf = sourceTies(graph);
   for (const node of nodes) if (node.type === "node") node.tie = tieOf.get(node.id) ?? null;
   const ranks = MAP_RANKS.filter((rank) => nodes.some((node) => node.rank === rank));
   return { ...base, view: focus ? "focus" : "overview", nodes, edges: drawn, ranks, legend: edgeLegendKinds(drawn), outOfScope: nodes.some((node) => !node.inScope) };
@@ -433,12 +543,15 @@ const round = (value: number): number => Math.round(value * 10) / 10;
  * Positions from dagre (`rankdir: "TB"`). Each rank is one line (an opened fold makes its line longer and the pane is
  * panned); an edge between two lines is given its exact length, so every node sits on the line of its kind. Links
  * inside one line are drawn after the layout. At topic level the cards are a grid of three columns: chains of
- * layout-only links that are never drawn.
- * `heightOf` is the measured height of a node at `nodeWidth`.
+ * layout-only links that are never drawn; `columns` says how many cards a line holds (three unless the pane holds more).
+ * `heightOf` is the measured height of a node at its width: `nodeWidth`, or what `widthOf` gives a node (a rank of one
+ * node may be wider than the nodes of a full rank). `fitWidth` is the width the nodes were sized to fill (the pane less
+ * 4 px): a drawing that comes out a little wider is brought back to it by its gaps.
  */
-export function layoutMap(model: MapModel, heightOf: (id: string) => number, options: { nodeWidth: number }): MapLayout {
+export function layoutMap(model: MapModel, heightOf: (id: string) => number, options: { nodeWidth: number; widthOf?: (id: string) => number; columns?: number; fitWidth?: number }): MapLayout {
   const grid = model.view === "topics";
-  const columns = RANK_FOLD;
+  const columns = Math.max(1, options.columns ?? RANK_FOLD);
+  const widthOf = (id: string): number => options.widthOf?.(id) ?? options.nodeWidth;
   const nodeSep = grid ? MAP_GAPS.card : MAP_GAPS.node;
   const rankSep = grid ? MAP_GAPS.card : MAP_GAPS.rank;
   const empty: MapLayout = { boxes: new Map(), rankLabels: [], edges: new Map(), width: 0, height: 0 };
@@ -473,7 +586,7 @@ export function layoutMap(model: MapModel, heightOf: (id: string) => number, opt
   }
   const heights = new Map(model.nodes.map((node) => [node.id, Math.max(1, Math.ceil(heightOf(node.id)))]));
   g.setNode(ROOT, { width: 0, height: 0 });
-  for (const node of model.nodes) g.setNode(node.id, { width: options.nodeWidth, height: heights.get(node.id)! + (dips.has(line.get(node.id)!) ? DIP_ROOM : 0) });
+  for (const node of model.nodes) g.setNode(node.id, { width: widthOf(node.id), height: heights.get(node.id)! + (dips.has(line.get(node.id)!) ? DIP_ROOM : 0) });
   // Lines are given to the layout in the order of the model's nodes (the outline's order), so where no crossing decides,
   // a line of nodes reads in the order the outline lists them.
   const place = new Map(model.nodes.map((node, index) => [node.id, index]));
@@ -542,8 +655,32 @@ export function layoutMap(model: MapModel, heightOf: (id: string) => number, opt
     const placed = g.node(node.id) as { x: number; y: number; width: number; height: number };
     raw.set(node.id, { x: placed.x - placed.width / 2, y: placed.y - placed.height / 2, width: placed.width, height: heights.get(node.id)! });
   }
+  // A wider node that stands alone on its line is centred over (or under) the node it belongs to. When that node is at
+  // an end of a full line, the wider one would reach past the line and make the drawing wider than its pane: it is
+  // moved back inside the extent of the full lines, as far as it reaches past it and no further.
+  if (!grid) {
+    const full = lines.filter((ids) => ids.length > 1).flat().map((id) => raw.get(id)!);
+    if (full.length > 0) {
+      const from = Math.min(...full.map((box) => box.x));
+      const to = Math.max(...full.map((box) => box.x + box.width));
+      for (const ids of lines) {
+        const box = ids.length === 1 ? raw.get(ids[0]!)! : null;
+        if (box && box.width <= to - from) box.x = clamp(from, box.x, to - box.width);
+      }
+    }
+  }
   const left = Math.min(...[...raw.values()].map((box) => box.x));
   const top = Math.min(...[...raw.values()].map((box) => box.y));
+  // The nodes are sized to fill the pane, but a line that is led past a rank takes a few pixels between two nodes
+  // there, and the drawing then comes out that much wider than the pane: a drawing made to fit would be cut at one side
+  // and faded. Such a small excess (5 % at most) is taken out of the gaps between the nodes, never out of the nodes.
+  let squeeze = 1;
+  if (!grid && options.fitWidth && Math.max(...[...raw.values()].map((box) => box.x + box.width)) - left > options.fitWidth) {
+    const needed = Math.min(...[...raw.values()].filter((box) => box.x > left).map((box) => (options.fitWidth! - box.width) / (box.x - left)));
+    if (needed >= 0.95 && needed < 1) squeeze = needed;
+  }
+  const across = (x: number): number => left + (x - left) * squeeze;
+  if (squeeze !== 1) for (const box of raw.values()) box.x = across(box.x);
   const dy = (grid ? 0 : MAP_GAPS.rankLabel) - top;
   const boxes = new Map([...raw].map(([id, box]) => [id, { x: round(box.x - left), y: round(box.y + dy), width: box.width, height: box.height }]));
   const width = Math.max(...[...boxes.values()].map((box) => box.x + box.width));
@@ -560,7 +697,7 @@ export function layoutMap(model: MapModel, heightOf: (id: string) => number, opt
   const routes = new Map<string, Array<{ x: number; y: number }>>();
   for (const { edge, upper, lower, laidOut } of between) {
     const inner = (laidOut ? (g.edge({ v: upper, w: lower, name: edge.id }) as { points?: Array<{ x: number; y: number }> }).points ?? [] : []).slice(1, -1)
-      .map((point) => ({ x: round(point.x - left), y: round(point.y + dy) }));
+      .map((point) => ({ x: round(across(point.x) - left), y: round(point.y + dy) }));
     const a = boxes.get(upper)!;
     const b = boxes.get(lower)!;
     // Only the points that carry the line past the lines in between: an edge between neighbouring lines is one curve.
@@ -680,26 +817,45 @@ export interface MapViewport {
 }
 /** The map is never drawn smaller than it is: 100 % to 150 %. */
 export const MAP_ZOOM = { min: 1, max: 1.5, step: 0.25 } as const;
-const PANE_PAD = 8;
+/** What is placed in the pane. `pinTop`: a drawing that is read from its top (the topic cards under their sentence) stays there instead of being centred upright. */
+export interface MapDrawing {
+  width: number;
+  height: number;
+  pinTop?: boolean;
+}
 /**
- * The nearest allowed place of a drawing in its pane. A drawing that fits is centred sideways and sits at the top;
- * one that does not can be moved until its edge is 8 px inside the pane, and no further. Whole pixels, so text stays sharp.
+ * The nearest allowed place of a drawing in its pane. A drawing that fits is centred, sideways and upright (the
+ * topic cards stay at the top); one that does not can be moved until its edge is 8 px inside the pane, and no further.
+ * Whole pixels, so text stays sharp.
  * "Fits" is the pane's own width: three columns are sized to fill the pane less 4 px, and such a drawing must stay still.
  */
-export function clampViewport(view: MapViewport, drawing: { width: number; height: number }, pane: MapPane): MapViewport {
+export function clampViewport(view: MapViewport, drawing: MapDrawing, pane: MapPane): MapViewport {
   const zoom = clamp(MAP_ZOOM.min, Number.isFinite(view.zoom) ? view.zoom : 1, MAP_ZOOM.max);
   const width = drawing.width * zoom;
   const height = drawing.height * zoom;
   const x = width <= pane.width ? (pane.width - width) / 2 : clamp(pane.width - width - PANE_PAD, view.x, PANE_PAD);
-  const y = height <= pane.height - PANE_PAD ? PANE_PAD : clamp(pane.height - height - PANE_PAD, view.y, PANE_PAD);
+  const y = height <= pane.height - PANE_PAD ? (drawing.pinTop ? PANE_PAD : Math.max(PANE_PAD, (pane.height - height) / 2)) : clamp(pane.height - height - PANE_PAD, view.y, PANE_PAD);
   return { x: Math.round(x), y: Math.round(y), zoom };
 }
 /** The pane centred on a node, as far as the drawing's edges allow. Nothing is ever fitted by shrinking. */
-export function centreOn(box: Box, drawing: { width: number; height: number }, pane: MapPane, zoom: number = MAP_ZOOM.min): MapViewport {
+export function centreOn(box: Box, drawing: MapDrawing, pane: MapPane, zoom: number = MAP_ZOOM.min): MapViewport {
   return clampViewport({ x: pane.width / 2 - (box.x + box.width / 2) * zoom, y: pane.height / 2 - (box.y + box.height / 2) * zoom, zoom }, drawing, pane);
 }
+/**
+ * Where a drawing opens. One that is wider than its pane starts at its left edge, where the names of the ranks are,
+ * and is moved only as far as the selected node needs to lie wholly in the pane; a selected node that does not fit
+ * the pane at all is centred. Nothing is ever fitted by shrinking.
+ */
+export function openingViewport(target: Box | null | undefined, drawing: MapDrawing, pane: MapPane): MapViewport {
+  const start = clampViewport({ x: PANE_PAD, y: PANE_PAD, zoom: MAP_ZOOM.min }, drawing, pane);
+  if (!target || isInView(target, start, pane)) return start;
+  if (target.width > pane.width - 2 * PANE_PAD || target.height > pane.height - 2 * PANE_PAD) return centreOn(target, drawing, pane);
+  const x = clamp(PANE_PAD - target.x, start.x, pane.width - PANE_PAD - (target.x + target.width));
+  const y = clamp(PANE_PAD - target.y, start.y, pane.height - PANE_PAD - (target.y + target.height));
+  return clampViewport({ x, y, zoom: MAP_ZOOM.min }, drawing, pane);
+}
 /** Another zoom about the middle of the pane. */
-export function zoomAbout(view: MapViewport, zoom: number, drawing: { width: number; height: number }, pane: MapPane): MapViewport {
+export function zoomAbout(view: MapViewport, zoom: number, drawing: MapDrawing, pane: MapPane): MapViewport {
   const next = clamp(MAP_ZOOM.min, zoom, MAP_ZOOM.max);
   const cx = pane.width / 2;
   const cy = pane.height / 2;

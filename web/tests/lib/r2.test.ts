@@ -10,7 +10,7 @@ import {
   invalidatedBy, queryKeys, useConceptGraph, useCourseTiming, useInferredAnchors, useServedIdentity, useSourceMap, useSourceMapOverride, useSuggestionDecision, useTimingBuild,
 } from "@/lib/queries";
 import {
-  NBSP, clampToRange, clockLabel, conceptGraphErrorCode, durationLabel, graphLayoutInput, identityOf, intervalBounds, isStale, isStructuralPage, lectureQuestionCounts, logicalSlides,
+  NBSP, clampToRange, clockLabel, conceptGraphErrorCode, durationLabel, graphLayoutInput, identityOf, intervalBounds, isStale, isStructuralPage, lectureQuestionCounts, logicalSlides, questionDivisionSentence,
   nextContentPage, nextStop, noRangeDetail, noRangeSentence, pageRef, pagesRef, questionsForPage, rangeOrdinalLabel, rangesForPage, sourceMapPageProblems, stopAtEnd, supportOrdinals, timeSpanLabel, toMs, whereLine,
   withinRange,
 } from "@/lib/r2";
@@ -326,6 +326,24 @@ describe("lectureQuestionCounts", () => {
     expect(fifth.ties!.map((tie) => [tie.tie, tie.granularity])).toEqual([["stated", "section"], ["agent_inferred", "page"]]);
     // without link = the rows that carry one of the two no-link lines
     expect(sampleLectureView.questions.all.filter((row) => row.no_link).length).toBe(counts.withoutLink);
+  });
+
+  it("counts an anchored question that also carries a suggested link as a part of the anchored ones, and the sentence says so", () => {
+    // the plain case keeps its wording
+    expect(questionDivisionSentence(lectureQuestionCounts(sampleLectureView))).toBe("8 questions: 3 anchored by the course, 3 with a suggested link, 2 without a link.");
+    expect(lectureQuestionCounts(sampleLectureView).anchoredWithSuggestion).toBe(0);
+    // the course anchors a question (to a question sheet, say) and a suggestion names slide pages for it
+    const anchored = sampleLectureView.questions.all.find((row) => (row.ties ?? []).some((tie) => tie.tie === "exact" && tie.granularity !== "section"))!;
+    const suggestion = sampleLectureView.questions.all.flatMap((row) => row.ties ?? []).find((tie) => tie.tie === "agent_inferred" && tie.granularity !== "section")!;
+    const rows = sampleLectureView.questions.all.map((row) => (row === anchored ? { ...row, ties: [...(row.ties ?? []), suggestion] } : row));
+    const reported = { ...sampleLectureView.questions.counts!, course_anchor_with_suggestion: 1 };
+    const both = lectureQuestionCounts({ ...sampleLectureView, questions: { ...sampleLectureView.questions, all: rows, counts: reported } });
+    expect(both).toMatchObject({ all: 8, courseAnchor: 3, agentInferred: 3, withoutLink: 2, anchoredWithSuggestion: 1, consistent: true });
+    expect(questionDivisionSentence(both)).toBe("8 questions: 3 anchored by the course (1 of them also carries a suggested link), 3 with a suggested link only, 2 without a link.");
+    expect(questionDivisionSentence({ ...both, anchoredWithSuggestion: 2 })).toContain("(2 of them also carry a suggested link)");
+    // a Brain that states another figure disagrees with its own rows; one that states none is not compared on it
+    expect(lectureQuestionCounts({ ...sampleLectureView, questions: { ...sampleLectureView.questions, all: rows, counts: { ...reported, course_anchor_with_suggestion: 0 } } }).consistent).toBe(false);
+    expect(lectureQuestionCounts({ ...sampleLectureView, questions: { ...sampleLectureView.questions, all: rows } }).consistent).toBe(true);
   });
 
   it("says when the Brain's own counts disagree with its rows, and reports nothing as reported when there are none", () => {

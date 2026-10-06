@@ -9,23 +9,30 @@
 // persistent media host. This file is a view of it. The seek buttons, the mute button and the volume slider are Media
 // Chrome's own, bound to the controller by id; the track is the app's range input, because it spans the SELECTED range.
 //
-// A page without a range shows exactly one line of its no-range state with at most one action (9.5); until the
-// learner opens the whole recording nothing can be played. A lecture view of an older Brain (no `ranges`) keeps its
-// timed links, shown as ranges, and plays the whole recording as before.
-import { useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+// A page without a range shows exactly one line of its no-range state with at most one action (9.5). The play disc is
+// never dead while the recording can be read (fix round of 2026-10-06, amending 5.5 and 9.5): on such a page Play opens
+// the whole recording and plays it from where the player stands; only "Recording unavailable" draws no control. A
+// lecture view of an older Brain (no `ranges`) keeps its timed links, shown as ranges, and plays the whole recording.
+//
+// The range line is ONE line and never ends in an ellipsis: what does not fit is given up whole, in a fixed order (a
+// sentence for a shorter one, then for none), and what was given up opens in full from the line.
+//
+// Where the player stood (page, selection, time, Repeat) is kept on this device (./ClipPlayer `StoredPosition`) and put
+// back, paused, when the same page of the lecture is opened again.
+import { useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { DropdownMenu, Popover } from "radix-ui";
 import { MediaMuteButton, MediaSeekBackwardButton, MediaSeekForwardButton, MediaVolumeRange } from "media-chrome/react";
-import { Check, ChevronLeft, ChevronRight, Ellipsis, Pause, Play, Repeat, SkipForward, Volume1, Volume2, VolumeX } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Ellipsis, Info, Pause, Play, Repeat, SkipForward, Volume1, Volume2, VolumeX } from "lucide-react";
 import { useWorkspaceFrame } from "@/app/WorkspaceFrame";
 import { ErrorGlyph } from "@/components/glyphs";
 import { BasisLabel } from "@/components/labels";
 import { Button, cn, IconButton, ToolbarButton } from "@/components/ui";
 import {
-  NBSP, NO_RANGE_LINE, R2_ACTION, RANGE_RELATION_LABEL, TOPIC_DISCUSSION_SENTENCE, clockLabel, countLabel, rangeSupportLine, timeSpanLabel, unlistedLabel, type NoRangeActionId,
+  NBSP, NO_RANGE_LINE, R2_ACTION, RANGE_RELATION_LABEL, TOPIC_DISCUSSION_SENTENCE, clockLabel, countLabel, nb, rangeSupportLine, timeSpanLabel, unlistedLabel, type NoRangeActionId,
 } from "@/lib/labels";
 import { identityOf, isStructuralPage, noRangeDetail, noRangeSentence, rangesForPage } from "@/lib/r2";
-import type { NoRange, Occurrence, RecordingView, TimingRange } from "@/lib/types";
-import { useClipPlayer, type ClipBounds } from "./ClipPlayer";
+import type { LectureView, NoRange, Occurrence, RecordingView, TimingRange } from "@/lib/types";
+import { readStoredPosition, useClipPlayer, writeStoredPosition, type ClipBounds, type StoredPosition } from "./ClipPlayer";
 import { WHOLE_RECORDING, type TransportProps } from "./contracts";
 import { CANDIDATE_WORDS, RangeList, candidateId, rangeBasis, rangeKindParts } from "./RangeList";
 
@@ -83,46 +90,110 @@ export function trackSegments(ranges: readonly TimingRange[], recordingId: strin
 export const separate = (segments: ReadonlyArray<{ left: number; width: number }>): boolean =>
   [...segments].sort((a, b) => a.left - b.left).every((segment, index, sorted) => index === 0 || segment.left >= sorted[index - 1]!.left + sorted[index - 1]!.width);
 
-/** "99.7 %": a share that is under the whole never reads as 100, and one above nothing never as 0. */
-export function shareLabel(fraction: number): string {
-  const clamped = Math.min(1, Math.max(0, fraction));
-  if (clamped >= 1) return `100${NBSP}%`;
-  const tenths = Math.min(999, Math.max(clamped > 0 ? 1 : 0, Math.round(clamped * 1000)));
-  return `${(tenths / 10).toFixed(1)}${NBSP}%`;
-}
 /**
- * How much of the lecture's recording has timing, for a page whose talk was looked for in the processed part only:
- * the processed stretches of the state's own detail over the lengths of the recordings they belong to; failing that,
- * the one coverage figure the Brain stated. null when neither is known: no share is made up.
+ * How much of the lecture's recording has speech timing, for a page whose talk was looked for in that part only: the
+ * processed stretches of the state's own detail and the lengths of the recordings they belong to; failing that, the one
+ * coverage figure the Brain stated, of a recording whose length is known. null when neither is known: no figure is
+ * made up. Said as two times ("2:22 of 2:30"), never as a percentage (design principle 6).
  */
-export function processedShare(noRange: NoRange, recordings: ReadonlyArray<Pick<RecordingView, "source_id" | "duration_ms">>): number | null {
+export function processedSpan(noRange: NoRange, recordings: ReadonlyArray<Pick<RecordingView, "source_id" | "duration_ms">>): { coveredMs: number; totalMs: number } | null {
   if (noRange.state !== "audio_unprocessed") return null;
   const detail = noRange.detail ?? {};
   const processed = Array.isArray(detail.processed) ? detail.processed.filter((entry) => Array.isArray(entry) && entry.length === 3 && typeof entry[1] === "number" && typeof entry[2] === "number" && entry[2] > entry[1]) : [];
   const ids = new Set(processed.map((entry) => String(entry[0])));
   const lengths = recordings.filter((recording) => ids.has(recording.source_id)).map((recording) => recording.duration_ms);
   if (processed.length && lengths.length === ids.size && lengths.every((length): length is number => typeof length === "number" && length > 0)) {
-    return Math.min(1, processed.reduce((sum, entry) => sum + (entry[2] - entry[1]), 0) / lengths.reduce((sum, length) => sum + length, 0));
+    const totalMs = lengths.reduce((sum, length) => sum + length, 0);
+    return { coveredMs: Math.min(totalMs, processed.reduce((sum, entry) => sum + (entry[2] - entry[1]), 0)), totalMs };
   }
-  const stated = (detail.coverage ?? []).map((row) => row.coverage_fraction).filter((value): value is number => typeof value === "number");
-  return stated.length === 1 ? Math.min(1, Math.max(0, stated[0]!)) : null;
+  const stated = (detail.coverage ?? []).filter((row) => typeof row.coverage_fraction === "number");
+  const length = stated.length === 1 ? recordings.find((recording) => recording.source_id === stated[0]!.recording_source_id)?.duration_ms : null;
+  if (typeof length !== "number" || !(length > 0)) return null;
+  return { coveredMs: Math.round(Math.min(1, Math.max(0, stated[0]!.coverage_fraction!)) * length), totalMs: length };
 }
 /**
- * The one line of a page without a range (9.5): the state's name, its sentence (the Brain's own, verbatim) and at most
- * one action. When part of the recording was processed and nothing for the page was found in it, "audio not processed
- * yet" would be untrue as a name: the line then says that it was not found in the processed part, and how much that is.
+ * "2:22 of 2:30", held on one line. Both times are whole seconds counted down, as the Brain writes them in its own
+ * sentence ("Timing covers 2:22 of the recording's 2:30"), so the line and the sentence it opens never differ by a
+ * second, and a part under the whole never reads as the whole. null when the two cannot be told apart to the second.
  */
-export function noRangeLine(noRange: NoRange, recordings: ReadonlyArray<Pick<RecordingView, "source_id" | "duration_ms">> = []): { name: string; brief: string; sentence: string; action: NoRangeActionId | null } {
+function partOfWhole(span: { coveredMs: number; totalMs: number }): string | null {
+  if (!(span.coveredMs < span.totalMs)) return null;
+  const seconds = (ms: number): string => clockLabel(Math.floor(ms / 1000) * 1000);
+  return seconds(span.coveredMs) === seconds(span.totalMs) ? null : nb(`${seconds(span.coveredMs)} of ${seconds(span.totalMs)}`);
+}
+
+export interface NoRangeLine {
+  /** The state's name: semibold, first on the line. */
+  name: string;
+  /** The name for a bar too narrow for it: the same fact without its figures. */
+  brief: string;
+  /** A second clause short enough for a bar of 560 px, said from the state and its detail alone; "" when the state has none. */
+  short: string;
+  /** The Brain's own sentence, verbatim: shown when it fits, and always what opens in full. */
+  sentence: string;
+  action: NoRangeActionId | null;
+}
+/**
+ * The one line of a page without a range (9.5): the state's name, then its sentence, and at most one action. The
+ * sentence is the Brain's own when the bar has room for it, else the short clause, else nothing; it is never cut.
+ * When part of the recording was transcribed and nothing for the page was found in it, "audio not processed yet" would
+ * be untrue as a name: the line then says that it was not found in the transcribed part, and how long that part is.
+ */
+export function noRangeLine(noRange: NoRange, recordings: ReadonlyArray<Pick<RecordingView, "source_id" | "duration_ms">> = []): NoRangeLine {
   const row = (NO_RANGE_LINE as Record<string, { label: string; action: NoRangeActionId | null } | undefined>)[noRange.state];
   const state = String(noRange.state);
+  const detail = noRangeDetail(noRange);
   let name = row?.label ?? unlistedLabel(state).replace(/^./, (first) => first.toUpperCase());
-  let brief = name; // for a bar too narrow for the sentence: the same fact in fewer words
-  if (noRange.state === "audio_unprocessed" && noRangeDetail(noRange).coveredIntervals.length > 0) {
-    const share = processedShare(noRange, recordings);
-    name = `Not found in the processed part of the recording${share === null ? "" : ` (${shareLabel(share)})`}`;
-    brief = share === null ? "Not found in the processed part" : `Not found in ${shareLabel(share)}`;
+  let brief = name;
+  let short = "";
+  switch (noRange.state) {
+    case "not_discussed":
+      short = "No talk about this slide was found.";
+      break;
+    case "audio_unprocessed":
+      if (detail.reason === "transcript_lines_without_time") {
+        name = brief = "Not found among the timed lines";
+        short = "Some transcript lines have no time yet.";
+      } else if (detail.coveredIntervals.length > 0) {
+        const span = processedSpan(noRange, recordings);
+        const times = span ? partOfWhole(span) : null;
+        name = times ? `Not found in the transcribed ${times}` : "Not found in the transcribed part of the recording";
+        brief = "Not found in the transcribed part";
+        short = "The rest has no speech timing yet.";
+      } else short = "This recording has no speech timing yet.";
+      break;
+    case "association_not_run": {
+      const cause = detail.cause === "stale" ? "inputs_changed" : detail.cause;
+      short = cause === "not_run" ? "Slide matching has not run yet." : cause === "inputs_changed" ? "Its inputs changed since slide matching ran."
+        : cause === "no_adequate_method" ? "No adequate matching method is available." : "Slide matching has not run with the current inputs.";
+      break;
+    }
+    case "ambiguous":
+      short = `${detail.candidates.length ? countLabel(detail.candidates.length, "candidate") : "Several candidates"}, none clear enough to show.`;
+      break;
+    case "no_range_expected":
+      short = "No recording range is expected here.";
+      break;
+    default:
+      break;
   }
-  return { name, brief, sentence: row ? noRangeSentence(noRange) : (noRange as { text?: string }).text ?? "", action: row?.action ?? null };
+  return { name, brief, short, sentence: row ? noRangeSentence(noRange) : (noRange as { text?: string }).text ?? "", action: row?.action ?? null };
+}
+
+/**
+ * A lecture whose session the course's index does not link, offered to it only because a recording or transcript file
+ * name carries its number (`session_link` "suggested_by_file_name", r2-read-api 1.4): every range of the lecture rests
+ * on that suggestion, and the screen says so where the recording is named. null for every other lecture.
+ */
+export function sessionLinkNote(lecture: Pick<LectureView, "session_link">): { short: string; sentence: string; full: string } | null {
+  if (lecture.session_link !== "suggested_by_file_name") return null;
+  const evidence = (lecture as { session_link_evidence?: { files?: unknown } | null }).session_link_evidence;
+  const files = Array.isArray(evidence?.files) ? evidence.files.filter((file): file is string => typeof file === "string" && file.trim() !== "") : [];
+  return {
+    short: "recording offered by its file name",
+    sentence: "The recording was offered to this lecture by its file name.",
+    full: `The recording was offered to this lecture by its file name${files.length ? ` (${files.join(", ")})` : ""}; the course's index does not link it. Every range of this lecture rests on that suggestion.`,
+  };
 }
 
 /**
@@ -156,12 +227,15 @@ const SEPARATOR = "my-1 h-px bg-hairline";
 /** A text button of the range line: 28 high on a pad. */
 const LINE_BUTTON = "flex-none px-2.5";
 const LINE_PAD = "bg-pad hover:bg-pad-strong";
-/** Media Chrome's own buttons, drawn as the app's icon button: 36 square, bare, a pad on hover, the app's focus ring. */
+/** A window under 900 px is pressed with a finger: the buttons of the first row are 44 px there (36 elsewhere). */
+const TOUCH = "max-[899px]:h-11 max-[899px]:min-w-11";
+/** Media Chrome's own buttons, drawn as the app's icon button: 36 square (44 under 900 px), bare, a pad on hover, the app's focus ring. */
 const MC_BUTTON = [
-  "size-9 flex-none rounded-control [--media-control-background:transparent] [--media-control-hover-background:var(--ll-pad)] [--media-control-padding:6px] [--media-control-height:24px]",
+  "size-9 max-[899px]:size-11 flex-none rounded-control [--media-control-background:transparent] [--media-control-hover-background:var(--ll-pad)] [--media-control-padding:6px] [--media-control-height:24px]",
   "[--media-icon-color:var(--ll-text)] [--media-primary-color:var(--ll-text)] [--media-focus-box-shadow:0_0_0_2px_var(--ll-surface-raised),0_0_0_4px_var(--ll-focus)]",
 ].join(" ");
-const MC_BUTTON_OFF = "[--media-icon-color:var(--ll-border)] [--media-control-hover-background:transparent] [--media-cursor:not-allowed]";
+/** A sentence of the range line: whole or not there. It is never cut for the eye: while it is cut, the line gives it up (`useFit`). */
+const SENTENCE = "min-w-0 overflow-hidden whitespace-nowrap text-muted";
 const ROW_1 = "h-[52px] min-[1920px]:h-14 min-[2400px]:h-[60px]";
 const ROW_2 = "h-8 min-[1920px]:h-9 min-[2400px]:h-10";
 
@@ -182,9 +256,10 @@ function useWidth(ref: RefObject<HTMLElement | null>): number {
 }
 
 /**
- * How much the range line has to give up to stay one line: 0 nothing; then, one step at a time, whatever of it is
- * marked `data-fit` and is cut, or the line itself when it runs over. `key` names what the line holds and how wide it
- * is; a new key starts again from nothing given up. Measured before paint, so no cut line is ever shown.
+ * How much the range line has to give up to stay whole: 0 nothing; then, one step at a time, while whatever of it is
+ * marked `data-fit` is cut (a part marked "wrap" may take two lines and is cut when it needs a third), or the line
+ * itself runs over. `key` names what the line holds and how wide it is; a new key starts again from nothing given up.
+ * Measured before paint, so no cut line is ever shown.
  */
 function useFit(ref: RefObject<HTMLElement | null>, key: string, steps: number): number {
   const [state, setState] = useState({ key, given: 0 });
@@ -192,7 +267,8 @@ function useFit(ref: RefObject<HTMLElement | null>, key: string, steps: number):
   useLayoutEffect(() => {
     const node = ref.current;
     if (!node) return;
-    const cut = node.scrollWidth > node.clientWidth + 1 || [...node.querySelectorAll<HTMLElement>("[data-fit]")].some((part) => part.scrollWidth > part.clientWidth + 1);
+    const cut = node.scrollWidth > node.clientWidth + 1
+      || [...node.querySelectorAll<HTMLElement>("[data-fit]")].some((part) => part.scrollWidth > part.clientWidth + 1 || (part.dataset.fit === "wrap" && part.scrollHeight > part.clientHeight + 2));
     if (cut && given < steps) setState({ key, given: given + 1 });
     else if (state.key !== key) setState({ key, given });
   });
@@ -250,36 +326,37 @@ function Scrubber({ min, max, value, bounded, idle, segments, label, valueText, 
 }
 
 /**
- * A sentence of the range line. The line is one line: a sentence that does not fit is cut there and opens in full on
- * request. `full` is more than what is shown (a bar too narrow for the sentence shows the name alone): it always opens.
+ * What the line had no room for, in full, on request. The trigger is the text that stayed on the line, marked with an
+ * "i"; `full` is what opens (the state's name, the Brain's sentence verbatim, what the recording rests on).
  */
-function LineSentence({ name, full, strong, children }: { name?: string; full?: string; strong?: boolean; children: string }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const [overflowing, setCut] = useState(false);
-  const cut = overflowing || !!full;
-  useLayoutEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    const read = () => setCut(node.scrollWidth > node.clientWidth + 1);
-    read();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(read);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [children]);
-  const text = <span ref={ref} className="block min-w-0 truncate">{children}</span>;
-  const tone = strong ? "font-semibold text-ink" : "text-muted";
-  if (!cut) return <span className={cn("min-w-0 flex-shrink", tone)}>{text}</span>;
+function InFull({ label, className, children, content, fit, anchor }: { label: string; className?: string; children: ReactNode; content: ReactNode; fit?: "wrap"; anchor: RefObject<HTMLElement | null> }) {
   return (
     <Popover.Root>
-      <Popover.Trigger className={cn("min-w-0 flex-shrink cursor-pointer rounded-thumb border-0 bg-transparent p-0 text-left text-ui", tone, !strong && "hover:text-ink")} aria-label={`Read in full: ${full ?? children}`}>{text}</Popover.Trigger>
+      {/* It opens over the slide, from the bar's top edge: the controls of the bar stay in sight and in reach. */}
+      <Popover.Anchor virtualRef={anchor as RefObject<HTMLElement>} />
+      <Popover.Trigger className={cn("cursor-pointer rounded-thumb border-0 bg-transparent p-0 text-left text-ui hover:[&_svg]:text-ink", className)} aria-label={`Read in full: ${label}`} data-fit={fit}>
+        {children}
+      </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content side="top" align="start" sideOffset={10} collisionPadding={12} className="ll-pop z-50 max-w-[min(92vw,34rem)] p-3 text-ui">
-          {name && <b className="font-semibold">{name}. </b>}{full ?? children}
-        </Popover.Content>
+        <Popover.Content side="top" align="start" sideOffset={8} collisionPadding={12} className="ll-pop z-50 max-w-[min(92vw,34rem)] p-3 text-ui" data-testid="range-line-full">{content}</Popover.Content>
       </Popover.Portal>
     </Popover.Root>
   );
+}
+
+/** What the bar remembers: the position to put back, and the last one to keep. */
+interface Memory {
+  key: string;
+  /** The stored position of this page, until it has been put back (or could not be). */
+  want: StoredPosition | null;
+  /** The render in which the selection it names was asked for (the player follows a selection first); null before. */
+  asked: number | null;
+  /** Nothing is written before the stored position has been put back: the cue of a fresh page must not replace it. */
+  saving: boolean;
+  /** The bar was taken down: what the element reports while it goes is not a position. */
+  closed: boolean;
+  last: StoredPosition | null;
+  wrote: number;
 }
 
 // ---- the bar ---------------------------------------------------------------------------------------------------------------
@@ -291,7 +368,7 @@ export function Transport({ lecture, page, slide, selection, onSelect, playerRef
   const width = useWidth(bar);
   const measured = barLayout(width);
   const [listOpen, setListOpen] = useState(false);
-  const [listRoom, setListRoom] = useState<number | null>(null);
+  const [listPlace, setListPlace] = useState<{ side: "top" | "bottom"; room: number | null }>({ side: "top", room: null });
   // Outside a workspace frame (a story, a unit test) the media element lives in the bar itself.
   const [ownHost, setOwnHost] = useState<HTMLElement | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -323,6 +400,7 @@ export function Transport({ lecture, page, slide, selection, onSelect, playerRef
   // The whole recording, once opened on a page without a range, stays open on the later ones of the lecture.
   const [opened, setOpened] = useState<string | null>(null);
   const wholeOpen = legacy || opened === lectureKey;
+  // "idle": a page without a range whose whole recording is not open. Nothing is selected, but Play is never dead: it opens the whole recording.
   const mode: "unavailable" | "range" | "whole" | "candidate" | "opened" | "idle" = unavailable ? "unavailable" : selected ? "range" : ranges.length ? "whole" : candidate ? "candidate" : wholeOpen ? "opened" : "idle";
   const live = mode !== "unavailable" && mode !== "idle";
 
@@ -331,9 +409,35 @@ export function Transport({ lecture, page, slide, selection, onSelect, playerRef
     : candidate ? { id: candidateId(candidate), start_ms: candidate.start_ms, end_ms: candidate.end_ms, recording_source_id: candidate.recording_source_id ?? null } : null),
   [selected, candidate]);
 
+  // ---- where the learner was: read once per lecture, before anything is cued ------------------------------------------------
+  const memory = useRef<Memory | null>(null);
+  if (memory.current === null || memory.current.key !== lectureKey) {
+    const held = readStoredPosition(lectureKey);
+    const want = held && held.page === page ? held : null;
+    memory.current = { key: lectureKey, want, asked: null, saving: !want, closed: false, last: null, wrote: 0 };
+  }
+  const renders = useRef(0);
+  renders.current += 1;
+  const now = useRef({ page, chosen, wholeOpen, repeat: false, recording: null as string | null });
+  const remember = useCallback((ms: number, playing: boolean) => {
+    const held = memory.current;
+    if (!held || !held.saving || held.closed || !Number.isFinite(ms)) return;
+    const at = now.current;
+    held.last = { page: at.page, selection: at.chosen, whole: at.wholeOpen, recording: at.recording, ms: Math.max(0, Math.round(ms)), repeat: at.repeat, saved_at: Date.now() };
+    // While it plays a second is exact enough; a pause, a seek or a new selection is written at once.
+    if (!playing || held.last.saved_at - held.wrote >= 1_000) {
+      writeStoredPosition(held.key, held.last);
+      held.wrote = held.last.saved_at;
+    }
+  }, []);
+
   const leave = useRef<() => void>(() => undefined);
   const clip = useClipPlayer({
-    host, recordings: lecture.recordings, bounds, pageKey, onTime,
+    host, recordings: lecture.recordings, bounds, pageKey,
+    onTime: (ms, playing) => {
+      onTime(ms, playing);
+      remember(ms, playing);
+    },
     onLeftRange: () => leave.current(),
     onStopped: () => announce?.("Stopped at the end of this range."),
   });
@@ -342,6 +446,59 @@ export function Transport({ lecture, page, slide, selection, onSelect, playerRef
     setHeard(null);
     setOpened(lectureKey);
   };
+  now.current = { page, chosen, wholeOpen, repeat: clip.repeat, recording: clip.recording?.source_id ?? null };
+
+  // Put the stored position back, paused: first the selection it names (the player follows a selection by cueing its
+  // start), then the time inside it. A range that is no longer listed, or another recording, is not forced.
+  const putBack = (): void => {
+    const held = memory.current;
+    const want = held?.want;
+    if (!held || !want) return;
+    const done = (restore: boolean): void => {
+      held.want = null;
+      held.saving = true;
+      if (!restore || (want.recording && clip.recording && want.recording !== clip.recording.source_id)) return;
+      clip.seek(want.ms);
+      if (want.repeat && selected) clip.setRepeat(true);
+    };
+    if (unavailable) {
+      done(false);
+    } else if (ranges.length > 0) {
+      const target = want.selection === WHOLE_RECORDING ? WHOLE_RECORDING : ranges.some((range) => range.range_id === want.selection) ? want.selection : null;
+      if (target === null) done(false);
+      else if (target === chosen) done(true);
+      else if (held.asked === null) {
+        held.asked = renders.current;
+        select(target); // this runs again once the selection has come back
+      } else if (held.asked !== renders.current) done(false); // it was asked for and not taken: nothing is forced
+    } else if (want.whole && !wholeOpen) {
+      if (held.asked === null) {
+        held.asked = renders.current;
+        setOpened(lectureKey);
+      } else if (held.asked !== renders.current) done(true);
+    } else done(true);
+  };
+  useEffect(() => {
+    putBack();
+  });
+  // A new selection, Repeat or the whole recording opened: kept at once. Leaving the page of the app, or the tab: the last position is written.
+  useEffect(() => {
+    remember(clip.currentMs(), clip.isPlaying());
+  }, [remember, clip.currentMs, clip.isPlaying, pageKey, chosen, wholeOpen, clip.repeat]);
+  useLayoutEffect(() => {
+    const held = memory.current;
+    if (!held) return;
+    held.closed = false;
+    const write = () => {
+      if (held.saving && !held.closed && held.last) writeStoredPosition(held.key, held.last);
+    };
+    window.addEventListener("pagehide", write);
+    return () => {
+      window.removeEventListener("pagehide", write);
+      write();
+      held.closed = true;
+    };
+  }, [lectureKey]);
 
   const state = useRef({ live, durationMs: clip.durationMs, recording: clip.recording });
   state.current = { live, durationMs: clip.durationMs, recording: clip.recording };
@@ -365,27 +522,45 @@ export function Transport({ lecture, page, slide, selection, onSelect, playerRef
   // The list belongs to a page: another page closes it.
   useEffect(() => setListOpen(false), [pageKey]);
 
-  // The list lies over the slide and nothing else: it gets the room between the top of the stage's content and the bar.
+  // Where the list opens. Beside the context panel it lies over the slide and nothing else: it gets the room between
+  // the top of the stage's content and the bar. With one pane at a time it opens in the free area under the bar when
+  // that holds it, so the slide stays in sight while a range is chosen.
   const openList = (open: boolean) => {
-    if (open) {
+    if (open && bar.current) {
+      const rect = bar.current.getBoundingClientRect();
       // The nearest ancestor that holds something above the bar is the block of the slide and the bar.
-      const top = bar.current?.getBoundingClientRect().top ?? 0;
       let above = 0;
-      for (let parent = bar.current?.parentElement, depth = 0; parent && depth < 4 && above <= 120; parent = parent.parentElement, depth += 1) above = top - parent.getBoundingClientRect().top;
-      setListRoom(above > 120 ? Math.floor(above) - 8 : null);
+      for (let parent = bar.current.parentElement, depth = 0; parent && depth < 4 && above <= 120; parent = parent.parentElement, depth += 1) above = rect.top - parent.getBoundingClientRect().top;
+      // The nearest ancestor that scrolls or clips is the pane: what it leaves under the bar is free.
+      let below = 0;
+      if (frame.arrangement === "panes") {
+        for (let parent = bar.current.parentElement; parent; parent = parent.parentElement) {
+          const overflow = window.getComputedStyle(parent).overflowY;
+          if (overflow === "visible" && parent.parentElement) continue;
+          below = Math.min(parent.getBoundingClientRect().bottom, window.innerHeight) - rect.bottom;
+          break;
+        }
+      }
+      setListPlace(below >= 200 ? { side: "bottom", room: Math.floor(below) - 16 } : { side: "top", room: above > 120 ? Math.floor(above) - 8 : null });
     }
     setListOpen(open);
   };
-  const choose = (next: string) => {
-    clip.keepPlaying();
+  // `play`: a row of the list was pressed, which plays the range to its end (UI contract R2). The stepper of the line
+  // only moves: the recording goes on when it was playing and stays paused when it was not.
+  const choose = (next: string, play = false) => {
+    clip.keepPlaying(play);
     setHeard(null);
-    if (next === chosen && selected) clip.seek(selected.start_ms); // the chosen range again: back to its start
-    else select(next);
+    if (next === chosen && selected) {
+      clip.seek(selected.start_ms); // the chosen range again: back to its start
+      if (play) clip.play();
+    } else select(next);
   };
-  const hear = (id: string) => {
-    clip.keepPlaying();
-    if (candidate && candidateId(candidate) === id) clip.seek(candidate.start_ms);
-    else setHeard({ key: pageKey, id });
+  const hear = (id: string, play = false) => {
+    clip.keepPlaying(play);
+    if (candidate && candidateId(candidate) === id) {
+      clip.seek(candidate.start_ms);
+      if (play) clip.play();
+    } else setHeard({ key: pageKey, id });
   };
   const toggleWhole = () => {
     clip.keepPlaying();
@@ -394,7 +569,10 @@ export function Transport({ lecture, page, slide, selection, onSelect, playerRef
     else if (mode === "candidate") {
       setHeard(null);
       setOpened(lectureKey);
-    } else setOpened(mode === "opened" && !legacy ? null : lectureKey);
+    } else if (mode === "opened" && !legacy) {
+      clip.pause(); // nothing is selected on this page once the whole recording is closed
+      setOpened(null);
+    } else setOpened(lectureKey);
   };
   const goOn = () => {
     clip.goOn();
@@ -415,14 +593,62 @@ export function Transport({ lecture, page, slide, selection, onSelect, playerRef
   const wholeShown = mode === "whole" || mode === "opened";
   const segments = wholeShown ? trackSegments(ranges, clip.recording?.source_id, clip.durationMs) : [];
   const noLine = noRange ? noRangeLine(noRange, lecture.recordings) : null;
+  const note = useMemo(() => sessionLinkNote(lecture), [lecture]);
   const kind = selected ? rangeKindParts(selected) : null;
   const applies = selected ? (structural ? TOPIC_DISCUSSION_SENTENCE : rangeSupportLine(selected.support, identity.position?.kind ?? null).short) : null;
   const stopped = clip.stoppedAtEnd && (mode === "range" || mode === "candidate");
-  // The widths of 5.5 say what a bar keeps; a line that still does not fit (long times, a stepper, large text) gives up
-  // the same things in the same order: where it applies, then the method, then the Whole recording toggle (to More).
-  const given = useFit(lineRef, `${width}|${mode}|${bounds?.id ?? ""}|${ranges.length}|${stopped}|${clip.repeat}|${listOpen}`, 3);
-  const layout: BarLayout = { ...measured, applies: measured.applies && given < 1, method: measured.method && given < 2, wholeToggle: measured.wholeToggle && given < 3 };
   const canRepeat = mode === "range" || mode === "candidate";
+  const noRangeShown = mode === "idle" || mode === "opened";
+  const act = noLine?.action ?? "open_whole_recording";
+  // On a page without a range the Whole recording toggle stands on the line beside the one action of the state; where
+  // that action is "Open whole recording" the two are one control: the action until it is pressed, the toggle (on) after.
+  const noRangeToggle = noRangeShown && (mode === "opened" ? !legacy : act !== "open_whole_recording");
+  const fullSentence = noLine?.sentence ?? (legacy ? "No reviewed or suggested interval links this slide to the recording. No start time is guessed." : "No range came for this page, and no reason was stated.");
+  const wholeSays = mode !== "whole" ? [] : (() => {
+    const count = segments.length;
+    const long = count === 0 ? `This slide has ${countLabel(ranges.length, "range")}.` : count === 1 ? "The segment above the track is where this slide is discussed."
+      : separate(segments) ? `The ${count} segments above the track are where this slide is discussed.` : "The segments above the track are where this slide is discussed; some overlap.";
+    const short = count === 0 ? "" : count === 1 ? "1 segment marks this slide." : separate(segments) ? `${count} segments mark this slide.` : "Segments mark this slide; some overlap.";
+    return (note ? [`${long} ${note.sentence}`, note.sentence] : [long, short]).filter(Boolean);
+  })();
+
+  // What the line gives up to stay whole, in this order, one step at a time. The widths of 5.5 say what a bar starts
+  // with; a line that still does not fit (long times, a stepper, large text, a long sentence) gives up the next thing
+  // of its list. A sentence is given up for a shorter one and then for none: it is never cut, and never ends in "…".
+  const order: string[] = [];
+  if (mode === "range") {
+    if (stopped) {
+      if (measured.method) order.push("goOn", "long");
+      if (!measured.stacked) order.push("again");
+    } else if (clip.repeat) {
+      if (measured.hints) order.push("say0", "say1");
+      if (measured.wholeToggle) order.push("whole");
+    } else {
+      if (measured.applies && applies) order.push("applies");
+      if (measured.method && kind?.method) order.push("method");
+      if (measured.method && note) order.push("note");
+      if (measured.wholeToggle) order.push("whole");
+    }
+    if (ranges.length > 1) order.push("of");
+    if (!stopped) order.push("kind");
+  } else if (mode === "whole") {
+    if (measured.hints) wholeSays.forEach((_, at) => order.push(`say${at}`));
+    if (measured.wholeToggle) order.push("whole");
+  } else if (mode === "candidate") {
+    if (!measured.stacked) order.push("words");
+  } else if (noRangeShown) {
+    if (measured.hints) {
+      order.push("sentence");
+      if (noLine?.short && noLine.short !== fullSentence) order.push("short");
+    }
+    if (noRangeToggle && measured.wholeToggle) order.push("whole");
+    order.push("name");
+  }
+  const given = useFit(lineRef, `${width}|${mode}|${bounds?.id ?? ""}|${ranges.length}|${stopped}|${clip.repeat}|${listOpen}|${noRange?.state ?? ""}|${order.join()}`, order.length);
+  /** Still on the line: it is something this line can hold, and it has not been given up. */
+  const kept = (what: string): boolean => order.indexOf(what) >= given;
+  const layout = measured;
+  const wholeOnLine = mode === "range" ? !stopped && kept("whole") : mode === "whole" ? kept("whole") : noRangeToggle && kept("whole");
   const backName = `${names}back`;
   const forwardName = `${names}forward`;
 
@@ -441,10 +667,14 @@ export function Transport({ lecture, page, slide, selection, onSelect, playerRef
   }
 
   // ---- row 1 ---------------------------------------------------------------------------------------------------------------
+  // The disc is live whenever the recording can be read. With nothing selected it opens the whole recording and plays
+  // it from where the player stands; nothing ever starts without this press.
+  const open = () => {
+    if (mode === "idle") setOpened(lectureKey);
+  };
   const disc = (
-    <button type="button" disabled={!live} onClick={clip.toggle} aria-label={playLabel(clip.playing, bounds)} title={live ? playLabel(clip.playing, bounds) : "Nothing is selected to play"} data-testid="play-toggle"
-      className={cn("mr-1.5 grid size-10 flex-none place-items-center rounded-full border-0 transition-colors duration-[var(--ll-motion-small)] min-[1920px]:size-11",
-        live ? "cursor-pointer bg-accent text-on-accent hover:bg-accent-hover" : "cursor-not-allowed bg-pad-strong text-muted")}>
+    <button type="button" onClick={() => { open(); clip.toggle(); }} aria-label={playLabel(clip.playing, bounds)} title={playLabel(clip.playing, bounds)} data-testid="play-toggle"
+      className="mr-1.5 grid size-10 flex-none cursor-pointer place-items-center rounded-full border-0 bg-accent text-on-accent transition-colors duration-[var(--ll-motion-small)] hover:bg-accent-hover max-[899px]:size-11 min-[1920px]:size-11">
       {clip.playing ? <Pause aria-hidden className="size-5" fill="currentColor" strokeWidth={0} /> : <Play aria-hidden className="size-5 translate-x-px" fill="currentColor" strokeWidth={1.5} />}
     </button>
   );
@@ -453,19 +683,22 @@ export function Transport({ lecture, page, slide, selection, onSelect, playerRef
       {disc}
       <span id={backName} hidden>Back 10 seconds</span>
       <span id={forwardName} hidden>Forward 10 seconds</span>
-      <MediaSeekBackwardButton mediaController={clip.controllerId ?? undefined} seekOffset={10} noTooltip disabled={!live} aria-disabled={!live || undefined} aria-labelledby={backName} title="Back 10 seconds"
-        className={cn(MC_BUTTON, !live && MC_BUTTON_OFF)} />
-      <MediaSeekForwardButton mediaController={clip.controllerId ?? undefined} seekOffset={10} noTooltip disabled={!live} aria-disabled={!live || undefined} aria-labelledby={forwardName} title="Forward 10 seconds"
-        className={cn(MC_BUTTON, !live && MC_BUTTON_OFF)} />
+      {/* A press on a seek button with nothing selected is the learner asking for the recording: it opens too. */}
+      <span className="contents" onClickCapture={open}>
+        <MediaSeekBackwardButton mediaController={clip.controllerId ?? undefined} seekOffset={10} noTooltip aria-labelledby={backName} title="Back 10 seconds" className={MC_BUTTON} />
+        <MediaSeekForwardButton mediaController={clip.controllerId ?? undefined} seekOffset={10} noTooltip aria-labelledby={forwardName} title="Forward 10 seconds" className={MC_BUTTON} />
+      </span>
     </div>
   );
   const track = (
     <Scrubber className={layout.stacked ? "h-9 pt-2" : ROW_1} min={trackMin} max={trackMax} value={clip.positionMs} bounded={!!bounds} idle={!live} segments={segments}
       label={bounds ? "Position in the selected range" : "Position in the whole recording"} valueText={scrubberValueText(clip.positionMs, bounds, clip.durationMs)} onSeek={clip.seek} />
   );
+  // Where the player stands, also while nothing is selected: Play goes on from there.
+  const standsAt = trackMax > trackMin ? Math.min(Math.max(clip.positionMs, trackMin), trackMax) : Math.max(clip.positionMs, 0);
   const time = (
     <p className={cn("ll-num whitespace-nowrap text-ui text-muted", layout.stacked && "pr-2 pt-2")} data-testid="time-readout">
-      <b className={cn("font-semibold", live && "text-ink")}>{clockLabel(live ? Math.min(Math.max(clip.positionMs, trackMin), Math.max(trackMax, trackMin)) : 0)}</b>
+      <b className={cn("font-semibold", live && "text-ink")}>{clockLabel(standsAt)}</b>
       {trackMax > 0 && <> / {clockLabel(trackMax)}</>}
     </p>
   );
@@ -485,13 +718,13 @@ export function Transport({ lecture, page, slide, selection, onSelect, playerRef
     <div className={cn("flex items-center gap-0.5", layout.stacked ? "h-12" : ROW_1)}>
       {layout.speed && (
         <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild><ToolbarButton className="ll-num px-2" aria-label={`Playback speed, ${rateLabel(clip.rate)}`} title="Playback speed" data-testid="speed-button">{rateLabel(clip.rate)}</ToolbarButton></DropdownMenu.Trigger>
+          <DropdownMenu.Trigger asChild><ToolbarButton className={cn("ll-num justify-center px-2", TOUCH)} aria-label={`Playback speed, ${rateLabel(clip.rate)}`} title="Playback speed" data-testid="speed-button">{rateLabel(clip.rate)}</ToolbarButton></DropdownMenu.Trigger>
           <DropdownMenu.Portal><DropdownMenu.Content side="top" align="end" sideOffset={6} className={cn(MENU, "min-w-[7rem]")} data-testid="speed-menu">{speedItems}</DropdownMenu.Content></DropdownMenu.Portal>
         </DropdownMenu.Root>
       )}
       {layout.volume && (
         <Popover.Root>
-          <Popover.Trigger asChild><IconButton label="Volume"><VolumeIcon aria-hidden /></IconButton></Popover.Trigger>
+          <Popover.Trigger asChild><IconButton label="Volume" className={TOUCH}><VolumeIcon aria-hidden /></IconButton></Popover.Trigger>
           <Popover.Portal>
             <Popover.Content side="top" align="center" sideOffset={6} aria-label="Volume" className="ll-pop z-50 flex items-center gap-1 p-1.5" data-testid="volume-popover">
               <MediaMuteButton mediaController={clip.controllerId ?? undefined} noTooltip className={MC_BUTTON} />
@@ -501,17 +734,17 @@ export function Transport({ lecture, page, slide, selection, onSelect, playerRef
           </Popover.Portal>
         </Popover.Root>
       )}
-      <IconButton label="Repeat this range" aria-pressed={canRepeat && clip.repeat} disabled={!canRepeat} onClick={() => clip.setRepeat(!clip.repeat)} data-testid="repeat-toggle"><Repeat aria-hidden /></IconButton>
+      <IconButton label="Repeat this range" className={TOUCH} aria-pressed={canRepeat && clip.repeat} disabled={!canRepeat} onClick={() => clip.setRepeat(!clip.repeat)} data-testid="repeat-toggle"><Repeat aria-hidden /></IconButton>
       <DropdownMenu.Root>
-        <DropdownMenu.Trigger asChild><IconButton label="More: mark a range for this slide, correct this range" data-testid="transport-more-button"><Ellipsis aria-hidden /></IconButton></DropdownMenu.Trigger>
+        <DropdownMenu.Trigger asChild><IconButton label="More: mark a range for this slide, correct this range" className={TOUCH} data-testid="transport-more-button"><Ellipsis aria-hidden /></IconButton></DropdownMenu.Trigger>
         <DropdownMenu.Portal>
           <DropdownMenu.Content side="top" align="end" sideOffset={6} className={MENU} data-testid="transport-more">
             {markable
               ? <DropdownMenu.Item className="ll-menu-item" onSelect={() => onAddMatch!()}>Mark a range for this slide</DropdownMenu.Item>
               : <DropdownMenu.Label className={cn(MENU_LABEL, "pb-2")}>A range can be marked once this device is paired and the slide and the recording are identified.</DropdownMenu.Label>}
             {selected && canCorrect(selected) && <DropdownMenu.Item className="ll-menu-item" onSelect={() => correct(selected)}>Correct this range</DropdownMenu.Item>}
-            {stopped && !layout.method && <DropdownMenu.Item className="ll-menu-item" onSelect={goOn}>Go on in the whole recording</DropdownMenu.Item>}
-            {(!layout.wholeToggle || noLine?.action === "next_content" || noLine?.action === "show_candidates") && (
+            {stopped && (mode === "candidate" ? !layout.method : !kept("goOn")) && <DropdownMenu.Item className="ll-menu-item" onSelect={goOn}>Go on in the whole recording</DropdownMenu.Item>}
+            {!wholeOnLine && !(mode === "idle" && act === "open_whole_recording") && (
               <DropdownMenu.CheckboxItem className="ll-menu-item" checked={wholeShown} onCheckedChange={toggleWhole}>
                 <span className="flex-1">{R2_ACTION.whole_recording}</span>
                 <DropdownMenu.ItemIndicator><Check aria-hidden className="size-4" /></DropdownMenu.ItemIndicator>
@@ -527,15 +760,19 @@ export function Transport({ lecture, page, slide, selection, onSelect, playerRef
 
   // ---- row 2: the one range line ----------------------------------------------------------------------------------------------
   const lineButton = (pressed?: boolean) => cn(LINE_BUTTON, !pressed && LINE_PAD);
-  const wholeToggle = layout.wholeToggle && (
+  const wholeToggle = wholeOnLine && (
     <ToolbarButton size="sm" aria-pressed={wholeShown} className={lineButton(wholeShown)} onClick={toggleWhole} data-testid="whole-toggle">{R2_ACTION.whole_recording}</ToolbarButton>
   );
-  const listButton = (closed: ReactNode, open: ReactNode) => (
-    <ToolbarButton size="sm" chevron className={cn(lineButton(), !listOpen && "[&>svg:last-child]:rotate-180")} data-testid="range-list-toggle">{listOpen ? open : closed}</ToolbarButton>
+  // The chevron points to where the list is, or will open: up over the slide; down under the bar with one pane at a time.
+  const listSide = listOpen ? listPlace.side : frame.arrangement === "panes" ? "bottom" : "top";
+  const listButton = (closedLabel: ReactNode, openLabel: ReactNode) => (
+    <ToolbarButton size="sm" chevron className={cn(lineButton(), "max-[899px]:min-w-11 max-[899px]:justify-center", (listSide === "bottom") === listOpen && "[&>svg:last-child]:rotate-180")} data-testid="range-list-toggle">{listOpen ? openLabel : closedLabel}</ToolbarButton>
   );
   const list = (trigger: ReactNode) => (
-    <RangeList pages={identity.groupPages} ranges={ranges} candidates={candidates} selection={candidate ? candidateId(candidate) : chosen} onSelect={(next) => (next.startsWith("candidate:") ? hear(next) : choose(next))}
-      open={listOpen} onOpenChange={openList} room={listRoom} trigger={trigger} anchor={bar} recordings={lecture.recordings} groupKind={identity.position?.kind ?? null} structural={structural}
+    <RangeList pages={identity.groupPages} ranges={ranges} candidates={candidates} selection={candidate ? candidateId(candidate) : chosen}
+      onSelect={(next, how) => (next.startsWith("candidate:") ? hear(next, how?.play) : choose(next, how?.play))}
+      open={listOpen} onOpenChange={openList} room={listPlace.room} side={listPlace.side} trigger={trigger} anchor={bar} recordings={lecture.recordings} groupKind={identity.position?.kind ?? null} structural={structural}
+      note={note?.full ?? null}
       onMarkRange={onAddMatch ? () => { setListOpen(false); onAddMatch(); } : undefined} onCorrectRange={ranges.some(canCorrect) ? correct : undefined} onOpenTranscriptLines={onOpenTranscriptLines} />
   );
   const rangesButton = list(listButton(
@@ -545,44 +782,48 @@ export function Transport({ lecture, page, slide, selection, onSelect, playerRef
   const action = (label: string, onClick: () => void, icon?: ReactNode) => (
     <ToolbarButton size="sm" icon={icon} className={cn(LINE_BUTTON, LINE_PAD, "font-semibold text-accent-text")} onClick={onClick} data-testid="no-range-action">{label}</ToolbarButton>
   );
+  const say = (options: readonly string[]): string | null => options.find((_, at) => kept(`say${at}`)) ?? null;
 
   let line: ReactNode;
   if (mode === "range" && selected && kind) {
+    const repeats = clip.repeat && !stopped ? say(["Repeats this range until you turn it off", "Repeating"]) : null;
     line = (
       <>
         {ranges.length > 1 && (
           <span className="inline-flex flex-none items-center gap-0.5 whitespace-nowrap" data-testid="range-stepper">
             <IconButton size="sm" label="Previous range" disabled={index <= 0} onClick={() => choose(ranges[index - 1]!.range_id)}><ChevronLeft aria-hidden /></IconButton>
-            <span className="ll-num ll-nb">{!layout.stacked && `Range${NBSP}`}<b className="font-semibold">{index + 1}</b>{`${NBSP}of${NBSP}${ranges.length}`}</span>
+            <span className="ll-num ll-nb">{!layout.stacked && `Range${NBSP}`}<b className="font-semibold">{index + 1}</b>{kept("of") ? `${NBSP}of${NBSP}${ranges.length}` : <span className="sr-only"> of {ranges.length}</span>}</span>
             <IconButton size="sm" label="Next range" disabled={index >= ranges.length - 1} onClick={() => choose(ranges[index + 1]!.range_id)}><ChevronRight aria-hidden /></IconButton>
           </span>
         )}
         {stopped ? (
           <>
-            <b className="ll-nb flex-none font-semibold" data-testid="stopped-line">{layout.method ? "Stopped at the end of this range" : "Stopped at the end"}</b>
-            {!layout.stacked && <ToolbarButton size="sm" className={lineButton()} onClick={clip.play}>Play it again</ToolbarButton>}
-            {layout.method && <ToolbarButton size="sm" className={lineButton()} onClick={goOn}>Go on in the whole recording</ToolbarButton>}
+            <b className="ll-nb flex-none font-semibold" data-testid="stopped-line">{kept("long") ? "Stopped at the end of this range" : "Stopped at the end"}</b>
+            {kept("again") && <ToolbarButton size="sm" className={lineButton()} onClick={clip.play}>Play it again</ToolbarButton>}
+            {kept("goOn") && <ToolbarButton size="sm" className={lineButton()} onClick={goOn}>Go on in the whole recording</ToolbarButton>}
           </>
         ) : (
           <>
             <b className="ll-num ll-nb flex-none font-semibold" data-testid="range-times">{selected.relation === "displayed_during" ? `${RANGE_RELATION_LABEL.displayed_during} ` : ""}{timeSpanLabel(selected.start_ms, selected.end_ms)}</b>
-            <BasisLabel basis={rangeBasis(selected)} className="min-w-0 flex-shrink-0 whitespace-nowrap text-ink">{layout.stacked ? <span className="sr-only">{kind.label}</span>
-              : <span className="block" data-fit="">{kind.label}{kind.method && layout.method && !clip.repeat ? ` (${kind.method})` : ""}</span>}</BasisLabel>
-            {clip.repeat ? (measured.hints && <LineSentence>Repeats this range until you turn it off</LineSentence>)
-              : layout.applies && applies && <span className="min-w-0 truncate text-muted" data-fit=""><span aria-hidden>· </span>{applies}</span>}
+            <BasisLabel basis={rangeBasis(selected)} className="min-w-0 flex-shrink-0 whitespace-nowrap text-ink">{kept("kind")
+              ? <span className="block" data-fit="">{kind.label}{kind.method && kept("method") ? ` (${kind.method})` : ""}</span> : <span className="sr-only">{kind.label}</span>}</BasisLabel>
+            {repeats && <span className={SENTENCE} data-fit="">{repeats}</span>}
+            {!clip.repeat && (kept("applies") || kept("note")) && (
+              <span className={SENTENCE} data-fit="">{kept("applies") && <><span aria-hidden>· </span>{applies}</>}{kept("note") && <><span aria-hidden> · </span>{note!.short}</>}</span>
+            )}
           </>
         )}
         <span className="min-w-2 flex-1" />
-        {!stopped && wholeToggle}
+        {wholeToggle}
         {rangesButton}
       </>
     );
   } else if (mode === "whole") {
+    const says = say(wholeSays);
     line = (
       <>
         <b className="ll-nb flex-none font-semibold">{R2_ACTION.whole_recording}</b>
-        {layout.hints && <LineSentence>{segments.length === 0 ? `This slide has ${countLabel(ranges.length, "range")}.` : segments.length === 1 ? "The segment above the track is where this slide is discussed."
-          : separate(segments) ? `The ${segments.length} segments above the track are where this slide is discussed.` : "The segments above the track are where this slide is discussed; some overlap."}</LineSentence>}
+        {says && <span className={SENTENCE} data-fit="">{says}</span>}
         <span className="min-w-2 flex-1" />
         {wholeToggle}
         {rangesButton}
@@ -591,31 +832,40 @@ export function Transport({ lecture, page, slide, selection, onSelect, playerRef
   } else if (mode === "candidate" && candidate) {
     line = (
       <>
-        {stopped ? <b className="ll-nb flex-none font-semibold" data-testid="stopped-line">Stopped at the end of this candidate</b>
+        {stopped ? <b className="ll-nb flex-none font-semibold" data-testid="stopped-line">{layout.stacked ? "Stopped at the end" : "Stopped at the end of this candidate"}</b>
           : <><b className="ll-num ll-nb flex-none font-semibold" data-testid="range-times">{timeSpanLabel(candidate.start_ms, candidate.end_ms)}</b>
-            {!layout.stacked && <BasisLabel basis="suggested" className="min-w-0 text-ink"><span className="block truncate">{CANDIDATE_WORDS}</span></BasisLabel>}</>}
+            <BasisLabel basis="suggested" className="min-w-0 flex-shrink-0 whitespace-nowrap text-ink"><span className="block" data-fit="">{kept("words") ? CANDIDATE_WORDS : "Candidate"}</span></BasisLabel></>}
         <span className="min-w-2 flex-1" />
         {list(listButton(layout.stacked ? "Candidates" : R2_ACTION.show_candidates, layout.stacked ? "Hide" : "Hide candidates"))}
       </>
     );
   } else {
-    // No range: the one line of the page's state and its one action.
-    const name = (layout.hints ? noLine?.name : noLine?.brief) ?? (legacy ? "No recording range" : "No recording range is listed");
-    const sentence = noLine?.sentence ?? (legacy ? "No reviewed or suggested interval links this slide to the recording. No start time is guessed." : "No range came for this page, and no reason was stated.");
-    const act = noLine?.action ?? "open_whole_recording";
+    // No range: the one line of the page's state and its one action. The name always stands; its sentence is the
+    // Brain's own when there is room for it, else the short clause, else none, and opens in full from the line.
+    const fullName = noLine?.name ?? (legacy ? "No recording range" : "No recording range is listed");
+    const name = kept("name") ? fullName : noLine?.brief ?? fullName;
+    const second = kept("sentence") ? fullSentence : kept("short") ? noLine!.short : null;
+    const more = second !== fullSentence || !!note;
+    const mark = more && <Info aria-hidden className={cn("flex-none text-muted", layout.stacked ? "ml-1 inline size-3.5 align-[-2px]" : "size-4")} />;
+    const words = layout.stacked
+      ? <><b className="font-semibold text-ink">{name}</b>{mark}</>
+      : <><b className="ll-nb flex-none font-semibold text-ink">{name}</b>{second && <span className={SENTENCE} data-fit="">{second}</span>}{mark}</>;
+    // A bar under 480 px gives the name two lines of its row; a wider one keeps it on one.
+    const shape = layout.stacked ? "block max-h-9 min-w-0 flex-shrink overflow-hidden whitespace-normal leading-[18px]" : "flex min-w-0 flex-shrink items-center gap-2";
     line = (
       <>
-        {layout.hints ? <><b className="ll-nb flex-none font-semibold">{name}</b><LineSentence name={name}>{sentence}</LineSentence></>
-          : <LineSentence strong full={`${noLine?.name ?? name}. ${sentence}`}>{name}</LineSentence>}
+        {more
+          ? <InFull anchor={bar} label={`${fullName}. ${fullSentence}`} className={shape} fit={layout.stacked ? "wrap" : undefined}
+            content={<><b className="font-semibold">{fullName}.</b> {fullSentence}{note && <span className="mt-2 block text-muted">{note.full}</span>}</>}>{words}</InFull>
+          : <span className={shape} data-fit={layout.stacked ? "wrap" : undefined}>{words}</span>}
         <span className="min-w-2 flex-1" />
         {act === "next_content" ? (onNextContent && action(R2_ACTION.next_content, onNextContent, <SkipForward aria-hidden />))
           : act === "show_candidates" ? list(<ToolbarButton size="sm" className={cn(LINE_BUTTON, LINE_PAD, "font-semibold text-accent-text")} data-testid="no-range-action">{listOpen ? "Hide candidates" : R2_ACTION.show_candidates}</ToolbarButton>)
-            : mode !== "opened" ? action(R2_ACTION.open_whole_recording, () => setOpened(lectureKey))
-              : !legacy && <ToolbarButton size="sm" aria-pressed className={LINE_BUTTON} onClick={toggleWhole} data-testid="whole-toggle">{R2_ACTION.whole_recording}</ToolbarButton>}
+            : mode !== "opened" && action(R2_ACTION.open_whole_recording, () => setOpened(lectureKey))}
+        {wholeToggle}
       </>
     );
   }
-  const noRangeShown = mode === "idle" || mode === "opened";
 
   return (
     <section ref={bar} aria-label="Recording" className={cn(shell, layout.stacked && "py-px")} data-testid="transport" data-mode={mode}>
@@ -631,7 +881,7 @@ export function Transport({ lecture, page, slide, selection, onSelect, playerRef
           <div className={cn("grid items-center gap-x-3 px-2", layout.stacked ? "grid-cols-[minmax(0,1fr)_auto]" : "grid-cols-[auto_minmax(0,1fr)_auto_auto]")} data-testid="transport-row">
             {layout.stacked ? <>{track}{time}{controls}<div className="justify-self-end">{tools}</div></> : <>{controls}{track}{time}{tools}</>}
           </div>
-          <div ref={lineRef} className={cn("flex min-w-0 items-center gap-3 overflow-x-clip pl-2.5 pr-2 text-ui", layout.stacked ? "h-10 gap-2 pb-2" : cn(ROW_2, "pb-1.5"))} data-testid={noRangeShown ? "no-range-line" : "range-line"}
+          <div ref={lineRef} className={cn("flex min-w-0 items-center gap-3 overflow-x-clip pl-2.5 pr-2 text-ui", layout.stacked ? "h-10 gap-2 pb-1" : cn(ROW_2, "pb-1.5"))} data-testid={noRangeShown ? "no-range-line" : "range-line"}
             data-state={noRangeShown ? noRange?.state ?? "none" : undefined}>
             {line}
           </div>

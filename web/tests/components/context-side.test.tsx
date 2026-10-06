@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { ContextPanel, TabFoot, TabScroll } from "@/features/lecture/ContextPanel";
-import { SourcesPanel, groupingChoices } from "@/features/lecture/SourcesPanel";
+import { SourcesPanel, groupingChoices, nameCarriesLectureNumber, offeredSentences } from "@/features/lecture/SourcesPanel";
 import { NOT_ASSESSED_LEAD, tutorHeading } from "@/features/tutor/RequestCard";
 import { aboutPage, sendBlockedReason } from "@/features/tutor/TutorPanel";
 import { sampleLectureView, sampleLectureViewWithoutR2 } from "@/lib/fixtures/r2-sample";
@@ -97,6 +97,38 @@ describe("Sources tab", () => {
     expect(textOf(sources)).toContain("Lecture recording");
     expect(textOf(sources)).toContain("1 h 20 min.");
     expect(textOf(within(sources).getByTestId("source-timing"))).toBe("Slide-linked. 6 ranges for 6 of 12 pages; 1 page expects none.");
+  });
+
+  it("names the recording by its file, and says nothing about a suggestion when the course index links the session", () => {
+    panel(4);
+    const recording = screen.getByTestId("source-recording");
+    expect(textOf(recording)).toBe("1 h 20 min. sample-recording-90.m4a · version v1-eeeeeeeeeeee");
+    expect(textOf(screen.getByRole("region", { name: "Sources of this lecture" }))).not.toMatch(/file name|links (it|this recording) to no lecture/i);
+  });
+
+  it("says that a recording the course index links to no lecture is offered by its file name", () => {
+    const offered = { ...sampleLectureView, session_link: "suggested_by_file_name", recordings: [{ ...sampleLectureView.recordings[0]!, filename: "Sample Lec 90 Sep 3.m4a" }],
+      session_link_evidence: { state: "suggested", rule: "lecture number in the recording or transcript file name equals the unit number", number: 90, session_id: "session-90", files: ["Sample Lec 90 Sep 3.m4a"], note: "Synthetic note." } };
+    panel(4, offered);
+    const recording = screen.getByTestId("source-recording");
+    expect(textOf(recording)).toBe("Offered by its file name. The course index links this recording to no lecture. 1 h 20 min. Sample Lec 90 Sep 3.m4a · version v1-eeeeeeeeeeee");
+    expect(recording.querySelector("strong")).toHaveTextContent("Offered by its file name.");
+  });
+
+  it("says of each file of an offered session how it comes to be here, and never that a name carries a number it does not", () => {
+    expect(nameCarriesLectureNumber("Sample Lec 2 Sep 10 .m4a", 2)).toBe(true);
+    expect(nameCarriesLectureNumber("SAMPLE_Lecture_02_2026-09-10.m4a", 2)).toBe(true);
+    expect(nameCarriesLectureNumber("Sample Lec 12 Sep 2.m4a", 2)).toBe(false); // the 2 of a date, and 12, are not lecture 2
+    expect(nameCarriesLectureNumber("transcript.txt", 2)).toBe(false);
+    expect(nameCarriesLectureNumber("transcript.txt", undefined)).toBeNull();
+    const evidence = { state: "suggested", number: 2, files: ["Sample Lec 2 Sep 10 .m4a", "transcript.txt"] };
+    expect(offeredSentences("recording", "Sample Lec 2 Sep 10 .m4a", evidence)).toEqual({ how: "Offered by its file name.", index: "The course index links this recording to no lecture." });
+    expect(offeredSentences("transcript", "transcript.txt", evidence)).toEqual({ how: "Offered with the recording of its session.", index: "The course index links this transcript to no lecture." });
+    expect(offeredSentences("transcript", "Sample Lec 2 Sep 10 .txt", evidence).how).toBe("Offered by its file name.");
+    expect(offeredSentences("recording", "audio.m4a", { ...evidence, files: ["audio.m4a", "Sample Lec 2 Sep 10 .txt"] }).how).toBe("Offered with its session, by the name of another file.");
+    // An older Brain sends no evidence: the recording is worded as the session link says, the transcript claims nothing of its own name.
+    expect(offeredSentences("recording", "audio.m4a", null).how).toBe("Offered by its file name.");
+    expect(offeredSentences("transcript", "transcript.txt", null).how).toBe("Offered with the recording of its session.");
   });
 
   it("says what is known of a page of a build group and how it was established", () => {

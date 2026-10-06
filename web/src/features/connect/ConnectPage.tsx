@@ -8,7 +8,7 @@ import { useApp } from "@/app/state";
 import { Button, ErrorState, LoadingState, PageHeader } from "@/components/ui";
 import { formatFingerprint } from "@/lib/device";
 import { countLabel, NBSP } from "@/lib/labels";
-import { Callout, Lead, StateWords } from "@/features/search/SearchOverlay";
+import { Callout, Lead, Page, StateWords } from "@/features/search/SearchOverlay";
 
 /** A list of entries on one surface, parted by hairlines: never a wall of boxes. */
 const ROWS = "ll-region flex flex-col";
@@ -48,8 +48,8 @@ export function ConnectPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (app.workspaceLoading) return <LoadingState label="Checking this PC's workspace…" />;
-  if (!app.workspace) return <ErrorState error={app.workspaceError} />;
+  if (app.workspaceLoading) return <Page reading><LoadingState label="Checking this PC's workspace…" /></Page>;
+  if (!app.workspace) return <Page reading><ErrorState error={app.workspaceError} /></Page>;
   const { workspace, pairing, device } = app;
   const caps = workspace.capabilities;
   const bound = workspace.courses.filter((c) => c.binding === "bound");
@@ -68,7 +68,7 @@ export function ConnectPage() {
   };
 
   return (
-    <div className="ll-page ll-page-reading flex flex-col gap-8">
+    <Page reading className="flex flex-col gap-8">
       <PageHeader title="Connect your course workspace" subtitle={<Lead>One learner, your existing course folders. Nothing is reorganised, uploaded or written by connecting.</Lead>} />
 
       <section aria-labelledby="scope-heading" className="-mt-2">
@@ -93,7 +93,7 @@ export function ConnectPage() {
             </li>
           ))}
         </ul>
-        {problems.length > 0 && <p className="ll-measure mt-3 text-ui text-muted">A binding problem stops only that course. Similar-looking folders are never chosen by guess.</p>}
+        {problems.length > 0 && <p className="ll-measure mt-3 text-read text-muted">A binding problem stops only that course. Similar-looking folders are never chosen by guess.</p>}
       </section>
 
       <section aria-labelledby="checks-heading">
@@ -110,14 +110,14 @@ export function ConnectPage() {
           </Check>
           <Check ok={caps.writer.status === "enabled" ? true : caps.writer.status === "fixture_isolated" ? "partial" : false} title={caps.writer.label}>{caps.writer.detail}</Check>
         </ul>
-        <p className="ll-measure mt-3 text-ui"><Link className="ll-link" to="/settings/ai">Setup details</Link> lists the exact next action for anything not ready — it never asks you to weaken permissions.</p>
+        <p className="ll-measure mt-3 text-read"><Link className="ll-link" to="/settings/ai">Setup details</Link> lists the exact next action for anything not ready — it never asks you to weaken permissions.</p>
       </section>
 
       <section aria-labelledby="pair-heading" className="ll-region p-4 min-[900px]:p-6">
         <h2 id="pair-heading" className={SECTION_HEAD}>Pair this device</h2>
         {!device ? <LoadingState label="Preparing this device's key…" /> : (
           <div className="flex flex-col gap-4">
-            <p className="ll-measure text-ui text-muted">This device made its own signing key. The private key never leaves this browser. Compare this fingerprint with the one shown on the Brain PC before approving.</p>
+            <p className="ll-measure text-read text-muted">This device made its own signing key. The private key never leaves this browser. Compare this fingerprint with the one shown on the Brain PC before approving.</p>
             <p className="select-all break-all font-mono text-ui" data-testid="device-fingerprint" aria-label="This device's key fingerprint">{formatFingerprint(device.fingerprint)}</p>
             {!device.durable && <Callout tone="caution" title="This browser cannot keep the key">Storage is unavailable, so the pairing lasts only until this page closes.</Callout>}
             {pairing.state === "unpaired" && <div><Button variant="primary" busy={busy} onClick={() => run(app.requestPairing)}>Request pairing</Button></div>}
@@ -137,6 +137,6 @@ export function ConnectPage() {
         {bound.length === 0 ? <p className="text-ui text-muted">No course folder is bound, so there is nothing to open yet.</p>
           : pairing.state !== "paired" && <p className="text-ui text-muted">You can open the workspace now and pair later.</p>}
       </div>
-    </div>
+    </Page>
   );
 }

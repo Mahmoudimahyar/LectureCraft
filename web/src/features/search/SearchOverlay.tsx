@@ -2,8 +2,9 @@
 // keeps the study context: drafts are pinned to their own source, and "Return" restores the origin.
 //
 // This file also holds what the pages that keep their layout share (Review, Progress, Library, Activity, Settings,
-// Connect, session summary, question practice): `ReturnLink`, and at the foot `Picker`, `StateWords`, `Callout` (held to
-// a reading measure), `Disclosure`, `lectureNameOf`, `Lead`, `Facts` / `Fact`.
+// Connect, session summary, question practice): `ReturnLink`, and at the foot `Page` (the one page column, which is the
+// column of the Study home), `Picker`, `StateWords`, `Callout` (held to a reading measure), `Disclosure`, `Details`
+// (identifiers on request), `keyWords`, `lectureNameOf`, `Lead`, `Facts` / `Fact`.
 // They belong in components/ui.tsx; they are here because that file was not this stream's to edit.
 import { useId, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
@@ -94,6 +95,31 @@ export function ReturnLink() {
 // ---- shared by the pages that keep their layout ------------------------------------------------------------------------------
 
 /**
+ * The one page column of every browsing page. It is the column of the Study home (design specification 6): the full
+ * width under 1200 px, then 1280, 1400 and 1760 px including 48 px of side padding, 24 of which are the shell's. With
+ * it a page title stands in the same place whichever rail item is open. A test holds it, class for class, to the
+ * constant the Study home states for itself.
+ */
+export const PAGE_COLUMN = "mx-auto w-full pb-6 max-[899px]:pt-2 min-[1200px]:max-w-[1232px] min-[1200px]:px-6 min-[1200px]:pt-2 min-[1920px]:max-w-[1352px] min-[1920px]:pt-6 min-[2400px]:max-w-[1712px]";
+/** What a reading page holds: capped to a measure and kept on the column's left edge, never centred apart from it. */
+const READING_WIDTH = "max-w-[56rem] min-[1920px]:max-w-[64rem]";
+
+/**
+ * A page in the page column. A reading page (one record, one task) is the same column with what it holds capped to a
+ * measure, so its title starts where every other page's title starts. `className` arranges what the page holds.
+ */
+export function Page({ reading = false, className, testId, children }: { reading?: boolean; className?: string; testId?: string; children: ReactNode }) {
+  if (!reading) return <div className={cn(PAGE_COLUMN, className)} data-testid={testId}>{children}</div>;
+  return <div className={PAGE_COLUMN} data-testid={testId}><div className={cn(READING_WIDTH, className)}>{children}</div></div>;
+}
+
+/** A key as words that start with a capital ("raw_teachback_audio" → "Raw teachback audio"): for a heading whose only name is its key. */
+export function keyWords(key: string): string {
+  const words = key.replace(/[-_]+/g, " ").trim();
+  return words ? words[0]!.toUpperCase() + words.slice(1) : "";
+}
+
+/**
  * One choice of many, where a segmented control would not fit (a filter with long options, a size from 1 to 25). It
  * replaces the native select: a pad button showing the chosen option, and a popover list (Radix Select: a combobox
  * with a listbox, type-ahead and arrow keys). `label` is its accessible name; say the same word beside it when the
@@ -160,6 +186,21 @@ export function Disclosure({ title, count, children, className, bodyClassName, d
       <SectionToggle aria-expanded={open} aria-controls={open ? body : undefined} count={count} className="text-ui" onClick={() => setOpen((value) => !value)}>{title}</SectionToggle>
       {open && <div id={body} className={bodyClassName}>{children}</div>}
     </div>
+  );
+}
+
+/**
+ * The identifiers of a record (an attempt, a file version, a catalog entry), on request: a closed "Details" that holds
+ * them as terms and values the learner can select. A sentence or a heading says the thing in words; its identifier
+ * stays here for the day it is needed. A row with nothing to state is left out, and with no row nothing is drawn.
+ */
+export function Details({ rows, className }: { rows: ReadonlyArray<readonly [term: string, value: ReactNode]>; className?: string }) {
+  const stated = rows.filter(([, value]) => value !== null && value !== undefined && value !== false && value !== "");
+  if (stated.length === 0) return null;
+  return (
+    <Disclosure title="Details" className={cn("text-ui", className)} bodyClassName="pb-1 pt-1">
+      <Facts className="text-muted">{stated.map(([term, value]) => <Fact key={term} term={term}><span className="select-all break-all">{value}</span></Fact>)}</Facts>
+    </Disclosure>
   );
 }
 

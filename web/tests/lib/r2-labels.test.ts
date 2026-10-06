@@ -282,7 +282,7 @@ describe("question ties", () => {
   it("words the state of the suggestions file, an earlier catalog apart from a file that cannot be read", () => {
     expect(INFERRED_FILE_STATE_LABEL[sampleInferredAnchors.file.state]).toBe("Suggestions file read");
     expect(sampleInferredAnchorsEarlierCatalog.file.state).toBe("made_for_earlier_catalog");
-    expect(INFERRED_FILE_STATE_LABEL.made_for_earlier_catalog).toBe("Made for an earlier version of the question catalog");
+    expect(INFERRED_FILE_STATE_LABEL.made_for_earlier_catalog).toBe("Made for an earlier version of the question catalog; suggestions for questions that have not changed since are still shown");
     expect(INFERRED_FILE_STATE_LABEL.missing).toBe("None produced for this course yet");
     expect(new Set(FILE_STATES.map((state) => INFERRED_FILE_STATE_LABEL[state])).size).toBe(FILE_STATES.length);
   });

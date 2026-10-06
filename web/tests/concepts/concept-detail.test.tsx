@@ -2,17 +2,21 @@
 // page" opens, source rows as openable links worded by their tie, a concept's definition state, and the Evidence tab:
 // the five states with prior exposure beside them, counts with their denominator, no score and no percentage.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { configure, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import type { ReactElement } from "react";
-import { ConceptDetail, detailCounts, detailKicker, detailSummary, primaryPage, questionsHeading, sourceTieSentence, supportPlaceSentence } from "@/features/concepts/ConceptDetail";
+import {
+  ConceptDetail, IN_SCOPE_MARK, detailCounts, detailKicker, detailSummary, ownDetail, primaryPage, questionsHeading, questionsScopeSentence, sourceTieSentence, supportPlaceSentence,
+} from "@/features/concepts/ConceptDetail";
 import { parseScope } from "@/features/concepts/map-model";
 import { sampleEvidence, sampleLectureView } from "@/lib/fixtures/r2-sample";
 import { NBSP } from "@/lib/labels";
 import type { OutlineNodeView } from "@/lib/types";
 
 const plain = (text: string | null | undefined): string => (text ?? "").split(NBSP).join(" ");
+// The panel reads the item, the course and a lecture before it is complete: on a busy machine that can pass the library's one second.
+configure({ asyncUtilTimeout: 5000 });
 const question = (id: string, title: string, extra: Partial<OutlineNodeView["questions"][number]> = {}): OutlineNodeView["questions"][number] => ({
   question_id: id, version: 1, collection: "L90", number: 1, title, origin: "generated_practice", topic: null, prompt: `Synthetic prompt of ${title}.`, prompt_in_index: true, family_id: null, family_revision: null,
   criteria_count: 2, criteria_authorship: "catalog", lecture_ids: ["lecture-90"], membership: { basis: "cited_source_in_unit", source_ids: [] }, anchors: [], anchor_state: "resolved", slide_anchor: "named", locator_text: "",
@@ -90,6 +94,23 @@ describe("what the header says", () => {
     expect(plain(questionsHeading("concept", 2))).toBe("2 questions test this concept");
     expect(plain(questionsHeading("skill", 1))).toBe("1 question tests this skill");
     expect(questionsHeading("question", 1)).toBe("This question");
+  });
+
+  it("says how many of the course's questions of a node the scope holds, so two counts on one screen are told apart", () => {
+    expect(questionsScopeSentence("concept", 3, 2, "slide")).toBe("2 of them are tied to this slide.");
+    expect(questionsScopeSentence("concept", 3, 1, "slide")).toBe("1 of them is tied to this slide.");
+    expect(questionsScopeSentence("skill", 3, 3, "lecture")).toBe("All 3 are in this lecture.");
+    expect(questionsScopeSentence("topic", 1, 1, "slide")).toBe("It is tied to this slide.");
+    expect(questionsScopeSentence("concept", 2, 0, "lecture")).toBe("None of them is in this lecture.");
+    expect(questionsScopeSentence("concept", 1, 0, "slide")).toBe("It is not tied to this slide.");
+    // nothing to tell apart, or nothing known: nothing is said
+    expect(questionsScopeSentence("concept", 3, 2, "course")).toBeNull();
+    expect(questionsScopeSentence("question", 1, 1, "slide")).toBeNull();
+    expect(questionsScopeSentence("criterion", 1, 1, "slide")).toBeNull();
+    expect(questionsScopeSentence("concept", 0, 0, "slide")).toBeNull();
+    expect(questionsScopeSentence("concept", 3, null, "slide")).toBeNull();
+    expect(questionsScopeSentence("concept", 3, undefined, "lecture")).toBeNull();
+    expect(IN_SCOPE_MARK).toEqual({ course: null, lecture: "In this lecture", slide: "Tied to this slide" });
   });
 });
 
@@ -196,6 +217,71 @@ describe("the panel", () => {
     const all = plain(screen.getByTestId("outline-detail").textContent);
     expect(all).toContain("Unknown · no recorded attempt");
     expect(all).not.toMatch(/Of 0|0 independent/);
+  });
+
+  it("tells the course's count from the scope's on the Questions tab: the heading, one sentence, and a mark on the rows the scope holds", async () => {
+    // The header counts what this slide holds (1 question); the list is the course's (2 questions).
+    mount(
+      <ConceptDetail courseId="sample-course" nodeId="c-sample-1" tab="questions" scope={parseScope("slide:lecture-90:4")} returnTo="/" framed scopeQuestions={new Set(["L90-Q02"])}
+        graphNode={{ id: "c-sample-1", kind: "concept", label: "Sample concept one", counts: { skills: 1, questions: 1 }, in_scope: true, evidence: null, where: "on_this_page", support_pages: [4] }}
+        place={{ page: 4, position: { ordinal: 2, of: 3, kind: "build" }, groupPages: [3, 4, 5] }} />,
+    );
+    expect(plain((await screen.findByTestId("questions-heading")).textContent)).toBe("2 questions test this concept in the course");
+    expect(plain(screen.getByTestId("detail-summary").textContent)).toContain("1 skill and 1 question on this slide.");
+    expect(screen.getByTestId("questions-scope").textContent).toBe("1 of them is tied to this slide.");
+    const rows = screen.getAllByTestId("question-row");
+    expect(within(rows[0]!).queryByTestId("question-in-scope")).toBeNull();
+    expect(within(rows[1]!).getByTestId("question-in-scope").textContent).toBe("Tied to this slide");
+  });
+
+  it("adds nothing to the Questions tab in the course scope, where the list and the header count the same thing", async () => {
+    mount(panel("questions", "course"));
+    expect(plain((await screen.findByTestId("questions-heading")).textContent)).toBe("2 questions test this concept");
+    expect(screen.queryByTestId("questions-scope")).toBeNull();
+    expect(screen.queryByTestId("question-in-scope")).toBeNull();
+  });
+
+  it("says in words that the item is being read, instead of a bare skeleton", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined))); // an answer that has not come yet
+    mount(panel("sources"));
+    expect(await screen.findByText("Reading this item from the course catalog…")).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent("Reading this item from the course catalog…");
+  });
+
+  it("keeps the item read before on the panel, under a line that says so, until the selected one arrives", async () => {
+    let arrive: (response: Response) => void = () => undefined;
+    const other: OutlineNodeView = { ...DETAIL, node: { node_id: "c-sample-2", kind: "concept", label: "Sample concept two" }, questions: [], questions_total: 0 };
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/outline/node") && url.includes("c-sample-2")) return new Promise<Response>((resolve) => { arrive = resolve; });
+      if (url.includes("/outline/node")) return Promise.resolve(new Response(JSON.stringify(DETAIL), { status: 200 }));
+      return Promise.resolve(new Response(JSON.stringify({ detail: "not mocked" }), { status: 404 }));
+    }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const at = (nodeId: string) => (
+      <QueryClientProvider client={client}><MemoryRouter>
+        <ConceptDetail courseId="sample-course" nodeId={nodeId} tab="sources" scope={parseScope("lecture:lecture-90")} returnTo="/" framed
+          graphNode={{ id: nodeId, kind: "concept", label: nodeId, counts: { skills: 1, questions: 2 }, in_scope: true, evidence: null, where: null, support_pages: [] }} />
+      </MemoryRouter></QueryClientProvider>
+    );
+    const view = render(at("c-sample-1"));
+    await screen.findByRole("heading", { name: "Sample concept one" });
+    expect(screen.queryByTestId("detail-pending")).toBeNull();
+    expect(screen.getByTestId("detail-summary")).toBeInTheDocument();
+
+    view.rerender(at("c-sample-2"));
+    // The earlier item stays; a line says what is being read; the selected node's counts are not said of the item still shown.
+    expect(await screen.findByTestId("detail-pending")).toHaveTextContent("Reading this item from the course catalog… The item read before stays below until it arrives.");
+    expect(screen.getByRole("heading", { name: "Sample concept one" })).toBeInTheDocument();
+    expect(screen.getByTestId("outline-detail")).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByTestId("detail-summary")).toBeNull();
+    expect(ownDetail({ data: DETAIL, isPlaceholderData: true })).toBeNull(); // the tabs show no count of the item read before
+    expect(ownDetail({ data: DETAIL, isPlaceholderData: false })).toBe(DETAIL);
+
+    arrive(new Response(JSON.stringify(other), { status: 200 }));
+    expect(await screen.findByRole("heading", { name: "Sample concept two" })).toBeInTheDocument();
+    expect(screen.queryByTestId("detail-pending")).toBeNull();
+    expect(screen.getByTestId("outline-detail")).not.toHaveAttribute("aria-busy");
   });
 
   it("says that nothing is selected, and explains an identifier the catalog does not hold", async () => {

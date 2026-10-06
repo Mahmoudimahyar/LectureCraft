@@ -801,7 +801,7 @@ export const SOURCE_MAP_UNAVAILABLE_LABEL: Record<SourceMapUnavailableReason, st
 /** Where the suggestions file of a course stands. An earlier catalog and an unreadable file are two different things. Open wording. */
 export const INFERRED_FILE_STATE_LABEL: Record<InferredFileState, string> = {
   ok: "Suggestions file read", missing: "None produced for this course yet", unreadable: "The suggestions file could not be read",
-  made_for_earlier_catalog: "Made for an earlier version of the question catalog", catalog_unavailable: "The question catalog could not be read, so the file was not compared with it",
+  made_for_earlier_catalog: "Made for an earlier version of the question catalog; suggestions for questions that have not changed since are still shown", catalog_unavailable: "The question catalog could not be read, so the file was not compared with it",
 };
 
 // ---- concepts -------------------------------------------------------------------------------------------------------------

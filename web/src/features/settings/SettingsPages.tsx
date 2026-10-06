@@ -24,7 +24,7 @@ import { useCourseTiming, useInferredAnchors, useSettings } from "@/lib/queries"
 import { TEXT_SCALES, type ThemePref } from "@/lib/theme";
 import { driveConfigFromEnv, DRIVE_SCOPES } from "@/lib/transport";
 import type { CourseTimingSummary, CourseTimingView, InferredAnchorsReadback, TimingAllowance, TimingQueue, TimingStage } from "@/lib/types";
-import { Callout, Fact, Facts, Picker } from "@/features/search/SearchOverlay";
+import { Callout, Fact, Facts, Page, Picker, keyWords } from "@/features/search/SearchOverlay";
 
 const SECTIONS = [["appearance", "Appearance"], ["access", "Access and devices"], ["ai", "AI and Brain"], ["limits", "Limits"], ["data", "Data and privacy"], ["maintenance", "Maintenance"], ["build", "Build and data"]] as const;
 
@@ -116,11 +116,23 @@ export function decisionRows(decisions: InferredAnchorsReadback["decisions"] | n
   return rows;
 }
 
+/** The kinds of data the Brain keeps, each named in words. The Brain sends a key; the sentence beside it is the Brain's own. */
+const RETENTION_HEADING: Record<string, string> = {
+  raw_teachback_audio: "Recordings of your spoken explanations",
+  text_evidence: "The text you submit",
+  referenced_sidecars: "Full responses an attempt refers to",
+  operational_logs: "Activity logs",
+  reproducible_cache: "Prepared copies that can be rebuilt",
+  original_sources: "Original course files",
+};
+/** The heading of a retention row. A kind this build has no name for is shown as recorded, as words, never as the nearest known name. */
+export const retentionHeading = (kind: string): string => RETENTION_HEADING[kind] ?? keyWords(kind);
+
 // ---- page ---------------------------------------------------------------------------------------------------------------
 export function SettingsPage() {
   const { section = "appearance" } = useParams();
   return (
-    <div className="ll-page">
+    <Page>
       <PageHeader title="Settings" />
       <div className="grid gap-4 min-[900px]:grid-cols-[15rem_minmax(0,1fr)] min-[900px]:gap-6">
         <nav aria-label="Settings sections" className="grid grid-cols-2 gap-1 self-start min-[600px]:grid-cols-3 min-[900px]:grid-cols-1 min-[900px]:gap-0.5">
@@ -140,7 +152,7 @@ export function SettingsPage() {
           {section === "build" && <BuildAndData />}
         </div>
       </div>
-    </div>
+    </Page>
   );
 }
 
@@ -149,7 +161,7 @@ function Block({ title, children, intro }: { title: string; intro?: string; chil
   return (
     <section className="border-t border-hairline py-5 first:border-t-0 min-[900px]:py-6" aria-label={title}>
       <h2 className="text-head font-semibold">{title}</h2>
-      {intro && <p className="ll-measure mt-1 text-ui text-muted">{intro}</p>}
+      {intro && <p className="ll-measure mt-1 text-read text-muted">{intro}</p>}
       <div className="mt-3 flex flex-col gap-3">{children}</div>
     </section>
   );
@@ -236,7 +248,7 @@ function Access() {
       </Block>
       <Block title="Google Drive (other devices)" intro="Needed only to use the app away from this PC. It is separate from the Brain reading its local course folders.">
         <p><StatusChip tone={drive ? "neutral" : "unassessed"}>{drive ? "OAuth client configured — not signed in" : "Not configured"}</StatusChip></p>
-        <p className="ll-measure text-ui text-muted">{drive ? "Sign-in is offered on the device that needs it. " : "No Google OAuth client id is bound to this app origin, so Drive sign-in is unavailable. "}
+        <p className="ll-measure text-read text-muted">{drive ? "Sign-in is offered on the device that needs it. " : "No Google OAuth client id is bound to this app origin, so Drive sign-in is unavailable. "}
           When enabled the app asks for <code className="font-mono text-ink">{DRIVE_SCOPES.read.split("/").pop()}</code> (read your course archive — broad at Google's level; the app only touches the bound course folders) and <code className="font-mono text-ink">{DRIVE_SCOPES.appFiles.split("/").pop()}</code> (write only files this app creates). A refused or partial grant is reported; the app never asks for full Drive write access to work around it.</p>
       </Block>
       <Block title="Sign out of this device" intro="Signing out affects this device only.">
@@ -260,7 +272,7 @@ function Access() {
           setNotice(`Signed out of this device. Cleared: ${result.cleared.join(", ") || "nothing"}. Kept: ${result.kept.join(", ") || "nothing"}. No provider or Drive data was erased by this.`);
           window.setTimeout(() => navigate("/connect"), 1500);
         }}>Sign out this device</Button></div>
-        {notice && <p role="status" className="ll-measure text-ui text-muted">{notice}</p>}
+        {notice && <p role="status" className="ll-measure text-read text-muted">{notice}</p>}
       </Block>
     </>
   );
@@ -302,7 +314,7 @@ function AiAndBrain() {
         {probe && (
           <div className={INSET} data-testid="probe-result">
             <p className="font-semibold">Inspection: {probe.status.replace(/_/g, " ").toLowerCase()} · version {probe.version}</p>
-            <ul className="mt-1">{Object.entries(probe.checks).map(([k, v]) => <li key={k}>{k.replace(/_/g, " ")}: <strong>{v}</strong></li>)}</ul>
+            <ul className="mt-1">{Object.entries(probe.checks).map(([k, v]) => <li key={k}>{keyWords(k)}: <strong>{v}</strong></li>)}</ul>
             <ul className="mt-1 list-disc pl-5 text-muted">{probe.findings.map((f) => <li key={f}>{f}</li>)}</ul>
           </div>
         )}
@@ -365,7 +377,7 @@ function Limits() {
     <>
       <Block title="Operating limits" intro="Reviewed defaults. They are changed in the app's configuration on the Brain PC, never by a request or a course file.">
         <Facts className="ll-num">{rows.map(([k, v]) => <Fact key={k} term={k}>{v}</Fact>)}</Facts>
-        <p className="ll-measure text-ui text-muted">{caps.spending.note}</p>
+        <p className="ll-measure text-read text-muted">{caps.spending.note}</p>
       </Block>
       <Block title="Processing" intro="Pausing keeps receiving and storing what you send; nothing is dispatched until you resume. It does not cancel anything.">
         <p><StatusChip tone={caps.brain.paused ? "caution" : "success"}>{caps.brain.paused ? "Paused" : "Running"}</StatusChip> {caps.brain.paused && caps.brain.pause_reason && <span className="text-ui text-muted">{caps.brain.pause_reason.reason}</span>}</p>
@@ -427,7 +439,7 @@ function DataAndPrivacy() {
       </Block>
       <Block title="What is kept, and for how long">
         <ul className="flex flex-col">
-          {(settings.data?.retention ?? []).map((r) => <li key={r.class} className={cn(ROW, "text-ui")}><span className="font-semibold">{r.class.replace(/_/g, " ")}</span><span className="ll-measure block text-muted">{r.default}</span></li>)}
+          {(settings.data?.retention ?? []).map((r) => <li key={r.class} className={cn(ROW, "text-ui")}><span className="font-semibold">{retentionHeading(r.class)}</span><span className="ll-measure block text-muted">{r.default}</span></li>)}
         </ul>
       </Block>
       <Block title="Clean up local app data" intro="Removes only data this app can rebuild. Evidence, originals and unfinished work are never part of it.">
@@ -454,7 +466,7 @@ function DataAndPrivacy() {
         {receipt && <Callout tone={receipt.status === "done" ? "success" : "caution"} role="status" title={receipt.status === "done" ? "Cleanup receipt" : "Nothing was removed"}>
           {receipt.status === "done" ? `Removed ${receipt.removed?.length ?? 0} item(s); ${receipt.blocked?.length ?? 0} protected item(s) untouched. ${receipt.rebuild?.queued ? receipt.rebuild.note : ""} ${receipt.note ?? ""}` : receipt.reason}
         </Callout>}
-        <p className="ll-measure text-ui text-muted">There is no "delete everything" button: removing a response that an attempt refers to needs the course's own writer and an approved deletion policy. This app does not claim to erase copies held by a provider or on other devices.</p>
+        <p className="ll-measure text-read text-muted">There is no "delete everything" button: removing a response that an attempt refers to needs the course's own writer and an approved deletion policy. This app does not claim to erase copies held by a provider or on other devices.</p>
       </Block>
     </>
   );
@@ -497,7 +509,7 @@ function Maintenance() {
             <ul className="mt-2 flex flex-col">{acceptance.checks.map((c) => (
               <li key={c.id} className={cn(ROW, "grid grid-cols-[7.5rem_minmax(0,1fr)] gap-x-3 max-[599px]:grid-cols-1")}>
                 <StatusChip tone={c.status === "PASS" ? "success" : c.status === "FAIL" ? "danger" : "unassessed"}>{c.status.replace("_", " ")}</StatusChip>
-                <span className="min-w-0"><span className="font-semibold">{c.id.replace(/-/g, " ")}</span> — <span className="text-muted">{c.detail}</span></span>
+                <span className="min-w-0"><span className="font-semibold">{keyWords(c.id)}</span> — <span className="text-muted">{c.detail}</span></span>
               </li>
             ))}</ul>
             <p className="ll-measure mt-3 text-muted">{acceptance.boundary}</p>
@@ -648,7 +660,7 @@ function TimingReadback({ courseId }: { courseId: string }) {
           </ul>
         )}
       </div>
-      {data.note && <p className="ll-measure text-ui text-muted">{data.note}</p>}
+      {data.note && <p className="ll-measure text-read text-muted">{data.note}</p>}
     </div>
   );
 }
@@ -692,7 +704,7 @@ function SuggestedLinksReadback({ courseId }: { courseId: string }) {
           </table>
         </div>
       )}
-      {data.note && <p className="ll-measure text-ui text-muted">{data.note}</p>}
+      {data.note && <p className="ll-measure text-read text-muted">{data.note}</p>}
     </div>
   );
 }
@@ -717,11 +729,11 @@ export function RepairPreview() {
   const [busy, setBusy] = useState(false);
   // Once approved, keep showing what was approved next to its receipt even though the issue itself is now gone.
   const [approved, setApproved] = useState<RepairPreviewData | null>(null);
-  if (preview.isLoading) return <LoadingState />;
-  if (!approved && (preview.isError || !preview.data)) return <ErrorState error={preview.error} />;
+  if (preview.isLoading) return <Page reading><LoadingState /></Page>;
+  if (!approved && (preview.isError || !preview.data)) return <Page reading><ErrorState error={preview.error} /></Page>;
   const p = approved ?? preview.data!;
   return (
-    <div className="ll-page ll-page-reading">
+    <Page reading>
       <Link to="/settings/maintenance" className="ll-btn ll-btn-sm mb-4">← Maintenance</Link>
       <PageHeader title="Repair preview" subtitle={p.issue?.summary ?? "This issue no longer exists."} />
       {p.status === "unknown_issue" ? <Callout tone="success" title="Nothing to repair">The problem is no longer present.</Callout> : (
@@ -751,6 +763,6 @@ export function RepairPreview() {
           </Callout>}
         </div>
       )}
-    </div>
+    </Page>
   );
 }

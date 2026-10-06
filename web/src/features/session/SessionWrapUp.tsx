@@ -10,7 +10,7 @@ import { JOB_STATE } from "@/lib/labels";
 import { useActivity, useCourse, useResume, useReview } from "@/lib/queries";
 import { reviewItemPayload } from "@/lib/requests";
 import type { ActivityJob, QuestionRecord } from "@/lib/types";
-import { Callout, Lead, StateWords, lectureNameOf } from "@/features/search/SearchOverlay";
+import { Callout, Lead, Page, StateWords, lectureNameOf } from "@/features/search/SearchOverlay";
 import { useLocalRequests, useSubmitActions } from "@/features/tutor/actions";
 
 const ANSWERS = new Set(["explain", "practice", "review_answer", "diagnose"]);
@@ -60,7 +60,7 @@ export function SessionWrapUp() {
   const jobs = useMemo(() => new Map((activity.data?.jobs ?? []).filter((j) => j.request_id).map((j) => [j.request_id!, j])), [activity.data]);
 
   if (!courseId) return <Callout tone="caution" title="No course selected">Open a course to see its session summary.</Callout>;
-  if (local.isLoading) return <LoadingState />;
+  if (local.isLoading) return <Page reading><LoadingState /></Page>;
 
   const asked = mine.filter((r) => r.action === "ask");
   const answered = mine.filter((r) => ANSWERS.has(r.action));
@@ -112,7 +112,7 @@ export function SessionWrapUp() {
   const count = (label: string, value: number) => <div><dt className="text-ui text-muted">{label}</dt><dd className="ll-num text-title font-semibold">{value}</dd></div>;
 
   return (
-    <div className="ll-page ll-page-reading">
+    <Page reading>
       <PageHeader title="Session summary" subtitle={<Lead>{courseName(app.workspace, courseId)} · built from this session's actual requests and receipts, not from a model's recollection.</Lead>} />
 
       <section className={SECTION} aria-labelledby="where-h">
@@ -138,7 +138,7 @@ export function SessionWrapUp() {
         {asked.length > 0 && <><h3 className="mt-5 text-ui font-semibold text-muted">Answers you asked for</h3><ul className="flex flex-col">{asked.map(row)}</ul></>}
         {answered.length > 0 && <><h3 className="mt-5 text-ui font-semibold text-muted">Your own responses</h3><ul className="flex flex-col">{answered.map(row)}</ul></>}
         {other.length > 0 && <><h3 className="mt-5 text-ui font-semibold text-muted">Notes and corrections</h3><ul className="flex flex-col">{other.map(row)}</ul></>}
-        <p className="ll-measure mt-4 text-ui text-muted">Time spent and slides viewed are observations only; they are never treated as evidence of knowledge.</p>
+        <p className="ll-measure mt-4 text-read text-muted">Time spent and slides viewed are observations only; they are never treated as evidence of knowledge.</p>
       </section>
 
       <section className={SECTION} aria-labelledby="pending-h">
@@ -146,18 +146,18 @@ export function SessionWrapUp() {
         {pending.length === 0 && (device?.outbox ?? 0) === 0 ? <p className="ll-measure mt-1" data-testid="pending-none">Nothing from this session is waiting. Everything listed above has a final state.</p> : (
           <div className="mt-1 flex flex-col gap-2" data-testid="pending-some">
             <p className="ll-measure">{pending.length} request{pending.length === 1 ? "" : "s"} from this session {pending.length === 1 ? "has" : "have"} no final state yet{(device?.outbox ?? 0) > 0 ? `, and ${device!.outbox} signed request(s) are held on this device waiting to be sent` : ""}.</p>
-            <p className="ll-measure text-ui text-muted">Leaving this page does not cancel work the Brain already accepted, and nothing is submitted again when you come back. Requests held only on this device are sent the next time the app is open and the Brain is reachable.</p>
+            <p className="ll-measure text-read text-muted">Leaving this page does not cancel work the Brain already accepted, and nothing is submitted again when you come back. Requests held only on this device are sent the next time the app is open and the Brain is reachable.</p>
             <div><Link className="ll-btn" to="/activity">Open Activity</Link></div>
           </div>
         )}
-        {(device?.drafts ?? 0) > 0 && <p className="ll-measure mt-2 text-ui text-muted">{device!.drafts} unsent draft{device!.drafts === 1 ? "" : "s"} stay on this device until you send or discard them.</p>}
+        {(device?.drafts ?? 0) > 0 && <p className="ll-measure mt-2 text-read text-muted">{device!.drafts} unsent draft{device!.drafts === 1 ? "" : "s"} stay on this device until you send or discard them.</p>}
       </section>
 
       <section className={SECTION} aria-labelledby="next-h">
         <h2 id="next-h" className={SECTION_HEAD}>Optional next steps</h2>
         {suggestions.length === 0 ? <p className="ll-measure mt-1 text-muted">No course question from this session is waiting to be added to your review list.</p> : (
           <>
-            <p className="ll-measure mt-1 text-ui text-muted">Tick only what you want to keep. Unticked suggestions are dropped — they do not become scheduled work.</p>
+            <p className="ll-measure mt-1 text-read text-muted">Tick only what you want to keep. Unticked suggestions are dropped — they do not become scheduled work.</p>
             <ul className="mt-3 flex flex-col gap-3">
               {suggestions.map((q) => (
                 <li key={q.question_id}><label className="flex items-start gap-3"><input type="checkbox" className="mt-0.5 size-5 flex-none accent-accent" checked={chosen.has(q.question_id)} onChange={(e) => setChosen((prev) => {
@@ -169,7 +169,7 @@ export function SessionWrapUp() {
             </ul>
           </>
         )}
-        {saved && <p role="status" className="ll-measure mt-3 text-ui">{saved}</p>}
+        {saved && <p role="status" className="ll-measure mt-3 text-read">{saved}</p>}
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <Link className="ll-btn ll-btn-primary" to="/study">Done</Link>
           <Link className="ll-btn" to="/review">Review now</Link>
@@ -177,6 +177,6 @@ export function SessionWrapUp() {
           {suggestions.length > 0 && chosen.size === 0 && <span className="text-ui text-muted">Tick a question to save it.</span>}
         </div>
       </section>
-    </div>
+    </Page>
   );
 }

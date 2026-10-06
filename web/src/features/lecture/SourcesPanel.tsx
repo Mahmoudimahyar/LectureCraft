@@ -73,6 +73,33 @@ function useWorkspaceOrNull(): { lecture: LectureView; page: number } | null {
 type Back = { returnTo: string; returnLabel: string };
 const HEAD = "text-head font-semibold";
 
+/**
+ * `session_link` of a lecture whose recording and transcript are OFFERED by their file name (decision D79): the course
+ * index links that session to no lecture unit, and the file name carries this unit's number. A suggestion nobody
+ * confirmed; the row of each such file says so before anything else.
+ */
+const SESSION_SUGGESTED_BY_FILE_NAME = "suggested_by_file_name";
+/** What the Brain sends with such a lecture: the unit's number it found in a file name, and the session's files. Absent from an older Brain. */
+interface SessionLinkEvidence { state?: string; number?: number; files?: string[] }
+// A lecture number in a file name, as the Brain reads one ("Lec 2", "Lecture_02"): the evidence the session is offered on.
+const LECTURE_NUMBER_IN_NAME = /(?<![a-z])lec(?:ture)?[\s._-]*0*(\d{1,2})(?!\d)/gi;
+/** Whether this file's own name carries the unit's number. Without the number (an older Brain) the answer is not known: null. */
+export function nameCarriesLectureNumber(filename: string, number: number | null | undefined): boolean | null {
+  if (typeof number !== "number") return null;
+  const stem = filename.replace(/\.[^.\\/]+$/, "");
+  return [...stem.matchAll(LECTURE_NUMBER_IN_NAME)].some((match) => Number(match[1]) === number);
+}
+/**
+ * The two sentences that open the row of a file of an offered session: how it comes to be here, and that the course
+ * index does not link it. A recording is offered by its file name unless the evidence shows that another file of the
+ * session carries the number; a transcript whose own name does not carry it is offered with the recording.
+ */
+export function offeredSentences(kind: "recording" | "transcript", filename: string, evidence: SessionLinkEvidence | null | undefined): { how: string; index: string } {
+  const carries = nameCarriesLectureNumber(filename, evidence?.number);
+  const how = carries === true || (carries === null && kind === "recording") ? "Offered by its file name." : kind === "recording" ? "Offered with its session, by the name of another file." : "Offered with the recording of its session.";
+  return { how, index: `The course index links this ${kind} to no lecture.` };
+}
+
 /** One row of a list of sources: an icon, a title at reading size, one muted line, and where it opens. */
 function SourceRow({ icon, title, children, to, back, end = "open" }: { icon: ReactNode; title: ReactNode; children?: ReactNode; to?: string | null; back?: Back; end?: "open" | "more" | null }) {
   const body = (
@@ -91,6 +118,12 @@ function SourceRow({ icon, title, children, to, back, end = "open" }: { icon: Re
       {to ? <Link to={to} state={back} className={cn(row, "transition-colors hover:bg-pad")}>{body}</Link> : <div className={row}>{body}</div>}
     </li>
   );
+}
+
+/** Opens the line of a file of an offered session: the suggestion is said first, in the row's own words. */
+function Offered({ kind, filename, evidence }: { kind: "recording" | "transcript"; filename: string; evidence: SessionLinkEvidence | null }) {
+  const { how, index } = offeredSentences(kind, filename, evidence);
+  return <><strong className="font-semibold text-ink">{how}</strong> {index}{" "}</>;
 }
 
 /** One fact of the page: the term in muted text, the value at reading size. */
@@ -120,7 +153,9 @@ export function SourcesPanel({ courseId, slide, others = [], lecture: lecturePro
   const back: Back = { returnTo: location.pathname + location.search, returnLabel: "Return to slide" };
   const [correcting, setCorrecting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const sourceHref = (sourceId: string, at?: number | null) => `/courses/${courseId}/sources/${encodeURIComponent(sourceId)}${at ? `?page=${at}` : ""}`;
+  const offeredByFileName = lecture?.session_link === SESSION_SUGGESTED_BY_FILE_NAME;
+  const evidence = (lecture as { session_link_evidence?: SessionLinkEvidence | null } | null)?.session_link_evidence ?? null;
+  const sourceHref =(sourceId: string, at?: number | null) => `/courses/${courseId}/sources/${encodeURIComponent(sourceId)}${at ? `?page=${at}` : ""}`;
 
   return (
     <div className="flex flex-col gap-6" data-testid="sources-tab">
@@ -142,12 +177,19 @@ export function SourcesPanel({ courseId, slide, others = [], lecture: lecturePro
             {lecture.recordings.length === 0 && <SourceRow icon={<Mic />} title="Lecture recording">No recording is linked to this lecture.</SourceRow>}
             {lecture.recordings.map((recording) => (
               <SourceRow key={recording.source_id} icon={<Mic />} title={recordingLabel(lecture.recordings, recording.source_id)} to={sourceHref(recording.source_id)} back={back}>
-                {recording.duration_ms ? `${durationLabel(recording.duration_ms)}. ` : ""}{recording.filename}{recording.version_id ? ` · version ${recording.version_id}` : ""}
+                <span data-testid="source-recording">
+                  {/* The course index links this session to no lecture: the recording is here because of its file name, and the row says so first. */}
+                  {offeredByFileName && <Offered kind="recording" filename={recording.filename} evidence={evidence} />}
+                  {recording.duration_ms ? `${durationLabel(recording.duration_ms)}. ` : ""}{recording.filename}{recording.version_id ? ` · version ${recording.version_id}` : ""}
+                </span>
               </SourceRow>
             ))}
             {lecture.transcripts.map((transcript) => (
               <SourceRow key={transcript.source_id} icon={<AlignLeft />} title="Course transcript" to={sourceHref(transcript.source_id)} back={back}>
-                {countLabel(transcript.lines.length, "line")}. {transcript.timing === "annotated" ? "Original text; a line has a time where a link gives one." : "Original text, without times."} {transcript.filename}
+                <span data-testid="source-transcript">
+                  {offeredByFileName && <Offered kind="transcript" filename={transcript.filename} evidence={evidence} />}
+                  {countLabel(transcript.lines.length, "line")}. {transcript.timing === "annotated" ? "Original text; a line has a time where a link gives one." : "Original text, without times."} {transcript.filename}
+                </span>
               </SourceRow>
             ))}
             {lecture.timing && (

@@ -9,16 +9,17 @@ import { Link, Navigate, useLocation, useParams, useSearchParams } from "react-r
 import { useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu } from "radix-ui";
 import { ArrowLeft, ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { useApp } from "@/app/state";
 import { BAND_CLASS, TextTabs, WorkspaceFrame, useWorkspaceFrame, type FramePane } from "@/app/WorkspaceFrame";
 import { Button, IconButton, Segmented, StaleNotice, cn } from "@/components/ui";
 import { CONCEPT_SCOPE_LABEL, R2_ACTION, conceptScopeHeading, countLabel, nb, staleViewLine } from "@/lib/labels";
 import { useCourse, useLecture } from "@/lib/queries";
 import { conceptGraphErrorCode, identityOf, isStale, isStructuralPage, nextContentPage } from "@/lib/r2";
-import type { AnchorTieKind, GraphScopeKind, LectureView, OutlineRow } from "@/lib/types";
-import { ConceptDetail, DETAIL_TABS, detailCounts, isDetailTab, useNodeDetail, type DetailTabId } from "./ConceptDetail";
+import type { AnchorTieKind, ConceptGraphNode, ConceptGraphView, GraphScopeKind, LectureView, OutlineRow } from "@/lib/types";
+import { ConceptDetail, DETAIL_TABS, detailCounts, isDetailTab, ownDetail, useNodeDetail, type DetailTabId } from "./ConceptDetail";
 import { ConceptMap, useFocusGraph, useScopeGraph } from "./ConceptMap";
 import { ConceptTree, type TreePlace } from "./ConceptTree";
-import { conceptMapHref, parseScope, revealPath, scopeParam, sourceTies, topicConceptCounts, type ParsedScope } from "./map-model";
+import { conceptMapHref, firstTopic, openingNode, parseScope, revealPath, scopeParam, sourceTies, topicConceptCounts, type ParsedScope } from "./map-model";
 
 export { parseScope } from "./map-model";
 
@@ -63,6 +64,10 @@ interface ExplorerState {
   /** The lecture and page offered by the scope switch while the scope is wider. */
   lectureId: string | null;
   page: number | null;
+  /** The course's lectures are still being read: which lecture the switch would open is not known yet. */
+  lecturesLoading: boolean;
+  /** The scope is about to open on a node that is still being looked up: its opening view is not put up in between. */
+  openingPending: boolean;
   setScope: (kind: GraphScopeKind, lectureId?: string | null, page?: number | null) => void;
   select: (nodeId: string | null) => void;
   selectOutside: (nodeId: string) => void;
@@ -73,12 +78,20 @@ interface ExplorerState {
 }
 
 // ---- the scope switch and what the scope is ---------------------------------------------------------------------------------
-function ScopeSwitch({ state, className }: { state: ExplorerState; className?: string }) {
-  const options: Array<{ value: GraphScopeKind; label: string }> = [
-    { value: "course", label: CONCEPT_SCOPE_LABEL.course },
-    ...(state.lectureId ? [{ value: "lecture" as const, label: CONCEPT_SCOPE_LABEL.lecture }] : []),
-    ...(state.lectureId && state.page ? [{ value: "slide" as const, label: CONCEPT_SCOPE_LABEL.slide }] : []),
+/**
+ * Which segments the scope switch holds, from the first paint on. Course and Lecture are always there, so the band
+ * does not shift when the course's lectures arrive: Lecture is disabled until a lecture is known (while the course is
+ * read, or for a course that lists none). This slide is there when a page is known, which the address says at once.
+ */
+export function scopeSegments(state: { lectureId: string | null; page: number | null; lecturesLoading: boolean }): Array<{ value: GraphScopeKind; label: string; disabled: boolean; why: string | null }> {
+  return [
+    { value: "course", label: CONCEPT_SCOPE_LABEL.course, disabled: false, why: null },
+    { value: "lecture", label: CONCEPT_SCOPE_LABEL.lecture, disabled: !state.lectureId, why: state.lectureId ? null : state.lecturesLoading ? "Reading the course's lectures…" : "This course lists no lecture" },
+    ...(state.page ? [{ value: "slide" as const, label: CONCEPT_SCOPE_LABEL.slide, disabled: !state.lectureId, why: null }] : []),
   ];
+}
+function ScopeSwitch({ state, className }: { state: ExplorerState; className?: string }) {
+  const options = scopeSegments(state).map((option) => ({ value: option.value, label: option.label, disabled: option.disabled, title: option.why ?? undefined }));
   return <Segmented label="Scope of the concept map" value={state.scope.kind} onChange={(kind) => state.setScope(kind)} options={options} className={cn("flex-none flex-nowrap", className)} />;
 }
 
@@ -137,6 +150,18 @@ function EmptyScope({ state, note }: { state: ExplorerState; note: string | null
   );
 }
 
+/**
+ * Lecture and slide scope: the questions of the selected concept or skill that the scope holds, read from the node's
+ * own neighbourhood (a neighbour is drawn there only when it belongs to the scope). The detail lists the course's
+ * questions and marks these. null when that cannot be said in full: in the course scope, for another kind of node,
+ * for a neighbourhood cut by its limit, or when the questions found are not as many as the node's own count.
+ */
+export function questionsInScope(graph: ConceptGraphView | null | undefined, node: Pick<ConceptGraphNode, "id" | "kind" | "counts"> | null | undefined, scopeKind: GraphScopeKind): ReadonlySet<string> | null {
+  if (scopeKind === "course" || !graph || !node || graph.focus !== node.id || (node.kind !== "concept" && node.kind !== "skill") || graph.truncated || (graph.dropped ?? 0) > 0) return null;
+  const ids = new Set(graph.nodes.filter((entry) => entry.kind === "question" && entry.in_scope !== false).map((entry) => entry.id));
+  return ids.size === node.counts?.questions ? ids : null;
+}
+
 // ---- zones -----------------------------------------------------------------------------------------------------------------
 function OutlineZone({ state, heading, note, unknownScope, reveal, conceptCounts, ties }: { state: ExplorerState; heading: string | null; note: string | null; unknownScope: string | null; reveal: string[];
   conceptCounts: ReadonlyMap<string, number> | null; ties: ReadonlyMap<string, AnchorTieKind> | null }) {
@@ -189,7 +214,7 @@ function StageZone({ state, scopeName, slideLabel, note, unknownScope, notice }:
           </div>
         ) : (
           <ConceptMap courseId={state.courseId} scope={state.scopeText} scopeKind={state.scope.kind} selected={state.selected} onSelect={state.select} onSelectOutside={state.selectOutside} scopeName={scopeName}
-            slideLabel={slideLabel} place={state.place} empty={<EmptyScope state={state} note={note} />} notice={notice} />
+            slideLabel={slideLabel} place={state.place} opening={state.openingPending} empty={<EmptyScope state={state} note={note} />} notice={notice} />
         )}
       </div>
     </div>
@@ -201,6 +226,7 @@ function DetailZone({ state, counts, onTab }: { state: ExplorerState; counts: Re
   const framed = frame.arrangement === "frame";
   const focus = useFocusGraph(state.courseId, state.scopeText, state.selected);
   const graphNode = focus.data?.nodes.find((node) => node.id === state.selected) ?? null;
+  const scopeQuestions = useMemo(() => questionsInScope(focus.data, graphNode, state.scope.kind), [focus.data, graphNode, state.scope.kind]);
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="concept-detail-zone">
       {framed && (
@@ -214,7 +240,7 @@ function DetailZone({ state, counts, onTab }: { state: ExplorerState; counts: Re
       <div id="ll-concept-detail" role={framed && state.selected ? "tabpanel" : undefined} aria-labelledby={framed && state.selected ? `ll-concept-tab-${state.tab}` : undefined}
         className={cn("flex min-h-0 flex-1 flex-col", framed && "ll-region my-3 overflow-hidden")}>
         <ConceptDetail courseId={state.courseId} nodeId={state.selected} tab={state.tab} scope={state.scope} graphNode={graphNode} tie={state.scope.kind === "slide" && state.selected ? sourceTies(focus.data).get(state.selected) ?? null : null}
-          place={state.place} returnTo={state.here} onClear={() => state.select(null)} framed={framed} />
+          scopeQuestions={scopeQuestions} place={state.place} returnTo={state.here} onClear={() => state.select(null)} framed={framed} />
       </div>
     </div>
   );
@@ -226,6 +252,7 @@ export function ConceptExplorer() {
   const [params, setParams] = useSearchParams();
   const location = useLocation();
   const queryClient = useQueryClient();
+  const app = useApp();
   const scope = useMemo(() => parseScope(params.get("scope")), [params]);
   const scopeText = scopeParam(scope.kind, scope.lectureId, scope.page);
   const selected = params.get("node");
@@ -271,15 +298,43 @@ export function ConceptExplorer() {
   const base = useScopeGraph(courseId, scopeText);
   const focus = useFocusGraph(courseId, scopeText, selected);
   const detail = useNodeDetail(courseId, selected);
-  const counts = detailCounts(detail.data);
+  const counts = detailCounts(ownDetail(detail));
+
+  // ---- the opening selection: "Concept map" opens on something drawn, with its detail beside it ---------------------------
+  // Once for each scope that is entered without a selection: a lecture opens on its first topic (with three topics or
+  // fewer the map draws all of them with their concepts, with more it draws that topic with its concepts), a slide of
+  // three topics or fewer likewise; the course scope entered from a lecture opens on that lecture's first topic. The
+  // course scope entered from Study keeps its topic cards. Written into the address like any selection, so Back, a
+  // reload and a shared link show the same thing.
+  const [openedFor, setOpenedFor] = useState<string | null>(null);
+  const scopeKey = `${courseId}|${scopeText}`;
+  const undecided = openedFor !== scopeKey;
+  const cameLecture = scope.kind === "course" && !selected && undecided ? came?.lectureId ?? null : null;
+  const cameGraph = useScopeGraph(courseId, cameLecture ? scopeParam("lecture", cameLecture, null) : "course", !!cameLecture);
+  const opening = scope.kind === "course"
+    ? { ready: !cameLecture || !cameGraph.isLoading, node: cameLecture ? firstTopic(cameGraph.data) : null }
+    : { ready: !base.isLoading, node: openingNode(base.data) };
+  const focusNode = focus.data?.nodes.find((node) => node.id === selected) ?? null;
+  useEffect(() => {
+    if (!undecided) return;
+    if (selected) {
+      // Entered with a selection: decided once the scope is known to hold it (one it does not hold is cleared below, and the scope then opens).
+      if ((focusNode && focusNode.in_scope !== false) || focus.isError) setOpenedFor(scopeKey);
+      return;
+    }
+    if (!opening.ready) return;
+    setOpenedFor(scopeKey);
+    if (opening.node) write({ node: opening.node });
+  }, [undecided, selected, focusNode, focus.isError, scopeKey, opening.ready, opening.node, write]);
+  // The course scope entered from a lecture: until that lecture's topic is known the topic cards are not put up, only to be replaced.
+  const openingPending = scope.kind === "course" && !selected && undecided && !!cameLecture && (!opening.ready || !!opening.node);
   const place = useMemo<TreePlace | null>(() => {
     if (scope.kind !== "slide" || !scope.page || !lecture) return null;
     const identity = identityOf(lecture, scope.page);
     return { page: scope.page, position: identity.position, groupPages: identity.groupPages };
   }, [scope.kind, scope.page, lecture]);
 
-  // A selection that the new scope does not hold selects nothing.
-  const focusNode = focus.data?.nodes.find((node) => node.id === selected) ?? null;
+  // A selection that the new scope does not hold selects nothing; the scope then opens as if it had been entered without one.
   useEffect(() => {
     if (selected && focusNode && focusNode.in_scope === false) select(null);
   }, [selected, focusNode, select]);
@@ -289,7 +344,9 @@ export function ConceptExplorer() {
   const emptySlide = scope.kind === "slide" && !!totals && totals.concept + totals.skill + totals.question + totals.topic === 0;
   const lectureTitle = course.data?.lectures.find((entry) => entry.lecture_id === scope.lectureId)?.title ?? lecture?.title ?? null;
   const heading = totals && base.data && !emptySlide ? conceptScopeHeading(base.data.scope, totals, lectureTitle) : null;
-  const scopeName = scope.kind === "slide" ? CONCEPT_SCOPE_LABEL.slide : scope.kind === "lecture" ? lectureTitle ?? "This lecture" : course.data?.display_name ?? "This course";
+  // The course's name is in the workspace view Study already read: it is there before the course view arrives.
+  const courseName = course.data?.display_name ?? app.workspace?.courses.find((entry) => entry.course_id === courseId)?.display_name ?? null;
+  const scopeName = scope.kind === "slide" ? CONCEPT_SCOPE_LABEL.slide : scope.kind === "lecture" ? lectureTitle ?? "This lecture" : courseName ?? "This course";
   const slideLabel = scope.kind === "slide" && scope.page && lecture ? identityOf(lecture, scope.page).label : null;
   const conceptCounts = useMemo(() => topicConceptCounts(base.data), [base.data]);
   const reveal = useMemo(() => revealPath(focus.data), [focus.data]);
@@ -314,7 +371,7 @@ export function ConceptExplorer() {
   const backTo = state?.returnTo ?? (lectureId && (came || scope.lectureId) ? `/courses/${courseId}/lectures/${lectureId}${page ? `?page=${page}` : ""}` : null);
   const backPage = lectureOfAddress(backTo)?.page ?? null;
   const explorer: ExplorerState = {
-    courseId, scope, scopeText, selected, tab, lecture, place, lectureId, page, setScope, select, selectOutside,
+    courseId, scope, scopeText, selected, tab, lecture, place, lectureId, page, lecturesLoading: course.isLoading, openingPending, setScope, select, selectOutside,
     back: backTo ? { to: backTo, label: backPage ? `Back to page ${backPage}` : state?.returnLabel ?? "Back to the lecture", short: backPage ? nb(`Page ${backPage}`) : "Lecture" } : null,
     here: `${conceptMapHref(courseId, scopeText, selected)}`,
   };

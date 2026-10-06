@@ -12,7 +12,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type Keyboard
 import { Link } from "react-router";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { KindGlyph } from "@/components/glyphs";
+import { KindGlyph, type KindGlyphKind } from "@/components/glyphs";
 import { BasisLabel, StateLabel } from "@/components/labels";
 import { cn, Skeleton } from "@/components/ui";
 import { apiGet } from "@/lib/api";
@@ -45,6 +45,16 @@ export function wherePhrase(entry: { where?: TieWhere | null; support_pages?: re
   if (!entry.where) return null;
   const inGroup = place ? whereLine({ position: place.position, groupPages: place.groupPages, page: place.page }, { where: entry.where, support_pages: entry.support_pages ?? [] }) : null;
   return inGroup ?? whereLabel(entry.where, null);
+}
+
+/**
+ * The kind glyph as the concept views draw it. The shapes of components/glyphs are 6.5 to 9.5 px wide inside their
+ * 12 px box, where a square, a disc and a diamond are hard to tell apart. Here each is enlarged about its centre until
+ * it is 10 to 11 px wide; the 12 px box and the grid of the row stay as they are.
+ */
+const KIND_SCALE: Record<KindGlyphKind, string> = { topic: "scale-150", concept: "scale-[1.6]", skill: "scale-[1.3]", question: "scale-[1.15]", criterion: "scale-[1.3]", source_page: "scale-[1.15]" };
+export function Kind({ kind, selected, className }: { kind: KindGlyphKind; selected?: boolean; className?: string }) {
+  return <KindGlyph kind={kind} selected={selected} className={cn(KIND_SCALE[kind] ?? KIND_SCALE.concept, className)} />;
 }
 
 /**
@@ -217,7 +227,7 @@ function Row({ row, tree, level, position, setSize }: { row: OutlineRow; tree: T
       onFocus={(event) => { if (event.target === event.currentTarget) tree.setTabStop(row.instance_id); }} style={{ outline: "none" }} className={ITEM_FOCUS}>
       <div data-row="" className={cn(ROW, selected ? "bg-tint before:absolute before:bottom-2 before:left-0 before:top-2 before:w-[3px] before:rounded-r-[3px] before:bg-accent-text before:content-['']" : "hover:bg-pad")}>
         {expandable ? <Chevron open={open} label={row.label} onToggle={() => tree.toggle(row.instance_id, !open)} /> : <span aria-hidden className="size-4" />}
-        <KindGlyph kind={row.kind} selected={selected} className="mt-1" />
+        <Kind kind={row.kind} selected={selected} className="mt-1" />
         {tree.hrefFor
           ? <Link data-tree-action="" tabIndex={-1} to={tree.hrefFor(row)} state={tree.linkState} className={action}>{body}</Link>
           : <button data-tree-action="" type="button" tabIndex={-1} className={action} onClick={() => tree.onSelect?.(row)}>{body}</button>}
@@ -343,7 +353,7 @@ export function ConceptTree({ courseId, scope, scopeKind, selected = null, onSel
   };
 
   if (roots.isLoading) {
-    return <div role="status" className="grid gap-3 p-2"><span className="sr-only">Reading the course catalog…</span><Skeleton height={14} width="60%" /><Skeleton height={14} width="75%" /><Skeleton height={14} width="50%" /></div>;
+    return <div role="status" className="grid gap-3 p-2"><span className="text-ui text-muted">Reading the outline from the course catalog…</span><Skeleton height={14} width="60%" /><Skeleton height={14} width="75%" /><Skeleton height={14} width="50%" /></div>;
   }
   if (roots.isError) {
     return <p className="p-2 text-ui text-muted">The outline could not be read. {roots.error?.message} <button type="button" className="ll-link border-0 bg-transparent p-0" onClick={() => void roots.refetch()}>Try again</button></p>;

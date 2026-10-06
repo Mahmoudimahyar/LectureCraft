@@ -4,7 +4,8 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import {
-  GeneratedTextPanel, TranscriptPanel, generatedCoverageLine, generatedRows, lineTimeIndex, linesAt, linesOfRange, timeBasisWords, transcriptClosingLine, type TimedTranscript,
+  GeneratedTextPanel, TranscriptPanel, generatedCoverageLine, generatedRows, lineTimeIndex, linesAt, linesOfRange, rowOfLine, speakerTag, timeBasisWords, transcriptClosingLine, transcriptRows,
+  type TimedTranscript,
 } from "@/features/lecture/TranscriptPanel";
 import type { SourceRef } from "@/lib/db";
 import { sampleLectureTiming, sampleLectureView, sampleRangeFirstVisit, sampleRangeSecondVisit } from "@/lib/fixtures/r2-sample";
@@ -28,7 +29,51 @@ const linked: TimedTranscript = { ...transcript, generated_line_times: undefined
   line_times: [linkTime("a", "confirmed", 1, 4, 0, 15_000), linkTime("b", "suggested", 5, 8, 15_000, 30_000)] };
 const range = (extra: Partial<TimingRange> = {}): TimingRange => ({ ...sampleRangeFirstVisit, evidence: { transcript_lines: [[3, 6]] }, ...extra });
 
+/**
+ * A transcript as a speech-to-text export writes one (synthetic): a heading, then for every turn a line that is only a
+ * speaker tag, the talk, and a blank line. Lines 4, 7, 10 and 13 are talk; text alignment timed 4, 7 and 13.
+ */
+const tagged: TimedTranscript = {
+  ...transcript, source_id: "src-sample-transcript-91", filename: "sample-transcript-91.txt",
+  lines: ["Synthetic recording, turn by turn.", "", "[Speaker 1]", "First synthetic turn about the promoter.", "", "[Speaker 1]", "Second synthetic turn.", "", "[Speaker 2]", "A synthetic question from the room.", "",
+    "[Speaker 1]", "The synthetic answer.", "", "[Speaker 1]"],
+  generated_line_times: [aligned(4, 0), aligned(7, 1), aligned(13, 2)],
+  text_alignment: [{ recording_source_id: REC, state: "accepted", reason: null, lines_aligned: 3, lines_total: 5, method: { name: "anchored-token-alignment", version: "2" } }],
+};
+
 // ---- pure parts ------------------------------------------------------------------------------------------------------------
+describe("the rows of a transcript: speech only", () => {
+  it("knows a line that is only a speaker tag from a line of talk", () => {
+    expect(speakerTag("[Speaker 1]")).toBe("Speaker 1");
+    expect(speakerTag("  [Speaker 12]  ")).toBe("Speaker 12");
+    expect(speakerTag("Dr. Example:")).toBeNull(); // a full stop inside: not taken for a name
+    expect(speakerTag("Sample Lecturer:")).toBe("Sample Lecturer");
+    for (const talk of ["Okay.", "So: what is a promoter?", "[inaudible] and then it binds.", "A line of talk that ends with a colon after many words of it:", "", "[]", `[${"x".repeat(41)}]`]) expect(speakerTag(talk)).toBeNull();
+  });
+
+  it("folds a tag into the talk after it, draws no blank line, and renumbers nothing", () => {
+    expect(transcriptRows(tagged.lines)).toEqual([
+      { n: 1, first: 1, last: 1, speaker: null, text: "Synthetic recording, turn by turn." },
+      { n: 4, first: 3, last: 4, speaker: "Speaker 1", text: "First synthetic turn about the promoter." },
+      { n: 7, first: 6, last: 7, speaker: "Speaker 1", text: "Second synthetic turn." },
+      { n: 10, first: 9, last: 10, speaker: "Speaker 2", text: "A synthetic question from the room." },
+      { n: 13, first: 12, last: 13, speaker: "Speaker 1", text: "The synthetic answer." },
+      { n: 15, first: 15, last: 15, speaker: null, text: "[Speaker 1]" }, // a tag with no talk after it stays, as written: no line with text goes unseen
+    ]);
+    expect(transcriptRows(transcript.lines).map((row) => [row.n, row.first, row.last])).toEqual(transcript.lines.map((_, index) => [index + 1, index + 1, index + 1])); // plain lines: one row each
+    expect(transcriptRows(["[Speaker 1]", "[Speaker 2]", "Talk."]).map((row) => [row.n, row.speaker, row.text])).toEqual([[1, null, "[Speaker 1]"], [3, "Speaker 2", "Talk."]]);
+    expect(transcriptRows([])).toEqual([]);
+  });
+
+  it("finds the row that stands for a line of the file: a tag's line, a blank line, a line of talk", () => {
+    const rows = transcriptRows(tagged.lines);
+    expect(rowOfLine(rows, 3)?.n).toBe(4); // the tag line
+    expect(rowOfLine(rows, 4)?.n).toBe(4);
+    expect(rowOfLine(rows, 5)?.n).toBe(7); // a blank line: the row after it
+    expect(rowOfLine(rows, 16)).toBeNull();
+  });
+});
+
 describe("which lines show a time", () => {
   it("only the lines the text alignment timed, each with its own time", () => {
     const index = lineTimeIndex(transcript);
@@ -150,11 +195,12 @@ describe("the Transcript tab", () => {
     expect(within(screen.getByTestId("course-transcript")).queryByText(/Generated stretch/)).toBeNull(); // never mixed
   });
 
-  it("shows a time only on a line the Brain timed; the others show their line number and are not links", () => {
+  it("shows a time only on a line the Brain timed; the others have an empty gutter and are not links", () => {
     const probe = tab();
     expect(within(row(3)).getByRole("button", { name: "Go to 17:52 in the recording (generated timing, not reviewed)" })).toHaveTextContent("17:52");
     expect(within(row(7)).queryByRole("button", { name: /^Go to/ })).toBeNull();
-    expect(text(row(7))).toContain("line 7");
+    expect(text(row(7))).toBe("Synthetic transcript line 7 with the word promoter."); // no "line 7" is drawn in the gutter
+    expect(within(row(7)).getByRole("button", { name: "Select line 7" })).toHaveAttribute("title", expect.stringMatching(/^Line 7\./)); // the number is on the quote button
     expect(screen.getAllByRole("button", { name: /^Go to .* in the recording/ })).toHaveLength(6);
     fireEvent.click(within(row(5)).getByRole("button", { name: /^Go to 18:32/ }));
     expect(probe.seeks).toEqual([START + 40_000]); // pressing a timed line seeks the one player
@@ -195,6 +241,45 @@ describe("the Transcript tab", () => {
   it("closes with what the times are", () => {
     tab();
     expect(text(screen.getByTestId("transcript-closing"))).toMatch(/^6 of 12 lines have a time\./);
+  });
+
+  it("draws speech only: no blank line, a speaker tag as a muted prefix where the speaker changes", () => {
+    tab({ transcripts: [tagged], range: null, rangeOrdinal: null });
+    const items = within(screen.getByTestId("transcript-lines")).getAllByRole("listitem");
+    expect(items.map((item) => Number(item.getAttribute("data-line")))).toEqual([1, 4, 7, 10, 13, 15]); // six rows for fifteen lines of the file
+    expect(text(screen.getByTestId("transcript-lines"))).not.toContain("(blank line)");
+    expect(text(row(4))).toBe("17:52[Speaker 1] First synthetic turn about the promoter.");
+    expect(text(row(7))).toBe("18:12Second synthetic turn."); // the same speaker goes on: not said again
+    expect(text(row(10))).toBe("[Speaker 2] A synthetic question from the room.");
+    expect(text(row(13))).toBe("18:32[Speaker 1] The synthetic answer.");
+    expect(screen.getAllByTestId("speaker-tag")).toHaveLength(3);
+    expect(row(4)).toHaveAttribute("data-lines", "3-4"); // the row stands for its tag's line too
+  });
+
+  it("marks the rows of a range by the lines of the file, and opens a line that is a tag or a blank at its row", () => {
+    tab({ transcripts: [tagged], range: range({ evidence: { transcript_lines: [[5, 9]] } }), focusLine: 9 }); // lines 5–9: a blank, a turn, a blank, the tag of the next turn
+    expect(row(7)).toContainElement(screen.getByTestId("range-divider"));
+    expect(row(10)).toContainElement(screen.getByTestId("after-range"));
+    for (const line of [7, 10]) expect(row(line).querySelector("[class*='border-accent-text']")).not.toBeNull();
+    for (const line of [4, 13]) expect(row(line).querySelector("[class*='border-accent-text']")).toBeNull();
+    expect(text(screen.getByRole("group", { name: "Selected transcript lines" }))).toContain("Lines 9–10 selected"); // line 9 is the tag of the row of line 10
+  });
+
+  it("quotes a turn with the line that names its speaker", () => {
+    const probe = tab({ transcripts: [tagged], range: null, rangeOrdinal: null });
+    fireEvent.click(screen.getByRole("button", { name: "Select line 4" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Selected transcript lines" })).getByRole("button", { name: "Ask about this" }));
+    expect(probe.quotes).toEqual([[{ source_id: tagged.source_id, version_id: tagged.version_id, sha256: tagged.sha256, locator: { kind: "lines", start: 3, end: 4 } }, "[Speaker 1]\nFirst synthetic turn about the promoter."]]);
+  });
+
+  it("searches talk and speakers", () => {
+    tab({ transcripts: [tagged], range: null, rangeOrdinal: null });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search this transcript" }), { target: { value: "speaker 2" } });
+    expect(screen.getByRole("status")).toHaveTextContent(/1\smatching\sline/);
+    expect(text(row(10))).toBe("[Speaker 2] A synthetic question from the room.");
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search this transcript" }), { target: { value: "synthetic turn" } });
+    expect(within(screen.getByTestId("transcript-lines")).getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getAllByTestId("speaker-tag")).toHaveLength(2); // out of their order, every row says who speaks
   });
 
   it("searches the transcript", () => {

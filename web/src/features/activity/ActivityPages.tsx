@@ -14,7 +14,7 @@ import { JOB_STATE, timeSpanLabel, unlistedLabel } from "@/lib/labels";
 import { useActivity, useCourse, useLecture, useResume } from "@/lib/queries";
 import { flushOutbox, reviseAnnotation } from "@/lib/requests";
 import type { ActivityJob, AnnotationRecord } from "@/lib/types";
-import { Callout, Disclosure, Fact, Facts, Lead, lectureNameOf } from "@/features/search/SearchOverlay";
+import { Callout, Details, Disclosure, Fact, Facts, Lead, Page, lectureNameOf } from "@/features/search/SearchOverlay";
 import { useLocalRequests, useSubmitActions } from "@/features/tutor/actions";
 import { RequestCard } from "@/features/tutor/RequestCard";
 
@@ -49,7 +49,7 @@ export function ActivityPage() {
   }, [activity.dataUpdatedAt]);
 
   if (requestId) return <RequestDetail requestId={requestId} />;
-  if (activity.isLoading) return <LoadingState label="Loading activity…" />;
+  if (activity.isLoading) return <Page><LoadingState label="Loading activity…" /></Page>;
   const data = activity.data;
   const jobs = (data?.jobs ?? []).filter((j) => j.request_id && (filter === "all" || !["SUCCEEDED", "CANCELLED", "SUPERSEDED"].includes(j.state)));
   const internal = (data?.jobs ?? []).filter((j) => !j.request_id);
@@ -69,7 +69,7 @@ export function ActivityPage() {
   };
 
   return (
-    <div className="ll-page">
+    <Page>
       <PageHeader title="Activity" subtitle={<Lead>{data?.note ?? "Requests and their real states."}</Lead>} actions={
         <Segmented label="Which requests to show" value={filter} onChange={setFilter} options={[{ value: "open", label: "Open requests" }, { value: "all", label: "All requests" }]} />} />
       {activity.isError && <Callout tone="danger" role="alert" className="mb-4" title="The Brain is not reachable">{activity.error.message} What is listed below is only what this device still holds.</Callout>}
@@ -104,7 +104,7 @@ export function ActivityPage() {
                     <StatusChip tone={label.tone}>{label.label}</StatusChip>
                     <span className="ll-num text-ui text-muted">{job.course_id.toUpperCase()} · {formatWhen(job.created_at)}{job.cancel_requested && job.state !== "CANCELLED" ? " · cancellation requested (not final)" : ""}</span>
                   </div>
-                  {job.reason && <p className="ll-measure mb-2 text-ui">{job.reason}</p>}
+                  {job.reason && <p className="ll-measure mb-2 text-read">{job.reason}</p>}
                   <Phases job={job} />
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Link className="ll-btn ll-btn-sm" to={`/activity/${job.request_id}`}>Details</Link>
@@ -143,7 +143,7 @@ export function ActivityPage() {
           <ul className={ROWS}>{internal.map((j) => <li key={j.job_id} className={ROW}>{j.course_id.toUpperCase()} · {(j.action ?? j.workflow).replace(/[-_]/g, " ")} · {JOB_STATE[j.state]?.label ?? j.state}{j.reason ? ` — ${j.reason}` : ""}</li>)}</ul>
         </Disclosure>
       )}
-    </div>
+    </Page>
   );
 }
 
@@ -154,7 +154,7 @@ function RequestDetail({ requestId }: { requestId: string }) {
   const local = useLocalRequests(app.courseId);
   const mine = local.data?.find((r) => r.requestId === requestId);
   return (
-    <div className="ll-page ll-page-reading">
+    <Page reading>
       <Link to="/activity" className="ll-btn ll-btn-sm mb-4">← All activity</Link>
       <PageHeader title="Request detail" subtitle={<span className="break-all text-ui">{requestId}</span>} />
       {mine && <div className="mb-6"><RequestCard request={mine} /></div>}
@@ -165,7 +165,7 @@ function RequestDetail({ requestId }: { requestId: string }) {
           <section className="mb-6" aria-labelledby="ph-h">
             <h2 id="ph-h" className={SECTION_HEAD}>Where it stands</h2>
             <p className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1"><StatusChip tone={JOB_STATE[detail.data.job.state]?.tone ?? "neutral"}>{JOB_STATE[detail.data.job.state]?.label ?? detail.data.job.state}</StatusChip> <span className="ll-num text-ui text-muted">generation {detail.data.job.generation} · {detail.data.job.dispatches} native dispatch(es)</span></p>
-            {detail.data.job.reason && <p className="ll-measure mb-2 text-ui">{detail.data.job.reason}</p>}
+            {detail.data.job.reason && <p className="ll-measure mb-2 text-read">{detail.data.job.reason}</p>}
             <Phases job={detail.data.job} />
           </section>
           <section className="mb-6" aria-labelledby="ev-h">
@@ -182,7 +182,7 @@ function RequestDetail({ requestId }: { requestId: string }) {
           </section>
         </>
       )}
-    </div>
+    </Page>
   );
 }
 
@@ -213,13 +213,13 @@ function ResumeConflict({ courseId }: { courseId: string }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [heads.map((h) => h.checkpoint_id).join("|")]);
-  if (resume.isLoading) return <LoadingState />;
-  if (resume.isError) return <ErrorState error={resume.error} />;
+  if (resume.isLoading) return <Page reading><LoadingState /></Page>;
+  if (resume.isError) return <Page reading><ErrorState error={resume.error} /></Page>;
   if (!resume.data?.conflict) {
-    return <EmptyState title="No competing study positions" action={<Link className="ll-btn" to="/study">Back to study</Link>}>{resume.data?.current ? "There is one current position; continue from Study." : "No position has been synchronised yet."}</EmptyState>;
+    return <Page reading><EmptyState title="No competing study positions" action={<Link className="ll-btn" to="/study">Back to study</Link>}>{resume.data?.current ? "There is one current position; continue from Study." : "No position has been synchronised yet."}</EmptyState></Page>;
   }
   return (
-    <div className="ll-page ll-page-reading">
+    <Page reading>
       <PageHeader title="Two study positions" subtitle={<Lead>{resume.data.conflict.note}</Lead>} />
       <ul className="grid gap-4 min-[600px]:grid-cols-2">
         {heads.map((head) => {
@@ -227,8 +227,9 @@ function ResumeConflict({ courseId }: { courseId: string }) {
           return (
             <li key={head.checkpoint_id} className="ll-region flex flex-col gap-3 p-4 min-[900px]:p-5" data-testid="resume-head">
               <h2 className="break-words text-head font-semibold">From device {head.device_id}</h2>
-              <p className="text-ui text-muted"><span className="text-ink">{lectureNameOf(course.data, head.cursor.lecture_id)}</span>, PDF page {page} · source version {head.cursor.source.version_id} · {head.cursor.position_ms !== null ? `recording at ${formatMs(head.cursor.position_ms)} (paused)` : "no playback position"} · received with time {formatWhen(head.updated_at)} (device clocks are not used to pick a winner)</p>
+              <p className="text-ui text-muted"><span className="text-ink">{lectureNameOf(course.data, head.cursor.lecture_id)}</span>, PDF page {page} · {head.cursor.position_ms !== null ? `recording at ${formatMs(head.cursor.position_ms)} (paused)` : "no playback position"} · received with time {formatWhen(head.updated_at)} (device clocks are not used to pick a winner)</p>
               {head.cursor.draft ? <div><p className="text-ui font-semibold text-muted">Draft on that device</p><p className="mt-1 whitespace-pre-wrap rounded-control bg-pad p-3">{drafts[head.cursor.draft.sha256] ?? "Loading…"}</p></div> : <p className="text-ui text-muted">No draft.</p>}
+              <Details rows={[["Source version", head.cursor.source.version_id]]} />
               <div className="mt-auto flex flex-wrap gap-2">
                 <Button busy={busy} onClick={async () => {
                   setBusy(true);
@@ -249,9 +250,9 @@ function ResumeConflict({ courseId }: { courseId: string }) {
           );
         })}
       </ul>
-      <p className="ll-measure mt-4 text-ui text-muted">The draft you do not choose is kept as a separate draft; nothing is merged, overwritten or sent.</p>
+      <p className="ll-measure mt-4 text-read text-muted">The draft you do not choose is kept as a separate draft; nothing is merged, overwritten or sent.</p>
       {error && <Callout tone="danger" role="alert" title="Not resolved" className="mt-4">{error}</Callout>}
-    </div>
+    </Page>
   );
 }
 
@@ -271,11 +272,11 @@ function LinkConflict({ conflictId, courseId, lectureId }: { conflictId: string;
   const actions = useSubmitActions();
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  if (lecture.isLoading) return <LoadingState />;
-  if (lecture.isError || !lecture.data) return <ErrorState error={lecture.error} />;
+  if (lecture.isLoading) return <Page reading><LoadingState /></Page>;
+  if (lecture.isError || !lecture.data) return <Page reading><ErrorState error={lecture.error} /></Page>;
   const conflict = lecture.data.link_conflicts.find((c) => c.conflict_id === conflictId);
   const back = <Link className="ll-btn" to={`/courses/${courseId}/lectures/${lectureId}`}>Back to the lecture</Link>;
-  if (!conflict || !conflict.current) return <EmptyState title="This conflict is resolved" action={back}>A later revision exists; both earlier versions remain in the history.</EmptyState>;
+  if (!conflict || !conflict.current) return <Page reading><EmptyState title="This conflict is resolved" action={back}>A later revision exists; both earlier versions remain in the history.</EmptyState></Page>;
   const all = lecture.data.slides.flatMap((s) => s.occurrences);
   const head = all.find((o) => o.annotation_id === conflict.annotation_id);
   const resolve = async (useProposed: boolean) => {
@@ -295,15 +296,15 @@ function LinkConflict({ conflictId, courseId, lectureId }: { conflictId: string;
     }
   };
   return (
-    <div className="ll-page ll-page-reading">
+    <Page reading>
       <PageHeader title="Two versions of a slide link" subtitle={<Lead>Another correction was accepted first. Nothing was overwritten; choose which one should stand.</Lead>} />
       <div className="grid gap-4 min-[600px]:grid-cols-2">
         <div className="ll-region flex flex-col items-start gap-3 p-4 min-[900px]:p-5"><h2 className="text-head font-semibold">Current (accepted)</h2><p className="ll-num" data-testid="conflict-current">{interval(conflict.current)} · revision {conflict.current.revision}</p><Button busy={busy} disabled={!head} onClick={() => resolve(false)}>Keep this one</Button></div>
         <div className="ll-region flex flex-col items-start gap-3 p-4 min-[900px]:p-5"><h2 className="text-head font-semibold">Your other version</h2><p className="ll-num" data-testid="conflict-proposed">{interval(conflict.proposed)}</p><Button variant="primary" busy={busy} disabled={!head} onClick={() => resolve(true)}>Use this one instead</Button></div>
       </div>
-      {!head && <p className="ll-measure mt-3 text-ui text-muted">Neither can be chosen here: the link this conflict belongs to is not among this lecture's current links.</p>}
+      {!head && <p className="ll-measure mt-3 text-read text-muted">Neither can be chosen here: the link this conflict belongs to is not among this lecture's current links.</p>}
       {notice && <Callout tone="accent" role="status" className="mt-4" title="Conflict">{notice}</Callout>}
       <div className="mt-4">{back}</div>
-    </div>
+    </Page>
   );
 }

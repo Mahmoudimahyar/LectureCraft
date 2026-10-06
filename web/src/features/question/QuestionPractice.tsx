@@ -22,7 +22,7 @@ import { useCourse, useLecture, useQuestion, useReview } from "@/lib/queries";
 import { NotPairedError, reviewItemPayload, type Conditions } from "@/lib/requests";
 import type { EvidenceObject, LectureQuestionTie, QuestionAnchor, QuestionFile, QuestionRecord, QuestionRow, QuestionView } from "@/lib/types";
 import { observationsByAttempt, useNodeDetail } from "@/features/progress/ProgressPages";
-import { Callout, ReturnLink } from "@/features/search/SearchOverlay";
+import { Callout, Details, Page, ReturnLink } from "@/features/search/SearchOverlay";
 import { useLocalRequests, useSubmitActions } from "@/features/tutor/actions";
 import { RequestCard, type FollowUp } from "@/features/tutor/RequestCard";
 
@@ -147,10 +147,10 @@ function QuestionSources({ courseId, questionId, view, row }: { courseId: string
         ) : view.anchors.length > 0 ? (
           <ul className="ll-measure mt-1 flex flex-col gap-1.5">{view.anchors.map((anchor, index) => <AnchorLine key={index} courseId={courseId} questionId={questionId} anchor={anchor} />)}</ul>
         ) : (
-          <p className="ll-measure mt-1 text-ui">The course record names no slide for this question.{lecture ? <> Suggested links, when there are any, are listed with it in <Link className="ll-link" to={`/courses/${courseId}/lectures/${lecture}?panel=questions`}>the lecture's Questions tab</Link>.</> : null}</p>
+          <p className="ll-measure mt-1 text-read">The course record names no slide for this question.{lecture ? <> Suggested links, when there are any, are listed with it in <Link className="ll-link" to={`/courses/${courseId}/lectures/${lecture}?panel=questions`}>the lecture's Questions tab</Link>.</> : null}</p>
         )}
         {ties?.some((tie) => tie.tie === "agent_inferred" && tie.learner_decision == null) && lecture && (
-          <p className="ll-measure mt-1 text-ui text-muted">Accept or reject a suggested link in <Link className="ll-link" to={`/courses/${courseId}/lectures/${lecture}?panel=questions`}>the lecture's Questions tab</Link>.</p>
+          <p className="ll-measure mt-1 text-read text-muted">Accept or reject a suggested link in <Link className="ll-link" to={`/courses/${courseId}/lectures/${lecture}?panel=questions`}>the lecture's Questions tab</Link>.</p>
         )}
       </div>
       {view.original && (
@@ -179,7 +179,7 @@ function QuestionSources({ courseId, questionId, view, row }: { courseId: string
           <span className="ll-measure text-ui text-muted">{view.related_copy.filename}. {view.related_copy.note}.</span>
         </div>
       )}
-      {outcome && <p role="status" className="ll-measure text-ui text-muted">{outcome}</p>}
+      {outcome && <p role="status" className="ll-measure text-read text-muted">{outcome}</p>}
     </div>
   );
 }
@@ -234,8 +234,8 @@ export function QuestionPractice() {
   }, [thread]);
   const observations = useMemo(() => observationsByAttempt(detail.data), [detail.data]);
 
-  if (question.isLoading) return <LoadingState label="Opening question…" />;
-  if (question.isError || !question.data) return <><ReturnLink /><ErrorState error={question.error} /></>;
+  if (question.isLoading) return <Page reading><LoadingState label="Opening question…" /></Page>;
+  if (question.isError || !question.data) return <Page reading><ReturnLink /><ErrorState error={question.error} /></Page>;
   const q = question.data;
   const sources: SourceRef[] = [];
   const all = [...(course.data?.lectures ?? []).flatMap((l) => (l.deck ? [l.deck] : [])), ...(course.data?.other_sources ?? [])];
@@ -296,9 +296,10 @@ export function QuestionPractice() {
   };
 
   return (
-    <div className="ll-page ll-page-reading">
+    <Page reading>
       <ReturnLink />
-      <PageHeader title={q.title ?? q.question_id} subtitle={<span className="text-ui">{q.question_id} · {q.origin === "course_source" ? "from course material" : "generated practice (tutor-authored)"}{q.collection ? ` · ${q.collection}` : ""}</span>} />
+      {/* The question is named by its title; its catalog identifier is under "Details" at the foot of the page (it is the title only when the catalog gives none). */}
+      <PageHeader title={q.title ?? q.question_id} subtitle={<span className="text-ui">{q.origin === "course_source" ? "From course material" : "Generated practice (tutor-authored)"}{q.collection ? ` · ${q.collection}` : ""}</span>} />
 
       <section aria-labelledby="prompt-h" className="mb-8">
         <h2 id="prompt-h" className="text-head font-semibold">Question</h2>
@@ -317,7 +318,7 @@ export function QuestionPractice() {
             : <span key={ref.source_id + ref.locator} className="text-ui">{ref.source_id} · {ref.locator} (not available)</span>)}
         </div>
         <QuestionSources courseId={courseId} questionId={questionId} view={q} row={row} />
-        <p className="ll-measure mt-3 text-ui text-muted">Open the original to see all sub-parts, givens and figures exactly as set. {q.criteria_note}
+        <p className="ll-measure mt-3 text-read text-muted">Open the original to see all sub-parts, givens and figures exactly as set. {q.criteria_note}
           {q.criteria_authorship === "tutor_authored" ? " The criteria for this question were written by the tutor; they are not the instructor's point scheme." : ""}</p>
         {!q.rubric_available && <Callout tone="caution" className="mt-3" title="No reviewed rubric is linked">An answer is still retained in full, but it stays "assessment pending" instead of being graded.</Callout>}
       </section>
@@ -331,7 +332,7 @@ export function QuestionPractice() {
       <section aria-labelledby="answer-h" className="ll-region mb-8 flex flex-col gap-4 p-4 min-[900px]:p-6">
         <h2 id="answer-h" className="text-head font-semibold">{diagnostic ? "Diagnostic check" : parent ? "New answer" : "Your answer"}</h2>
         {diagnostic && <Callout tone="accent" title="One short check" actions={<Button size="sm" variant="quiet" onClick={() => setDiagnostic(null)}>Skip</Button>}>{diagnostic.prompt}</Callout>}
-        {parent && !diagnostic && <p className="ll-measure text-ui text-muted">This is a new answer: it will be a separate attempt and never overwrites your earlier one.</p>}
+        {parent && !diagnostic && <p className="ll-measure text-read text-muted">This is a new answer: it will be a separate attempt and never overwrites your earlier one.</p>}
         <fieldset className="flex flex-col gap-3 text-ui">
           <legend className="mb-2 font-semibold">Conditions for this attempt (self-reported)</legend>
           <label className="flex items-center gap-2"><input type="checkbox" className="size-5 flex-none accent-accent" checked={sourcesOpen} onChange={(e) => setSourcesOpen(e.target.checked)} /> I am using my notes or the course sources</label>
@@ -366,13 +367,13 @@ export function QuestionPractice() {
             }
           }}>I looked at a solution</Button>
         </div>
-        {notice && <p role="status" className="ll-measure text-ui text-muted">{notice}</p>}
-        {app.pairing.state !== "paired" && <p className="ll-measure text-ui text-muted">This device is not paired, so nothing can be sent yet. <Link className="ll-link" to="/connect">Pair it</Link>.</p>}
+        {notice && <p role="status" className="ll-measure text-read text-muted">{notice}</p>}
+        {app.pairing.state !== "paired" && <p className="ll-measure text-read text-muted">This device is not paired, so nothing can be sent yet. <Link className="ll-link" to="/connect">Pair it</Link>.</p>}
       </section>
 
       <section aria-labelledby="review-h" className="mb-8 flex flex-col gap-2">
         <h2 id="review-h" className="text-head font-semibold">Review</h2>
-        <p className="ll-measure text-ui text-muted">{existingItem ? `This question is in your review list: ${existingItem.selection.replace("_", " ")}. ${existingItem.schedule_note ?? ""}` : "Not in your review list."}</p>
+        <p className="ll-measure text-read text-muted">{existingItem ? `This question is in your review list: ${existingItem.selection.replace("_", " ")}. ${existingItem.schedule_note ?? ""}` : "Not in your review list."}</p>
         <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" busy={busy === "saved_only"} disabled={existingItem?.selection === "saved_only"} onClick={() => select("saved_only")}>Save only</Button>
           <Button size="sm" busy={busy === "active"} disabled={existingItem?.selection === "active" || !q.rubric_available} onClick={() => select("active")} title={q.rubric_available ? undefined : "Needs a reviewed rubric before it can be scheduled"}>Add to review</Button>
@@ -401,7 +402,7 @@ export function QuestionPractice() {
       <section aria-labelledby="evidence-h">
         <h2 id="evidence-h" className="mb-2 text-head font-semibold">Recorded attempts on this question</h2>
         {r2?.state && q.evidence.length > 0 && <StateLabel evidence={r2 as EvidenceObject} />}
-        {r2?.summary && q.evidence.length > 0 && <p className="ll-measure mt-1 text-ui text-muted">{evidenceSummarySentence(r2.summary)}</p>}
+        {r2?.summary && q.evidence.length > 0 && <p className="ll-measure mt-1 text-read text-muted">{evidenceSummarySentence(r2.summary)}</p>}
         {q.evidence.length === 0 ? <p className="text-muted">Not assessed: no attempt is recorded for this question.</p> : (
           <ul className="mt-2 flex flex-col">
             {q.evidence.map((e) => {
@@ -417,6 +418,7 @@ export function QuestionPractice() {
           </ul>
         )}
       </section>
-    </div>
+      {q.title && <Details className="mt-6" rows={[["Catalog identifier", q.question_id]]} />}
+    </Page>
   );
 }

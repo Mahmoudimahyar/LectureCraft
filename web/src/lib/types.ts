@@ -1102,8 +1102,9 @@ export interface SuggestionHistory {
    */
   decisions_not_shown?: Array<{ suggestion_id: string; lecture_id?: string | null; source_id?: string | null; pages?: number[]; learner_decision?: LearnerDecision; reason?: string; [key: string]: unknown }>;
 }
-/** course_anchor + agent_inferred + without_link = all. course_section counts questions the course's study map places in a section; never part of course_anchor. */
-export interface LectureQuestionCountsBlock { all: number; course_anchor: number; agent_inferred: number; without_link: number; course_section?: number }
+/** course_anchor + agent_inferred + without_link = all. course_section counts questions the course's study map places in a section; never part of course_anchor.
+ *  course_anchor_with_suggestion is a PART of course_anchor: anchored by the course (to whatever file) and also carrying a current suggested link to pages. */
+export interface LectureQuestionCountsBlock { all: number; course_anchor: number; agent_inferred: number; without_link: number; course_section?: number; course_anchor_with_suggestion?: number }
 
 // ---- 1.2 ranges ----------------------------------------------------------------------------------------------------
 /** "displayed_during" only with inspected frame evidence; otherwise a range says the slide was discussed. */

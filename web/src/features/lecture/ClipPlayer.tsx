@@ -213,6 +213,48 @@ export class RangePlayer {
   }
 }
 
+// ---- where the learner was -----------------------------------------------------------------------------------------------
+/**
+ * Where the one player stood in a lecture, kept on this device (local storage, beside the tab last used and the place
+ * Study resumes from) so that leaving the lecture for a concept or a question and coming back, by a return link, the
+ * browser's Back or Resume, puts the page as it was: the same selection, the same time, paused. One record per
+ * lecture, of the page that was on screen; it is put back only on that page and never starts playback. Nothing but a
+ * page number, a range id, a recording id and a time is kept.
+ */
+export interface StoredPosition {
+  /** The page that was on screen (physical, 1-based). */
+  page: number;
+  /** The selected range (`range_id`) or "whole" for the whole recording. */
+  selection: string;
+  /** The whole recording was open on a page without a range. */
+  whole: boolean;
+  /** The recording the time belongs to. */
+  recording: string | null;
+  ms: number;
+  repeat: boolean;
+  /** Epoch ms of the write. */
+  saved_at: number;
+}
+export const POSITION_STORAGE_PREFIX = "ll.lecture.position:";
+/** The stored position of a lecture (`<course id>/<lecture id>`), or null: nothing stored, storage unavailable, or a record this build cannot read. */
+export function readStoredPosition(lectureKey: string): StoredPosition | null {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(POSITION_STORAGE_PREFIX + lectureKey) ?? "null") as Partial<StoredPosition> | null;
+    if (!value || typeof value !== "object" || !Number.isInteger(value.page) || typeof value.selection !== "string" || typeof value.ms !== "number" || !Number.isFinite(value.ms) || value.ms < 0) return null;
+    return { page: value.page!, selection: value.selection, whole: value.whole === true, recording: typeof value.recording === "string" ? value.recording : null, ms: value.ms, repeat: value.repeat === true,
+      saved_at: typeof value.saved_at === "number" ? value.saved_at : 0 };
+  } catch {
+    return null;
+  }
+}
+export function writeStoredPosition(lectureKey: string, position: StoredPosition): void {
+  try {
+    window.localStorage.setItem(POSITION_STORAGE_PREFIX + lectureKey, JSON.stringify(position));
+  } catch {
+    /* a convenience of this device only: without storage the position is simply not kept */
+  }
+}
+
 // ---- the one media element -----------------------------------------------------------------------------------------------
 const MEDIA_ERRORS: Record<number, string> = {
   1: "Loading the recording was stopped.", 2: "A network problem interrupted loading the recording.", 3: "The recording could not be decoded by this browser.",
@@ -274,8 +316,12 @@ export interface ClipPlayer {
   setRate: (rate: number) => void;
   setRepeat: (on: boolean) => void;
   setMuted: (muted: boolean) => void;
-  /** Say, before the selection is changed by the learner, that a playing recording should go on playing in the new range. */
-  keepPlaying: () => void;
+  /**
+   * Say, before the selection is changed by the learner, that a playing recording should go on playing in the new
+   * range. `start`: the learner pressed a row of the range list, which plays the range to its end (UI contract R2),
+   * so the new range plays also when the recording was paused.
+   */
+  keepPlaying: (start?: boolean) => void;
   /** After a stop at the end of a range: remove the bounds and play on from there. */
   goOn: () => void;
   /** Load the recording again after a failure; the position is kept. */
@@ -453,8 +499,8 @@ export function useClipPlayer({ host, recordings, bounds, pageKey, onTime, onLef
     setMuted: useCallback((next: boolean) => {
       if (mediaRef.current) mediaRef.current.muted = next;
     }, []),
-    keepPlaying: useCallback(() => {
-      resume.current = player.isPlaying();
+    keepPlaying: useCallback((start?: boolean) => {
+      resume.current = start === true || player.isPlaying();
     }, [player]),
     goOn: useCallback(() => act(() => {
       player.select(null);

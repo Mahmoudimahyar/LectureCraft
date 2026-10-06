@@ -258,6 +258,8 @@ export interface LectureQuestionCounts {
   withoutLink: number;
   /** Questions the course's study map places in a section of pages. Counted apart; never a course anchor. */
   courseSection: number;
+  /** A part of courseAnchor: questions the course anchors (to whatever file) that also carry a suggested link to pages. */
+  anchoredWithSuggestion: number;
   /** false when the rows carry no R2 ties (an older Brain): the division then rests on the R1 anchors alone. */
   known: boolean;
   /** The Brain's own counts, when it sent them. */
@@ -269,21 +271,36 @@ export interface LectureQuestionCounts {
 /** How the lecture's questions divide, counted from the rows that are listed (so a count equals its rows). */
 export function lectureQuestionCounts(view: View): LectureQuestionCounts {
   const rows: QuestionRow[] = view?.questions?.all ?? [];
-  let courseAnchor = 0, agentInferred = 0, courseSection = 0;
+  let courseAnchor = 0, agentInferred = 0, courseSection = 0, anchoredWithSuggestion = 0;
   for (const row of rows) {
     const ties = row.ties ?? [];
     const pageTies = ties.filter((tie) => tie.granularity !== "section");
+    const suggested = pageTies.some((tie) => tie.tie === "agent_inferred");
     if (ties.some((tie) => tie.granularity === "section")) courseSection += 1;
-    if (row.ties === undefined ? (row.anchors?.length ?? 0) > 0 : pageTies.some((tie) => tie.tie === "exact" || tie.tie === "stated")) courseAnchor += 1;
-    else if (pageTies.some((tie) => tie.tie === "agent_inferred")) agentInferred += 1;
+    if (row.ties === undefined ? (row.anchors?.length ?? 0) > 0 : pageTies.some((tie) => tie.tie === "exact" || tie.tie === "stated")) {
+      courseAnchor += 1;
+      if (suggested) anchoredWithSuggestion += 1;
+    } else if (suggested) agentInferred += 1;
   }
   const all = rows.length;
   const withoutLink = all - courseAnchor - agentInferred;
   const reported = view?.questions?.counts ?? null;
   const consistent = reported === null ? null
     : reported.all === all && reported.course_anchor === courseAnchor && reported.agent_inferred === agentInferred && reported.without_link === withoutLink
-      && (reported.course_section === undefined || reported.course_section === courseSection);
-  return { all, courseAnchor, agentInferred, withoutLink, courseSection, known: rows.some((row) => row.ties !== undefined), reported, consistent };
+      && (reported.course_section === undefined || reported.course_section === courseSection)
+      && (reported.course_anchor_with_suggestion === undefined || reported.course_anchor_with_suggestion === anchoredWithSuggestion);
+  return { all, courseAnchor, agentInferred, withoutLink, courseSection, anchoredWithSuggestion, known: rows.some((row) => row.ties !== undefined), reported, consistent };
+}
+
+/**
+ * How the lecture's questions divide, as one sentence. A question is counted once, by the strongest link it carries; the
+ * anchored ones that ALSO carry a suggested link are named inside their clause, and the suggested-link clause then says
+ * "only", so the list never reads "0 with a suggested link" above entries that offer Accept and Reject.
+ */
+export function questionDivisionSentence(counts: Pick<LectureQuestionCounts, "all" | "courseAnchor" | "agentInferred" | "withoutLink" | "anchoredWithSuggestion">): string {
+  const also = counts.anchoredWithSuggestion;
+  const anchored = `${counts.courseAnchor} anchored by the course${also > 0 ? ` (${also} of them also ${also === 1 ? "carries" : "carry"} a suggested link)` : ""}`;
+  return `${counts.all} ${counts.all === 1 ? "question" : "questions"}: ${anchored}, ${counts.agentInferred} with a suggested link${also > 0 ? " only" : ""}, ${counts.withoutLink} without a link.`;
 }
 
 /** The positions (1-based) in a group of the pages that carry a support: [5] in [3, 4, 5] → [3]. A page outside the group has no place in it. */

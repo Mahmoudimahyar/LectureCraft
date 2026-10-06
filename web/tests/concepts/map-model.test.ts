@@ -3,7 +3,8 @@
 // (dagre) with its ranks. Synthetic sample graphs only.
 import { describe, expect, it } from "vitest";
 import {
-  MAP_RANKS, RANK_FOLD, buildMapModel, conceptMapHref, layoutMap, mapNodeWidth, parseScope, scopeParam, sourceTies, topicConceptCounts, topicNodeWidth, type MapModel, type MapNodeModel,
+  MAP_RANKS, OVERVIEW_TOPICS, RANK_FOLD, buildMapModel, conceptMapHref, drawnWhole, firstTopic, layoutMap, mapNodeWidth, nodeWidths, openingNode, parseScope, scopeParam, soloNodeWidth, sourceTies, topicConceptCounts, topicGrid,
+  topicNodeWidth, type MapModel, type MapNodeModel,
 } from "@/features/concepts/map-model";
 import { sampleConceptGraphCourse, sampleConceptGraphLecture, sampleConceptGraphSlide } from "@/lib/fixtures/r2-sample";
 import { NBSP } from "@/lib/labels";
@@ -53,22 +54,51 @@ describe("the address of a scope", () => {
   });
 });
 
-describe("node width from the pane (7.3)", () => {
-  it("gives the widths the specification computes for the default panes", () => {
-    expect(mapNodeWidth(672)).toBe(196);
-    expect(mapNodeWidth(602)).toBe(172);
-    expect(mapNodeWidth(702)).toBe(206);
-    expect(mapNodeWidth(817)).toBe(220);
-    expect(mapNodeWidth(1280)).toBe(220);
+describe("node width from the pane and from what is drawn", () => {
+  // The panes of the default panel sizes, as measured: 590 px in a 1440 px window, 690 at 1680, 805 at 1920, 1268 at 2560.
+  it("fills the pane with the nodes of the widest rank, three at most, and stops at 320 px", () => {
+    expect(mapNodeWidth(590)).toBe(168);
+    expect(mapNodeWidth(690)).toBe(202);
+    expect(mapNodeWidth(805)).toBe(240);
+    expect(mapNodeWidth(1268)).toBe(320);
+    // two to a rank: wider nodes, not half an empty pane
+    expect(mapNodeWidth(590, 2)).toBe(273);
+    expect(mapNodeWidth(805, 2)).toBe(320);
+    // an opened fold does not narrow the nodes: the drawing is then panned
+    expect(mapNodeWidth(805, 7)).toBe(240);
   });
   it("never goes under 160 px, so a narrow pane is panned instead", () => {
     expect(mapNodeWidth(400)).toBe(160);
     expect(mapNodeWidth(0)).toBe(160);
   });
-  it("sizes a topic card for three columns with 16 px gaps, 280 px at most", () => {
+  it("lets a node that stands alone in its rank take up to 360 px, and never more than the pane", () => {
+    expect(soloNodeWidth(590)).toBe(360);
+    expect(soloNodeWidth(1268)).toBe(360);
+    expect(soloNodeWidth(300)).toBe(284);
+  });
+  it("gives every node of a drawing its width: the lone node of a rank wider than the nodes of a full rank", () => {
+    const concepts = ["c-1", "c-2"].map((id) => node(id, "concept", id));
+    const two = buildMapModel(graph([node("t-1", "topic", "Topic"), ...concepts], concepts.map((concept) => edge("structure", "topic_includes_concept", "t-1", concept.id)), "t-1"));
+    expect([...nodeWidths(two, 590)]).toEqual([["t-1", 360], ["c-1", 273], ["c-2", 273]]);
+    const chain = buildMapModel(graph([node("t-1", "topic", "Topic"), node("c-1", "concept", "Concept"), node("s-1", "skill", "Skill")],
+      [edge("structure", "topic_includes_concept", "t-1", "c-1"), edge("structure", "concept_assessed_as_skill", "c-1", "s-1")], "c-1"));
+    expect(new Set(nodeWidths(chain, 805).values())).toEqual(new Set([360]));
+    const cards = buildMapModel(graph([node("t-1", "topic", "One"), node("t-2", "topic", "Two")], [], null));
+    expect([...nodeWidths(cards, 805).values()]).toEqual([256, 256]);
+  });
+  it("lays the topic cards out in three columns up to a 1680 px window, four at 1920 and five at 2560", () => {
+    expect(topicGrid(590)).toEqual({ columns: 3, width: 184 });
+    expect(topicGrid(690)).toEqual({ columns: 3, width: 218 });
+    expect(topicGrid(805)).toEqual({ columns: 4, width: 188 });
+    expect(topicGrid(1268)).toEqual({ columns: 5, width: 240 });
     expect(topicNodeWidth(602)).toBe(188);
-    expect(topicNodeWidth(1280)).toBe(280);
     expect(topicNodeWidth(300)).toBe(160);
+  });
+  it("keeps no column for nothing: fewer cards than columns share the pane, a card 280 px at most, never fewer than three columns", () => {
+    expect(topicGrid(805, 3)).toEqual({ columns: 3, width: 256 });
+    expect(topicGrid(1268, 4)).toEqual({ columns: 4, width: 280 });
+    expect(topicGrid(1268, 1)).toEqual({ columns: 3, width: 280 });
+    expect(topicGrid(805, 20)).toEqual({ columns: 4, width: 188 });
   });
 });
 
@@ -181,8 +211,26 @@ describe("a focused neighbourhood", () => {
       [edge("structure", "topic_includes_concept", "t-1", "c-1"), edge("structure", "topic_includes_concept", "t-1", "c-2"), edge("structure", "concept_assessed_as_skill", "c-1", "s-1"),
         edge("structure", "concept_assessed_as_skill", "c-2", "s-2")], "c-1");
     expect(buildMapModel(siblings).nodes.map((entry) => entry.id).sort()).toEqual(["c-1", "s-1", "t-1"]);
-    // a selected topic does draw its concepts
-    expect(buildMapModel({ ...siblings, focus: "t-1" }).nodes.map((entry) => entry.id).sort()).toEqual(["c-1", "c-2", "s-1", "s-2", "t-1"]);
+    // a selected topic does draw its concepts, and their skills when two levels are asked for (a window from 1920 px)
+    expect(buildMapModel({ ...siblings, focus: "t-1" }).nodes.map((entry) => entry.id).sort()).toEqual(["c-1", "c-2", "t-1"]);
+    expect(buildMapModel({ ...siblings, focus: "t-1" }, { depth: 2 }).nodes.map((entry) => entry.id).sort()).toEqual(["c-1", "c-2", "s-1", "s-2", "t-1"]);
+  });
+
+  it("draws no question or criterion around a selected topic, and claims no cut when the Brain's limit only cut those", () => {
+    // A topic asked two relations deep comes with the questions and criteria of its concepts; the Brain lists concepts and skills first.
+    const deep = graph(
+      [node("t-1", "topic", "Topic"), node("c-1", "concept", "Concept"), node("s-1", "skill", "Skill"), node("q-1", "question", "Question"), node("k-1", "criterion", "Criterion")],
+      [edge("structure", "topic_includes_concept", "t-1", "c-1"), edge("structure", "concept_assessed_as_skill", "c-1", "s-1"), edge("assessment", "question_has_criterion", "q-1", "k-1"),
+        edge("assessment", "criterion_assesses_skill", "k-1", "s-1")], "t-1", { truncated: true, dropped: 40 });
+    const model = buildMapModel(deep, { depth: 2 });
+    expect(model.ranks).toEqual(["topic", "concept", "skill"]);
+    expect(model.edges.every((entry) => entry.legend === "hierarchy")).toBe(true);
+    expect(model.total).toBe(model.shown); // what was cut lies beyond what is drawn
+    // Without any question in the answer the cut may have taken a skill: it is said.
+    const cut = buildMapModel({ ...deep, nodes: deep.nodes.filter((entry) => entry.kind !== "question" && entry.kind !== "criterion"), edges: deep.edges.filter((entry) => entry.family === "structure") }, { depth: 2 });
+    expect(cut.total).toBe(cut.shown + 40);
+    // Around a concept everything stays, as before.
+    expect(buildMapModel({ ...deep, focus: "c-1" }).ranks).toEqual(["topic", "concept", "skill", "question"]);
   });
 
   it("shows evidence for a skill, a question and a criterion, and counts for a topic or a concept", () => {
@@ -451,6 +499,85 @@ describe("the one layout (dagre, top to bottom)", () => {
     expect(row[row.length - 1]!.type).toBe("fold");
   });
 
+  it("lays the topic cards out in as many columns as the pane holds", () => {
+    const topics = Array.from({ length: 9 }, (_, index) => node(`t-${index + 1}`, "topic", `Topic ${index + 1}`));
+    const grid = buildMapModel(graph(topics, [], null));
+    const placed = layoutMap(grid, () => 84, { nodeWidth: 188, columns: 4 });
+    const at = (id: string) => placed.boxes.get(id)!;
+    expect([at("t-1").x, at("t-2").x, at("t-3").x, at("t-4").x]).toEqual([0, 204, 408, 612]);
+    expect(at("t-5")).toMatchObject({ x: 0, y: at("t-1").y + 84 + 16 });
+    expect(at("t-9").x).toBe(0);
+    expect(placed.width).toBe(4 * 188 + 3 * 16);
+  });
+
+  it("centres a wider node that stands alone in its rank over the nodes below it", () => {
+    const concepts = ["c-1", "c-2", "c-3"].map((id) => node(id, "concept", id));
+    const fan = buildMapModel(graph([node("t-1", "topic", "Topic"), ...concepts], concepts.map((concept) => edge("structure", "topic_includes_concept", "t-1", concept.id)), "t-1"));
+    const widths = nodeWidths(fan, 805);
+    const placed = layoutMap(fan, sizes, { nodeWidth: 240, widthOf: (id) => widths.get(id)! });
+    const topic = placed.boxes.get("t-1")!;
+    expect(topic.width).toBe(360);
+    expect(concepts.map((concept) => placed.boxes.get(concept.id)!.width)).toEqual([240, 240, 240]);
+    expect(topic.x + topic.width / 2).toBe(placed.boxes.get("c-2")!.x + 120);
+    expect(placed.width).toBe(3 * 240 + 2 * 40);
+  });
+
+  it("moves a wider lone node back inside the full lines when it would reach past them, so the drawing still fits its pane", () => {
+    // A slide scope: the slide and one concept share the concept line; the topic stands alone above the concept, which is the right-hand one.
+    const slideId = sampleConceptGraphSlide.scope.logical_slide_id!;
+    const model = buildMapModel(graph(
+      [node("t-1", "topic", "Topic"), node("c-1", "concept", "Concept", { where: "on_this_page", support_pages: [4] }), node("s-1", "skill", "Skill", { where: "on_this_page", support_pages: [4] })],
+      [edge("structure", "topic_includes_concept", "t-1", "c-1"), edge("structure", "concept_assessed_as_skill", "c-1", "s-1"), edge("source", "slide_supports", slideId, "c-1", { tie: "exact", support_pages: [4] })],
+      "c-1", { scope: { ...sampleConceptGraphSlide.scope } }));
+    const widths = nodeWidths(model, 590);
+    expect(widths.get("t-1")).toBe(360);
+    expect(widths.get("c-1")).toBe(273);
+    const placed = layoutMap(model, sizes, { nodeWidth: 273, widthOf: (id) => widths.get(id)! });
+    const box = (id: string) => placed.boxes.get(id)!;
+    expect(box(slideId).x).toBe(0);
+    expect(box("c-1").x).toBe(313);
+    // centred over the concept the topic would end at 629.5; it ends where the concept line ends
+    expect(box("t-1").x + box("t-1").width).toBe(586);
+    expect(box("s-1").x + box("s-1").width).toBe(586);
+    expect(placed.width).toBe(586);
+    // its line still reaches the concept
+    expect(placed.edges.get(model.edges.find((entry) => entry.source === "t-1")!.id)!.path).toMatch(/^M/);
+  });
+
+  describe("a drawing that comes out a little wider than the width its nodes were sized to fill", () => {
+    // A slide's concept with its skill and two questions; the slide supports the concept and both questions, so two of its
+    // lines are led past the skill's rank and take room between the nodes there.
+    const slideId = sampleConceptGraphSlide.scope.logical_slide_id!;
+    const questions = ["q-1", "q-2"];
+    const model = buildMapModel(graph(
+      [node("t-1", "topic", "Topic"), node("c-1", "concept", "Concept"), node("s-1", "skill", "Skill"), ...questions.flatMap((id) => [node(id, "question", `Question ${id}`), node(`${id}.C1`, "criterion", "Criterion")])],
+      [edge("structure", "topic_includes_concept", "t-1", "c-1"), edge("structure", "concept_assessed_as_skill", "c-1", "s-1"),
+        ...questions.flatMap((id) => [edge("assessment", "question_has_criterion", id, `${id}.C1`), edge("assessment", "criterion_assesses_skill", `${id}.C1`, "s-1"), edge("source", "slide_supports", slideId, id, { tie: "exact", support_pages: [4] })]),
+        edge("source", "slide_supports", slideId, "c-1", { tie: "exact", support_pages: [4] })],
+      "c-1", { scope: { ...sampleConceptGraphSlide.scope } }));
+    const widths = nodeWidths(model, 590);
+    const options = { nodeWidth: 273, widthOf: (id: string) => widths.get(id)! };
+    const loose = layoutMap(model, sizes, options);
+    const fitted = layoutMap(model, sizes, { ...options, fitWidth: 586 });
+
+    it("is brought back to that width by its gaps, never by its nodes", () => {
+      expect(loose.width).toBeGreaterThan(586); // the premise: as laid out, it would be cut at one side of a 590 px pane
+      expect(loose.width).toBeLessThan(586 * 1.05);
+      expect(fitted.width).toBeLessThanOrEqual(586);
+      for (const entry of model.nodes) expect(fitted.boxes.get(entry.id)!.width).toBe(widths.get(entry.id));
+      // the nodes of a line still stand apart
+      for (const rank of model.ranks) {
+        const row = model.nodes.filter((entry) => entry.rank === rank).map((entry) => fitted.boxes.get(entry.id)!).sort((a, b) => a.x - b.x);
+        for (let index = 1; index < row.length; index += 1) expect(row[index]!.x - (row[index - 1]!.x + row[index - 1]!.width)).toBeGreaterThanOrEqual(20);
+      }
+      for (const entry of model.edges) expect(fitted.edges.get(entry.id)!.path).toMatch(/^M/);
+    });
+
+    it("is left as it is when it is wider by more than that: it is panned, and nothing is crowded", () => {
+      expect(layoutMap(model, sizes, { ...options, fitWidth: 400 }).width).toBe(loose.width);
+    });
+  });
+
   it("keeps an opened rank on its own line: the drawing grows sideways and is panned", () => {
     const skills = Array.from({ length: 7 }, (_, index) => node(`s-${index + 1}`, "skill", `Skill ${index + 1}`));
     const wide = graph([node("c-1", "concept", "Concept"), ...skills], skills.map((skill) => edge("structure", "concept_assessed_as_skill", "c-1", skill.id)), "c-1");
@@ -460,5 +587,94 @@ describe("the one layout (dagre, top to bottom)", () => {
     const placed = layoutMap(opened, sizes, { nodeWidth: 172 });
     expect(new Set(skills.map((skill) => placed.boxes.get(skill.id)!.y)).size).toBe(1);
     expect(placed.width).toBe(7 * 172 + 6 * 40);
+  });
+});
+
+describe("the opening view: \"Concept map\" opens on something drawn", () => {
+  // A lecture of one topic: four concepts, five skills (two of them of one concept). Without a focus, as the Brain answers a scope.
+  const lectureScope = { kind: "lecture" as const, lecture_id: "lecture-90", page: null, logical_slide_id: null, label: null, pages: [], note: null };
+  const names = ["Blank", "Calibration", "Reporter", "Site"];
+  const concepts = names.map((name, index) => node(`c-${index + 1}`, "concept", name));
+  const skills = [["s-1", "c-1", "Interpret a blank"], ["s-2", "c-2", "Convert a reading"], ["s-3", "c-2", "Explain the slope"], ["s-4", "c-3", "Explain a reporter"], ["s-5", "c-4", "Explain a site"]] as const;
+  const lecture = graph(
+    [node("t-1", "topic", "Assays"), ...concepts, ...skills.map(([id, , label]) => node(id, "skill", label))],
+    [...concepts.map((concept) => edge("structure", "topic_includes_concept", "t-1", concept.id)), ...skills.map(([id, concept]) => edge("structure", "concept_assessed_as_skill", concept, id))],
+    null, { scope: lectureScope });
+
+  const more = (count: number, scope: ConceptGraphView["scope"] = lectureScope) => graph(Array.from({ length: count }, (_, index) => node(`t-${index + 1}`, "topic", `Topic ${String.fromCharCode(90 - index)}`)), [], null, { scope });
+
+  it("draws a lecture or a slide of one to three topics whole, and no other scope", () => {
+    expect(OVERVIEW_TOPICS).toBe(3);
+    expect(drawnWhole(lecture)).toBe(true);
+    expect(drawnWhole(more(3))).toBe(true);
+    expect(drawnWhole(more(4))).toBe(false);
+    expect(drawnWhole(graph([node("c-1", "concept", "No topic")], [], null, { scope: lectureScope }))).toBe(false);
+    expect(drawnWhole({ ...lecture, scope: { ...lectureScope, kind: "course", lecture_id: null } })).toBe(false);
+    expect(drawnWhole({ ...lecture, truncated: true, dropped: 3 })).toBe(false); // a cut graph is not the whole scope
+    expect(drawnWhole({ ...lecture, focus: "t-1" })).toBe(false); // only a scope's own graph
+    expect(drawnWhole({ ...sampleConceptGraphSlide, focus: null })).toBe(true);
+    expect(drawnWhole(null)).toBe(false);
+  });
+
+  it("opens a lecture on its first topic, a slide of three topics or fewer too, and the course on nothing", () => {
+    expect(openingNode(lecture)).toBe("t-1");
+    expect(openingNode(more(3))).toBe("t-3"); // the first as the map orders them (by name), not as they arrived
+    expect(openingNode(more(4))).toBe("t-4"); // a lecture of more topics: its first topic is drawn with its concepts
+    expect(openingNode({ ...more(4), truncated: true, dropped: 3 })).toBe("t-4"); // topics are listed first: a cut graph still holds them
+    expect(openingNode(graph([node("c-1", "concept", "No topic")], [], null, { scope: lectureScope }))).toBeNull();
+    expect(openingNode({ ...lecture, scope: { ...lectureScope, kind: "course", lecture_id: null } })).toBeNull(); // the course opens on its topic cards
+    expect(openingNode({ ...lecture, focus: "t-1" })).toBeNull(); // only a scope's own graph says how it opens
+    expect(openingNode(sampleConceptGraphSlide)).toBeNull();
+    expect(openingNode({ ...sampleConceptGraphSlide, focus: null })).toBe("t-sample-a");
+    expect(openingNode(more(4, { ...sampleConceptGraphSlide.scope }))).toBeNull(); // a slide of more topics keeps its own overview, nothing selected
+    expect(openingNode(null)).toBeNull();
+  });
+
+  it("names the first topic of a scope, for the course scope entered from a lecture", () => {
+    expect(firstTopic(lecture)).toBe("t-1");
+    expect(firstTopic(sampleConceptGraphCourse)).toBe("t-sample-a");
+    expect(firstTopic(graph([node("c-1", "concept", "No topic")], [], null))).toBeNull();
+    expect(firstTopic(undefined)).toBeNull();
+  });
+
+  it("keeps the topic cards for a scope that is not asked to open as an overview", () => {
+    expect(buildMapModel(lecture).view).toBe("topics");
+  });
+
+  it("draws the scope's topics with their concepts, the selected topic marked, and no skill until two levels are asked for", () => {
+    const model = buildMapModel(lecture, { overview: true, selected: "t-1" });
+    expect(model.view).toBe("overview");
+    expect(model.ranks).toEqual(["topic", "concept"]);
+    expect(byId(model, "t-1").selected).toBe(true);
+    expect(model.focus).toBeNull(); // nothing was asked of the Brain for it: it is the scope's own graph
+    expect(ids(model, "concept")).toHaveLength(RANK_FOLD);
+    expect(plain(model.nodes.find((entry) => entry.type === "fold")!.label)).toBe("2 more concepts");
+    expect(model.edges.every((entry) => entry.legend === "hierarchy" && entry.arrow === null)).toBe(true);
+    expect(model.legend).toEqual(["hierarchy"]);
+    // nothing is marked when nothing is selected
+    expect(buildMapModel(lecture, { overview: true }).nodes.some((entry) => entry.selected)).toBe(false);
+  });
+
+  it("draws the skills too at two levels, one skill under each drawn concept before a concept's second skill", () => {
+    const model = buildMapModel(lecture, { overview: true, depth: 2, selected: "t-1" });
+    expect(model.ranks).toEqual(["topic", "concept", "skill"]);
+    expect(ids(model, "concept").slice(0, 2)).toEqual(["c-1", "c-2"]);
+    // "Convert a reading" and "Explain the slope" are both skills of the second concept: the first concept's skill is drawn before the second of them
+    expect(ids(model, "skill").slice(0, 2)).toEqual(["s-1", "s-2"]);
+    expect(plain(model.nodes.filter((entry) => entry.type === "fold").map((entry) => entry.label).join("; "))).toBe("2 more concepts; 3 more skills");
+    const placed = layoutMap(model, () => 64, { nodeWidth: 240 });
+    const centre = (id: string): number => placed.boxes.get(id)!.x + placed.boxes.get(id)!.width / 2;
+    expect(centre("s-1")).toBe(centre("c-1"));
+    expect(centre("s-2")).toBe(centre("c-2"));
+    expect(placed.width).toBe(3 * 240 + 2 * 40); // three regular columns: nothing is pushed out of the pane
+  });
+
+  it("still draws a slide's own overview with its skills, whatever depth is asked for, and marks its selected topic", () => {
+    const slide: ConceptGraphView = { ...sampleConceptGraphSlide, focus: null, nodes: sampleConceptGraphSlide.nodes.filter((entry) => entry.kind !== "question" && entry.kind !== "criterion"),
+      edges: sampleConceptGraphSlide.edges.filter((entry) => !/Q0|P90/.test(`${entry.from}${entry.to}`)) };
+    const model = buildMapModel(slide, { overview: true, depth: 1, selected: "t-sample-a" });
+    expect(model.ranks).toEqual(["topic", "concept", "skill"]);
+    expect(byId(model, "t-sample-a").selected).toBe(true);
+    expect(model.nodes.some((entry) => entry.type === "marker")).toBe(true);
   });
 });

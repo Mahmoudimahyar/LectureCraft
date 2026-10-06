@@ -3,10 +3,11 @@
 // No browser and no pdf.js document: the figures asserted for the stage are the specification's own table (4.3, 4.4).
 import { describe, expect, it } from "vitest";
 import { sampleLectureView, sampleLectureViewWithoutR2 } from "@/lib/fixtures/r2-sample";
-import { identityOf } from "@/lib/r2";
+import { identityOf, rangesForPage } from "@/lib/r2";
 import type { LectureView, SlideView, SourceMapOverrideRecord } from "@/lib/types";
-import { NO_TITLE, findRows, outlineFacts, outlineRows, plainRows, rowName } from "@/features/lecture/LectureOutline";
-import { STAGE_MIN_BLOCK_PX, fileSize, groupingChoices, groupingRequest, learnerCorrections, rangesFollowTheMap, stageBlock, takeBackChoice } from "@/features/lecture/LectureWorkspace";
+import { NO_TITLE, findRows, outlineFacts, outlineKeyAction, outlineRows, plainRows, rangeNote, rowName, type OutlineStop } from "@/features/lecture/LectureOutline";
+import { STAGE_MIN_BLOCK_PX, fileSize, groupingChoices, groupingRequest, learnerCorrections, offeredSessionNote, rangesFollowTheMap, slideFirstWidths, stageBlock, takeBackChoice } from "@/features/lecture/LectureWorkspace";
+import { frameGroupWidth } from "@/app/WorkspaceFrame";
 import { PAGER_LAST_LEVEL, PAGER_STEPS, ROLE_ORDER, identityDetails, pagerHolds, pagerLevelFor, stepName } from "@/features/lecture/Pager";
 import { FIT_DATA, FIT_LABEL, PDF_CSS_UNITS, SLIDE_FITS, canvasDensity, slideWidth } from "@/features/lecture/SlideCanvas";
 import { thumbRenderWidth } from "@/lib/thumbs";
@@ -182,14 +183,39 @@ describe("outline rows: one per logical slide, every page reachable (5.2)", () =
 
 describe("outline rows: plain figures and the no-range line", () => {
   const slides = slidesOf(sampleLectureView);
-  const facts = (page: number) => {
-    const result = outlineFacts(rowOf(sampleLectureView, page), slides);
+  /** A row as the outline draws it: standing on its first page, or on `shown` when that page of it is the one on screen. */
+  const facts = (page: number, shown?: number) => {
+    const result = outlineFacts(rowOf(sampleLectureView, page), slides, shown);
     return { figures: plain(result.figures), noRange: result.noRange };
   };
-  it("counts a question and a range once per row; a section range gives no time for the page alone and is not counted", () => {
-    expect(facts(2)).toEqual({ figures: "1 question · 2 ranges", noRange: false });
-    expect(facts(4)).toEqual({ figures: "3 questions · 1 range", noRange: false }); // three builds, one group range, each question once
-    expect(facts(7)).toEqual({ figures: "1 range", noRange: false }); // one step has a range: the row is not without one
+  it("counts what the range list of the page shows: its own ranges, then those of its section, each worded by its scope", () => {
+    expect(facts(2)).toEqual({ figures: "1 question · 2 ranges · 1 for its section", noRange: false }); // the list of page 2 has three rows
+    expect(facts(4)).toEqual({ figures: "3 questions · 1 range · 1 for its section", noRange: false }); // three builds: the group's range and the section's, each question once
+    expect(facts(12)).toEqual({ figures: "1 range", noRange: false });
+  });
+  it("words ranges of the section alone as that, with their number", () => {
+    expect(plain(rangeNote({ own: 0, section: 3 }))).toBe("3 ranges for its section only");
+    expect(plain(rangeNote({ own: 0, section: 1 }))).toBe("1 range for its section only");
+    expect(plain(rangeNote({ own: 1, section: 3 }))).toBe("1 range · 3 for its section");
+    expect(plain(rangeNote({ own: 2, section: 0 }))).toBe("2 ranges");
+    expect(rangeNote({ own: 0, section: 0 })).toBeNull();
+    const view: LectureView = { ...sampleLectureView, slides: sampleLectureView.slides.map((slide) => (slide.page === 2 ? { ...slide, ranges: slide.ranges!.filter((range) => range.support.scope === "section") } : slide)) };
+    const result = outlineFacts(rowOf(view, 2), slidesOf(view));
+    expect(plain(result.figures)).toBe("1 question · 1 range for its section only");
+    expect(result.noRange).toBe(false); // a page with a section range is not a page without a range
+  });
+  it("names the page of a range that only another page of the row carries, so the number of the page on screen stays the list's", () => {
+    expect(facts(7)).toEqual({ figures: "1 range on p. 7", noRange: false }); // the row stands on page 6, whose list is empty; one step has a range
+    expect(facts(7, 7)).toEqual({ figures: "1 range", noRange: false }); // on page 7 the list shows it
+    expect(outlineFacts(rowOf(sampleLectureView, 6), slides, 6).listed).toEqual({ own: 0, section: 0 });
+  });
+  it("says for every page of the sample exactly the number of rows its range list shows", () => {
+    for (const slide of sampleLectureView.slides) {
+      const listed = outlineFacts(rowOf(sampleLectureView, slide.page), slides, slide.page).listed;
+      const list = rangesForPage(sampleLectureView, slide.page);
+      expect([slide.page, listed.own + listed.section]).toEqual([slide.page, list.ranges.length]);
+      expect([slide.page, listed.own, listed.section]).toEqual([slide.page, list.pageRanges.length, list.sectionRanges.length]);
+    }
   });
   it("writes No recording range for the first four no-range states only", () => {
     expect(facts(8)).toEqual({ figures: "1 question", noRange: true }); // not discussed (searched)
@@ -199,7 +225,7 @@ describe("outline rows: plain figures and the no-range line", () => {
   });
   it("says ambiguous on a group only when no member has a range", () => {
     const view: LectureView = { ...sampleLectureView, slides: sampleLectureView.slides.map((slide) => (slide.page === 7 ? { ...slide, ranges: [], no_range: sampleLectureView.slides[5]!.no_range } : slide)) };
-    expect(outlineFacts(rowOf(view, 6), slidesOf(view))).toEqual({ figures: null, noRange: true });
+    expect(outlineFacts(rowOf(view, 6), slidesOf(view))).toMatchObject({ figures: null, noRange: true });
   });
   it("never writes it on a structural page, with or without a range", () => {
     expect(facts(1)).toEqual({ figures: null, noRange: false });
@@ -207,7 +233,7 @@ describe("outline rows: plain figures and the no-range line", () => {
   });
   it("claims nothing from a view without R2 fields", () => {
     const old = slidesOf(sampleLectureViewWithoutR2);
-    for (const row of outlineRows(sampleLectureViewWithoutR2, 12)) expect(outlineFacts(row, old)).toEqual({ figures: null, noRange: false });
+    for (const row of outlineRows(sampleLectureViewWithoutR2, 12)) expect(outlineFacts(row, old)).toMatchObject({ figures: null, noRange: false });
   });
   it("counts what an older view does carry: its questions and its timed links", () => {
     const base = sampleLectureViewWithoutR2.slides[1]!;
@@ -233,6 +259,42 @@ describe("Find in the outline", () => {
   it("finds nothing for a number or a word no page has", () => {
     expect(findRows(rows, "99", slides)).toEqual([]);
     expect(findRows(rows, "no such title", slides)).toEqual([]);
+  });
+});
+
+describe("the outline by keyboard: one stop, the arrow keys move inside it", () => {
+  // A page, an open group with its three pages, a closed group, a page.
+  const stops: OutlineStop[] = [{ kind: "row" }, { kind: "row", group: true, open: true }, { kind: "member" }, { kind: "member" }, { kind: "member" }, { kind: "row", group: true, open: false }, { kind: "row" }];
+  it("moves down and up through what is shown and stops at the ends", () => {
+    expect(outlineKeyAction("ArrowDown", 0, stops)).toEqual({ type: "focus", index: 1 });
+    expect(outlineKeyAction("ArrowDown", 1, stops)).toEqual({ type: "focus", index: 2 });
+    expect(outlineKeyAction("ArrowUp", 5, stops)).toEqual({ type: "focus", index: 4 });
+    expect(outlineKeyAction("ArrowDown", 6, stops)).toEqual({ type: "stay" });
+    expect(outlineKeyAction("ArrowUp", 0, stops)).toEqual({ type: "stay" });
+  });
+  it("goes to the first and the last with Home and End", () => {
+    expect(outlineKeyAction("Home", 4, stops)).toEqual({ type: "focus", index: 0 });
+    expect(outlineKeyAction("End", 1, stops)).toEqual({ type: "focus", index: 6 });
+  });
+  it("opens a closed group with Right, and from an open one goes to its first page", () => {
+    expect(outlineKeyAction("ArrowRight", 5, stops)).toEqual({ type: "open", index: 5 });
+    expect(outlineKeyAction("ArrowRight", 1, stops)).toEqual({ type: "focus", index: 2 });
+  });
+  it("closes an open group with Left, and from one of its pages goes back to its row", () => {
+    expect(outlineKeyAction("ArrowLeft", 1, stops)).toEqual({ type: "close", index: 1 });
+    expect(outlineKeyAction("ArrowLeft", 4, stops)).toEqual({ type: "focus", index: 1 });
+    expect(outlineKeyAction("ArrowLeft", 2, stops)).toEqual({ type: "focus", index: 1 });
+  });
+  it("keeps Left and Right for itself where they have nothing to do, so they never turn the page from inside the outline", () => {
+    expect(outlineKeyAction("ArrowLeft", 0, stops)).toEqual({ type: "stay" });
+    expect(outlineKeyAction("ArrowRight", 6, stops)).toEqual({ type: "stay" });
+    expect(outlineKeyAction("ArrowLeft", 5, stops)).toEqual({ type: "stay" }); // a closed group
+    expect(outlineKeyAction("ArrowRight", 3, stops)).toEqual({ type: "stay" }); // a page of a group
+  });
+  it("leaves every other key alone: Enter and Space press the row, Tab leaves the outline", () => {
+    for (const key of ["Enter", " ", "Tab", "a", "PageDown", "Escape"]) expect(outlineKeyAction(key, 1, stops)).toBeNull();
+    expect(outlineKeyAction("ArrowDown", -1, stops)).toBeNull(); // the key did not come from a row
+    expect(outlineKeyAction("ArrowDown", 0, [])).toBeNull();
   });
 });
 
@@ -337,5 +399,86 @@ describe("a correction of the map is followed by matching the recording again", 
     expect(rangesFollowTheMap(withAssociation("not_run"))).toBe(false);
     expect(rangesFollowTheMap({ ...sampleLectureView, timing: { ...sampleLectureView.timing!, recordings: [] } })).toBe(false);
     expect(rangesFollowTheMap(sampleLectureViewWithoutR2)).toBe(false);
+  });
+});
+
+describe("a first-run layout made for the slide: the slide gets the width it can use, the panel the rest", () => {
+  // Stage height = window − header − band − 12 px above and below (the figures of the stage-block table above).
+  const at = (windowWidth: number, windowHeight: number, aspect: number | null) => {
+    const header = windowWidth >= 2560 ? 64 : windowWidth >= 1920 ? 60 : 56;
+    const band = windowWidth >= 2560 ? 52 : 48;
+    const barHeight = windowWidth >= 2560 ? 100 : windowWidth >= 1920 ? 92 : 84;
+    return slideFirstWidths({ windowWidth, groupWidth: frameGroupWidth(windowWidth), stageHeight: windowHeight - header - band - 24, barHeight, aspect });
+  };
+  const cases: Array<[string, [number, number, number], { outline: number; context: number; slide: [number, number]; slack: number }]> = [
+    // A wide deck is bound by the stage's width at every size: the outline starts closed and the panel takes its floor.
+    ["1440 × 900, 16:9", [1440, 900, 16 / 9], { outline: 0, context: 396, slide: [932, 524], slack: 156 }],
+    ["1680 × 1050, 16:9", [1680, 1050, 16 / 9], { outline: 0, context: 396, slide: [1172, 659], slack: 171 }],
+    ["1920 × 1080, 16:9", [1920, 1080, 16 / 9], { outline: 0, context: 422, slide: [1378, 775], slack: 73 }],
+    ["2560 × 1440, 16:9", [2560, 1440, 16 / 9], { outline: 0, context: 520, slide: [1920, 1080], slack: 112 }],
+    // A 4:3 deck is bound by the stage's height: the panel takes what the slide cannot use, and the outline opens where it costs the slide nothing.
+    ["1280 × 800, 4:3", [1280, 800, 4 / 3], { outline: 0, context: 396, slide: [772, 579], slack: 1 }],
+    ["1440 × 900, 4:3", [1440, 900, 4 / 3], { outline: 0, context: 409, slide: [906, 680], slack: 0 }],
+    ["1680 × 1050, 4:3", [1680, 1050, 4 / 3], { outline: 0, context: 462, slide: [1106, 830], slack: 0 }],
+    ["1920 × 1080, 4:3", [1920, 1080, 4 / 3], { outline: 240, context: 430, slide: [1130, 848], slack: 0 }],
+    ["2560 × 1440, 4:3", [2560, 1440, 4 / 3], { outline: 288, context: 563, slide: [1589, 1192], slack: 0 }],
+  ];
+  for (const [name, [width, height, aspect], expected] of cases) {
+    it(`${name}: outline ${expected.outline || "closed"}, panel ${expected.context}, slide ${expected.slide[0]} × ${expected.slide[1]}`, () => {
+      const got = at(width, height, aspect)!;
+      expect({ outline: got.outline, context: got.context, slide: [got.slide.width, got.slide.height], slack: got.slack }).toEqual(expected);
+      expect(got.outline + got.stage + got.context).toBe(frameGroupWidth(width) - 24); // the three and both separators are the Group
+    });
+  }
+  it("keeps the slide the largest object, the stage at least half the workspace, and the slide's share of the window from falling on a bigger one", () => {
+    for (const aspect of [4 / 3, 16 / 9]) {
+      const sizes: Array<[number, number]> = [[1440, 900], [1680, 1050], [1920, 1080], [2560, 1440]];
+      for (const [width, height] of sizes) {
+        const got = at(width, height, aspect)!;
+        const header = width >= 2560 ? 64 : width >= 1920 ? 60 : 56;
+        expect(got.slide.width * got.slide.height).toBeGreaterThan(got.context * (height - header - 24)); // R2-V1: the largest object
+        expect(got.stage / (frameGroupWidth(width) - 24)).toBeGreaterThanOrEqual(0.5); // R2-V1: the stage is at least half the workspace
+        expect((got.slide.width * got.slide.height) / (width * height)).toBeGreaterThanOrEqual(aspect > 1.5 ? 0.37 : 0.46); // today: 16:9 falls to 0.23, 4:3 to 0.31
+      }
+    }
+  });
+  it("opens the outline in a short window too, where the slide is bound by height whatever the outline does", () => {
+    expect(at(1440, 700, 4 / 3)).toMatchObject({ outline: 192, context: 409 });
+  });
+  it("counts a shape nobody has reported yet as 4:3, and answers nothing before the stage has been measured", () => {
+    expect(at(1920, 1080, null)).toEqual(at(1920, 1080, 4 / 3));
+    expect(slideFirstWidths({ windowWidth: 1920, groupWidth: 1824, stageHeight: 0, barHeight: 0, aspect: 4 / 3 })).toBeNull();
+    expect(slideFirstWidths({ windowWidth: 1920, groupWidth: 0, stageHeight: 948, barHeight: 92, aspect: 4 / 3 })).toBeNull();
+  });
+});
+
+describe("a recording and transcript that are only offered to the lecture by a file name are said to be that", () => {
+  // The spelling of `session_link_evidence` in the lecture view (docs/engineering/r2-read-api.md, D79).
+  const evidence = { state: "suggested", rule: "lecture number in the recording or transcript file name equals the unit number", number: 3, session_id: "session-2026-09-17",
+    files: ["Sample Lec 3 recording.m4a", "Sample Lec 3 transcript.txt"], note: "Suggested from file names only." };
+  const offered = { ...sampleLectureView, session_link: "suggested_by_file_name", session_link_evidence: evidence } as LectureView;
+  it("with the unit's number and the files that carry it, and never as linked or confirmed", () => {
+    const note = offeredSessionNote(offered)!;
+    expect(note.state).toBe("offered");
+    expect(note.lead).toBe("Offered by file name.");
+    expect(plain(note.sentence)).toBe("The course records link no session to this lecture. The recording and the transcript shown with it are offered because a file name carries this unit's number (3). "
+      + "Nobody has confirmed the suggestion, and every recording range of this lecture rests on it.");
+    expect(note.files).toEqual(["Sample Lec 3 recording.m4a", "Sample Lec 3 transcript.txt"]);
+  });
+  it("without the number or the files when the view does not state them, and never with invented ones", () => {
+    const bare = offeredSessionNote({ ...sampleLectureView, session_link: "suggested_by_file_name" } as LectureView)!;
+    expect(plain(bare.sentence)).toContain("because a file name carries this unit's number. ");
+    expect(bare.files).toEqual([]);
+  });
+  it("says that nothing is offered when several sessions carry the unit's number", () => {
+    const note = offeredSessionNote({ ...sampleLectureView, session_link: "none_recorded", session_link_evidence: { state: "ambiguous", number: 3, candidates: ["a", "b"], note: "n" } } as LectureView)!;
+    expect(note.state).toBe("ambiguous");
+    expect(note.lead).toBe("Nothing is offered.");
+    expect(plain(note.sentence)).toBe("Two or more sessions carry this unit's number (3) in a file name, so none of them is offered as this lecture's recording.");
+  });
+  it("says nothing for a session the course records link, or when none is recorded", () => {
+    expect(offeredSessionNote(sampleLectureView)).toBeNull();
+    expect(offeredSessionNote({ ...sampleLectureView, session_link: "none_recorded" })).toBeNull();
+    expect(offeredSessionNote({ ...sampleLectureView, session_link: "owner_related_sources", session_link_evidence: evidence } as LectureView)).toBeNull();
   });
 });

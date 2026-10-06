@@ -171,6 +171,12 @@ body {
   outline: 2px solid var(--ll-focus);
   outline-offset: 2px;
 }
+/* A page heading that receives focus after the address changed (lib/route-focus.ts): the same ring, standing a little
+   off the words. It shows only to a learner who navigates by keyboard. */
+h1[tabindex="-1"]:focus-visible {
+  outline-offset: 4px;
+  border-radius: var(--ll-radius-row);
+}
 ::selection {
   background: color-mix(in srgb, var(--ll-accent-text) 28%, transparent);
 }

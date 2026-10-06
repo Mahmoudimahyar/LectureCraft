@@ -8,7 +8,7 @@ import { Link } from "react-router";
 import { ArrowUp, Mic, X } from "lucide-react";
 import { useApp } from "@/app/state";
 import { ErrorGlyph } from "@/components/glyphs";
-import { Button, Callout, IconButton, Segmented } from "@/components/ui";
+import { Button, Callout, IconButton, Segmented, cn } from "@/components/ui";
 import { deleteDraft, getDraft, saveDraft, type Draft, type DraftMode, type SourceRef } from "@/lib/db";
 import { isoNow } from "@/lib/bundle";
 import { nb } from "@/lib/labels";
@@ -236,11 +236,14 @@ export function TutorPanel({ courseId, lecture, page, slideRef, pinned, onUnpin,
   return (
     <TabScroll>
       <div className="flex flex-1 flex-col" data-testid="tutor-thread">
-        <div className="mt-auto flex w-full flex-col gap-3" role="region" aria-label="Conversation on this lecture">
+        {/* A thread is bottom-aligned above the composer (the room it does not fill is above it). Before the first
+            exchange there is no thread: the heading and its two sentences start at the top of the region, on the first
+            line of every other tab, and the composer stays docked at the foot. */}
+        <div className={cn("flex w-full flex-col gap-3", lectureThread.length > 0 && "mt-auto")} role="region" aria-label="Conversation on this lecture" data-empty={lectureThread.length === 0 || undefined}>
           {lectureThread.length === 0 ? (
             <div className="ll-measure flex flex-col gap-1" data-testid="tutor-empty">
               <h3 className="text-head font-semibold">Ask about this slide</h3>
-              <p className="text-ui text-muted">Choose how much help you want, then ask. Reading a slide or receiving an answer is never counted as an assessment.</p>
+              <p className="text-read text-muted">Choose how much help you want, then ask. Reading a slide or receiving an answer is never counted as an assessment.</p>
             </div>
           ) : (
             <>

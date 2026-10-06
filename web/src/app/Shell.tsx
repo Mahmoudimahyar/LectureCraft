@@ -4,14 +4,16 @@
 // routes (a lecture, the concept map) fill the window; every other page scrolls inside the main area.
 // The only standing line the shell shows is "this page is older than the app now being served"; alerts appear for
 // errors that block work (the Brain is unreachable, local save failed).
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import { DropdownMenu, RadioGroup } from "radix-ui";
 import { Activity, ArrowLeft, BookOpen, ChartNoAxesColumn, ChevronDown, ChevronRight, Ellipsis, GraduationCap, Library, ListChecks, Monitor, Moon, Network, Search, Settings, Sun } from "lucide-react";
 import { BuildIdentity, OlderPageLine } from "@/components/BuildIdentity";
-import { Callout, cn, IconButton, StatusChip } from "@/components/ui";
+import { Callout, chooseInSegmented, chooseWithArrows, cn, IconButton, StatusChip } from "@/components/ui";
+import { conceptMapEntry, parseCourseRoute } from "@/lib/course-route";
 import { R2_ACTION } from "@/lib/labels";
 import { useActivity, useCourse } from "@/lib/queries";
+import { findAgain, focusIsLost, rememberFocus, settleRouteFocus, type FocusMemo } from "@/lib/route-focus";
 import type { ThemePref } from "@/lib/theme";
 import { courseName, useApp } from "./state";
 import { SearchOverlay } from "@/features/search/SearchOverlay";
@@ -57,6 +59,101 @@ function useCompactShell(): boolean {
     };
   }, []);
   return compact;
+}
+
+/** For this long after the address changed to another page, focus that lands outside the page is brought to its heading (a closing overlay hands focus back to its button a moment later). */
+const ROUTE_FOCUS_WINDOW_MS = 1500;
+/** For this long a control that a re-render removed is looked for again (a drawing that is fetched anew takes a moment). */
+const REFOCUS_WINDOW_MS = 3000;
+
+/**
+ * Keyboard focus follows the page (lib/route-focus.ts). Returns the refs of the main area and of the header's path.
+ *  - The address changed to another page: focus goes to that page's heading (the main area until it has one), so the
+ *    next Tab starts in the page and not at the top of the window. Not on the first load, and never against the
+ *    learner: any key or pointer press ends it, and focus the page itself placed is left alone, as is focus on the
+ *    page's own name in the path (the lecture picker that was just used).
+ *  - A re-render replaced the focused control (a node of the concept map that was just selected): focus goes to the
+ *    control that took its place. A control nothing identifies, or one that is gone for good, is left alone.
+ */
+function useRouteFocus(pathname: string): { mainRef: RefObject<HTMLElement | null>; pathRef: RefObject<HTMLElement | null> } {
+  const mainRef = useRef<HTMLElement>(null);
+  const pathRef = useRef<HTMLElement>(null);
+  const memo = useRef<FocusMemo | null>(null);
+  const previous = useRef(pathname);
+
+  useEffect(() => {
+    const from = previous.current;
+    previous.current = pathname;
+    const main = mainRef.current;
+    // "/" only redirects (to Study or to pairing): arriving from it is the first load, which starts at the top as any page does.
+    if (from === pathname || from === "/" || !main) return;
+    memo.current = null;
+    let over = false;
+    let busy = false;
+    const step = () => {
+      if (over || busy) return;
+      busy = true;
+      try {
+        settleRouteFocus(main, document, pathRef.current);
+      } finally {
+        busy = false;
+      }
+    };
+    const end = () => {
+      over = true;
+      window.removeEventListener("keydown", end, true);
+      window.removeEventListener("pointerdown", end, true);
+      document.removeEventListener("focusin", step, true);
+      timers.forEach((timer) => window.clearTimeout(timer));
+      window.cancelAnimationFrame(frame);
+    };
+    const frame = window.requestAnimationFrame(step);
+    const timers = [120, 400, 900].map((ms) => window.setTimeout(step, ms));
+    timers.push(window.setTimeout(() => { step(); end(); }, ROUTE_FOCUS_WINDOW_MS));
+    window.addEventListener("keydown", end, true);
+    window.addEventListener("pointerdown", end, true);
+    document.addEventListener("focusin", step, true);
+    return end;
+  }, [pathname]);
+
+  useEffect(() => {
+    const main = mainRef.current;
+    if (!main || typeof MutationObserver === "undefined") return;
+    let lostAt = 0;
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target;
+      memo.current = target instanceof Element && target !== main && main.contains(target) ? rememberFocus(target) : null;
+      lostAt = 0;
+    };
+    // A press while nothing holds focus is the learner going somewhere else: nothing is brought back after it.
+    const onPress = (event: Event) => {
+      if (event.type === "pointerdown" || focusIsLost()) memo.current = null;
+    };
+    const check = () => {
+      const held = memo.current;
+      if (!held || held.element.isConnected || !focusIsLost()) return;
+      const now = performance.now();
+      if (!lostAt) lostAt = now;
+      if (now - lostAt > REFOCUS_WINDOW_MS) {
+        memo.current = null;
+        return;
+      }
+      findAgain(main, held)?.focus({ preventScroll: true });
+    };
+    const observer = new MutationObserver(check);
+    observer.observe(main, { childList: true, subtree: true });
+    document.addEventListener("focusin", onFocusIn, true);
+    window.addEventListener("keydown", onPress, true);
+    window.addEventListener("pointerdown", onPress, true);
+    return () => {
+      observer.disconnect();
+      document.removeEventListener("focusin", onFocusIn, true);
+      window.removeEventListener("keydown", onPress, true);
+      window.removeEventListener("pointerdown", onPress, true);
+    };
+  }, []);
+
+  return { mainRef, pathRef };
 }
 
 const inStudy = (pathname: string): boolean => pathname.startsWith("/study") || pathname.startsWith("/courses");
@@ -124,12 +221,13 @@ export function Shell() {
   const focusMode = new URLSearchParams(location.search).get("focus") === "1";
 
   const { pathname } = location;
-  const courseRoute = /^[/]courses[/]([^/]+)(?:[/]([^/]+))?(?:[/]([^/]+))?/.exec(pathname);
-  const routeCourse = courseRoute?.[1];
-  const lectureId = courseRoute?.[2] === "lectures" ? courseRoute[3] : undefined;
-  const conceptMap = !!courseRoute && !courseRoute[3] && (courseRoute[2] === "concepts" || courseRoute[2] === "outline");
+  const route = parseCourseRoute(pathname);
+  const routeCourse = route?.courseId;
+  const lectureId = route?.lectureId ?? undefined;
+  const conceptMap = route?.conceptMap ?? false;
   // A lecture and the concept map fill the window; every other page scrolls inside the main area.
-  const workspace = !!lectureId || conceptMap;
+  const workspace = route?.workspace ?? false;
+  const { mainRef, pathRef } = useRouteFocus(pathname);
   const onStudy = pathname.startsWith("/study");
 
   // The page you are on decides the active course: opened by link, address bar, reload or Back alike. Search scope,
@@ -159,9 +257,12 @@ export function Shell() {
   const courseOptions = courses.map((c) => ({ value: c.course_id, label: `${c.display_name}${c.binding !== "bound" ? " (binding problem)" : ""}`, disabled: c.binding !== "bound" }));
   const here = routeCourse ? courseName(workspaceView, routeCourse) : "";
   const searchLabel = workspaceView ? `Search ${courseName(workspaceView, app.courseId)}` : "Search";
-  const back = workspace && routeCourse ? `/courses/${routeCourse}` : null;
-  const conceptMapHref = lectureId && routeCourse ? `/courses/${routeCourse}/concepts?scope=${encodeURIComponent(`lecture:${lectureId}`)}` : null;
-  const returnState = { returnTo: pathname + location.search, returnLabel: "Back to the lecture" };
+  // Under 900 px every page below a course (a lecture, the concept map, the question bank, a question, a source, a
+  // concept) has the back arrow to the course where the product name stands on a wide window (4.2): the title then has
+  // room for its two lines and the Concept map tool fits beside the menu.
+  const back = routeCourse && route?.section ? `/courses/${routeCourse}` : null;
+  // "Concept map" is in the header of every page of a course (UI contract R2, Concepts): the lecture's scope from a lecture, the course's elsewhere.
+  const mapEntry = conceptMapEntry(pathname, location.search);
 
   // ---- the path: where you are ---------------------------------------------------------------------------------------------
   const courseLink = routeCourse ? <Link to={`/courses/${routeCourse}`} className="whitespace-nowrap rounded-row px-2 py-1 text-ui text-muted transition-colors duration-[var(--ll-motion-small)] hover:bg-pad hover:text-ink max-[1179px]:hidden">{here}</Link> : null;
@@ -177,8 +278,8 @@ export function Shell() {
           : <span className={PATH_HERE} aria-current="page"><span className="line-clamp-2 min-w-0">{lectureTitle}</span></span>}
       </>
     );
-  } else if (routeCourse && courseRoute?.[2]) {
-    path = <>{courseLink}{divider}<span className={PATH_HERE} aria-current="page"><span className="line-clamp-2 min-w-0">{conceptMap ? R2_ACTION.concept_map : COURSE_PAGE[courseRoute[2]] ?? here}</span></span></>;
+  } else if (routeCourse && route?.section) {
+    path = <>{courseLink}{divider}<span className={PATH_HERE} aria-current="page"><span className="line-clamp-2 min-w-0">{conceptMap ? R2_ACTION.concept_map : COURSE_PAGE[route.section] ?? here}</span></span></>;
   } else if (routeCourse) {
     path = courses.length > 1 ? <PathPicker name="Course" label={here} value={routeCourse} chevron={!compact} options={courseOptions} onChoose={(id) => id !== routeCourse && navigate(`/courses/${id}`)} />
       : <span className={PATH_HERE} aria-current="page">{here}</span>;
@@ -187,7 +288,7 @@ export function Shell() {
   }
 
   return (
-    <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-bg text-ink" data-shell={workspace ? "workspace" : "page"}>
+    <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-bg text-ink" data-shell={workspace ? "workspace" : "page"} onKeyDownCapture={chooseInSegmented}>
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-row focus:bg-raised focus:p-2">Skip to content</a>
       {!focusMode && (
         <header className={cn("z-30 grid min-h-[var(--ll-hdr-h)] flex-none items-center border-b border-hairline bg-surface",
@@ -203,14 +304,17 @@ export function Shell() {
               )}
             {workspaceView?.fixture_label && !(compact && back) && <span className="ml-3 whitespace-nowrap text-meta text-muted" title={workspaceView.fixture_label} data-testid="fixture-banner">Sample data</span>}
           </div>
-          <nav aria-label="Where you are" className={cn("flex min-w-0 items-center gap-1", compact ? "justify-start" : "justify-center")}>{path}</nav>
+          <nav ref={pathRef} aria-label="Where you are" className={cn("flex min-w-0 items-center gap-1", compact ? "justify-start" : "justify-center")}>{path}</nav>
           <div className={cn("flex items-center justify-self-end", compact ? "gap-0" : "gap-2")}>
-            {conceptMapHref && !compact && (
-              <Link to={conceptMapHref} state={returnState} className="ll-tbtn max-[1179px]:hidden"><Network aria-hidden /><span>{R2_ACTION.concept_map}</span></Link>
+            {mapEntry && !compact && (
+              <Link to={mapEntry.href} state={mapEntry.state} className="ll-tbtn" data-testid="header-concept-map"><Network aria-hidden /><span>{R2_ACTION.concept_map}</span></Link>
+            )}
+            {mapEntry && compact && back && (
+              <Link to={mapEntry.href} state={mapEntry.state} className="ll-ib" aria-label={R2_ACTION.concept_map} title={R2_ACTION.concept_map} data-testid="header-concept-map"><Network aria-hidden /></Link>
             )}
             {!compact && <IconButton label={searchLabel} onClick={() => app.setSearchOpen(true)} aria-keyshortcuts="Control+K /"><Search aria-hidden /></IconButton>}
             {!compact && (
-              <RadioGroup.Root value={app.theme} onValueChange={(value) => app.setTheme(value as ThemePref)} aria-label="Appearance" orientation="horizontal" className="flex gap-1">
+              <RadioGroup.Root value={app.theme} onValueChange={(value) => app.setTheme(value as ThemePref)} aria-label="Appearance" orientation="horizontal" className="flex gap-1" onKeyDownCapture={chooseWithArrows}>
                 {THEMES.map(({ value, label, icon: IconGlyph }) => (
                   <RadioGroup.Item key={value} value={value} aria-label={label} title={label}
                     className="inline-flex h-9 items-center justify-center gap-2 rounded-control border-0 bg-transparent px-3 text-ui text-ink transition-colors duration-[var(--ll-motion-small)] hover:bg-pad data-[state=checked]:bg-tint data-[state=checked]:font-semibold data-[state=checked]:text-accent-text data-[state=checked]:shadow-[inset_0_0_0_1px_var(--ll-accent-text)] max-[1439px]:w-9 max-[1439px]:px-0">
@@ -226,7 +330,7 @@ export function Shell() {
                 <DropdownMenu.Portal>
                   <DropdownMenu.Content align="end" sideOffset={6} className={MENU}>
                     <DropdownMenu.Item className="ll-menu-item" onSelect={() => app.setSearchOpen(true)}><Search aria-hidden className="size-[18px]" />{searchLabel}</DropdownMenu.Item>
-                    {conceptMapHref && <DropdownMenu.Item asChild className="ll-menu-item"><Link to={conceptMapHref} state={returnState}><Network aria-hidden className="size-[18px]" />{R2_ACTION.concept_map}</Link></DropdownMenu.Item>}
+                    {mapEntry && <DropdownMenu.Item asChild className="ll-menu-item"><Link to={mapEntry.href} state={mapEntry.state}><Network aria-hidden className="size-[18px]" />{R2_ACTION.concept_map}</Link></DropdownMenu.Item>}
                     <DropdownMenu.Separator className="my-1 h-px bg-hairline" />
                     <DropdownMenu.Label className={MENU_LABEL}>Appearance</DropdownMenu.Label>
                     <DropdownMenu.RadioGroup value={app.theme} onValueChange={(value) => app.setTheme(value as ThemePref)} aria-label="Appearance">
@@ -276,7 +380,7 @@ export function Shell() {
             <BuildIdentity variant="shell" className="mt-1 px-1" />
           </nav>
         )}
-        <main id="main" tabIndex={-1} className={cn("min-h-0 min-w-0 flex-1 outline-none", workspace ? "overflow-hidden" : "overflow-y-auto p-4 min-[900px]:p-6")}>
+        <main id="main" ref={mainRef} tabIndex={-1} className={cn("min-h-0 min-w-0 flex-1 outline-none", workspace ? "overflow-hidden" : "overflow-y-auto p-4 min-[900px]:p-6")}>
           <Outlet />
         </main>
       </div>

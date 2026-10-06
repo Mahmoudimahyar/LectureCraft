@@ -3,7 +3,7 @@
 // drawing of a phone, and the room a worded link inside one rank is given.
 import { describe, expect, it } from "vitest";
 import {
-  MAP_ZOOM, buildMapModel, centreOn, clampViewport, columnGroups, isInView, layoutMap, moreSides, revealPath, zoomAbout,
+  MAP_ZOOM, buildMapModel, centreOn, clampViewport, columnGroups, isInView, layoutMap, moreSides, openingViewport, revealPath, zoomAbout,
 } from "@/features/concepts/map-model";
 import { sampleConceptGraphCourse, sampleConceptGraphLecture, sampleConceptGraphSlide } from "@/lib/fixtures/r2-sample";
 import type { ConceptGraphEdge, ConceptGraphNode, ConceptGraphView } from "@/lib/types";
@@ -47,9 +47,37 @@ describe("the pane: never under 100 %, and never away from the drawing", () => {
   const small = { width: 400, height: 300 };
   const large = { width: 1400, height: 1200 };
 
-  it("centres a drawing that fits and keeps it at the top", () => {
-    expect(clampViewport({ x: -200, y: -200, zoom: 1 }, small, pane)).toEqual({ x: 100, y: 8, zoom: 1 });
-    expect(clampViewport({ x: 500, y: 500, zoom: 1 }, small, pane)).toEqual({ x: 100, y: 8, zoom: 1 });
+  it("centres a drawing that fits, sideways and upright, wherever it is moved to", () => {
+    expect(clampViewport({ x: -200, y: -200, zoom: 1 }, small, pane)).toEqual({ x: 100, y: 100, zoom: 1 });
+    expect(clampViewport({ x: 500, y: 500, zoom: 1 }, small, pane)).toEqual({ x: 100, y: 100, zoom: 1 });
+    // three nodes in a tall pane (2560 × 1440): in its middle, not pinned under the caption with the rest of the pane blank
+    expect(clampViewport({ x: 0, y: 0, zoom: 1 }, { width: 360, height: 290 }, { width: 1268, height: 1188 })).toEqual({ x: 454, y: 449, zoom: 1 });
+  });
+
+  it("keeps the topic cards at the top, under their sentence, and still centres them sideways", () => {
+    expect(clampViewport({ x: -200, y: -200, zoom: 1 }, { ...small, pinTop: true }, pane)).toEqual({ x: 100, y: 8, zoom: 1 });
+    expect(openingViewport(null, { ...small, pinTop: true }, pane)).toEqual({ x: 100, y: 8, zoom: 1 });
+  });
+
+  it("opens a drawing that fits in the middle of the pane, whichever node is selected", () => {
+    expect(openingViewport({ x: 0, y: 0, width: 100, height: 60 }, small, pane)).toEqual({ x: 100, y: 100, zoom: 1 });
+    expect(openingViewport(undefined, small, pane)).toEqual({ x: 100, y: 100, zoom: 1 });
+  });
+
+  it("opens a drawing wider than the pane at its left edge and moves only as far as the selected node needs", () => {
+    const wide = { width: 900, height: 300 };
+    // nothing selected, or a selected node that is already in view: the left edge, where the names of the ranks are
+    expect(openingViewport(null, wide, pane)).toEqual({ x: 8, y: 100, zoom: 1 });
+    expect(openingViewport({ x: 0, y: 0, width: 240, height: 60 }, wide, pane)).toEqual({ x: 8, y: 100, zoom: 1 });
+    // a selected node past the right edge: moved until it lies wholly in the pane with its 8 px margin, and no further
+    const far = { x: 660, y: 100, width: 240, height: 60 };
+    const view = openingViewport(far, wide, pane);
+    expect(view).toEqual({ x: 600 - 8 - 900, y: 100, zoom: 1 });
+    expect(isInView(far, view, pane)).toBe(true);
+    // a node in the middle that is cut by the right edge: moved by what it lacks, not centred
+    expect(openingViewport({ x: 400, y: 0, width: 240, height: 60 }, wide, pane).x).toBe(600 - 8 - 640);
+    // a selected node larger than the pane is centred
+    expect(openingViewport({ x: 100, y: 0, width: 700, height: 60 }, wide, pane).x).toBe(300 - 450);
   });
 
   it("holds three columns that fill the pane still, wherever the selected node is: nothing is hidden, so no side fades", () => {

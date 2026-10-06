@@ -5,9 +5,9 @@
 // A concept without a definition says so: nothing is filled in.
 import { type ReactNode } from "react";
 import { Link } from "react-router";
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { ChevronRight, FileText, Play, ScrollText } from "lucide-react";
-import { KindGlyph } from "@/components/glyphs";
+import type { KindGlyphKind } from "@/components/glyphs";
 import { StateLabel } from "@/components/labels";
 import { Button, ErrorState, OUTCOME_LABEL, Skeleton, cn } from "@/components/ui";
 import { ApiError, apiGet, r2Paths } from "@/lib/api";
@@ -17,19 +17,27 @@ import {
 import { useCourse, useLecture } from "@/lib/queries";
 import { rangesForPage, whereLine } from "@/lib/r2";
 import type { AnchorTieKind, ConceptGraphNode, EvidenceObservation, GraphNodeKind, GraphScopeKind, OutlineNodeView } from "@/lib/types";
-import type { TreePlace } from "./ConceptTree";
+import { Kind, type TreePlace } from "./ConceptTree";
 import type { ParsedScope } from "./map-model";
 
 export type DetailTabId = "sources" | "questions" | "evidence";
 export const DETAIL_TABS: ReadonlyArray<{ id: DetailTabId; label: string }> = [{ id: "sources", label: "Sources" }, { id: "questions", label: "Questions" }, { id: "evidence", label: "Evidence" }];
 export const isDetailTab = (value: string | null | undefined): value is DetailTabId => value === "sources" || value === "questions" || value === "evidence";
 
-/** Sources, Questions and Evidence of one catalog object. The same cache entry serves the panel and the counts on its tabs. */
+/**
+ * Sources, Questions and Evidence of one catalog object. The same cache entry serves the panel and the counts on its
+ * tabs. While the next item is read, the one read before stays as the answer (`isPlaceholderData`): on a large catalog
+ * the first read takes seconds, and the panel keeps what it showed, under a line that says what is being read.
+ */
 export function useNodeDetail(courseId: string, nodeId: string | null): UseQueryResult<OutlineNodeView, Error> {
   return useQuery<OutlineNodeView, Error>({
-    queryKey: ["outline-node", courseId, nodeId], enabled: !!courseId && !!nodeId, retry: false, staleTime: 5_000,
+    queryKey: ["outline-node", courseId, nodeId], enabled: !!courseId && !!nodeId, retry: false, staleTime: 5_000, placeholderData: keepPreviousData,
     queryFn: ({ signal }) => apiGet<OutlineNodeView>(r2Paths.outlineNode(courseId, nodeId ?? ""), signal),
   });
+}
+/** The detail of the selected item itself: null while the answer in hand is still the item read before. */
+export function ownDetail(detail: Pick<UseQueryResult<OutlineNodeView, Error>, "data" | "isPlaceholderData">): OutlineNodeView | null {
+  return detail.data && !detail.isPlaceholderData ? detail.data : null;
 }
 
 type Source = OutlineNodeView["sources"][number];
@@ -114,6 +122,21 @@ export function questionsHeading(kind: string, total: number): string {
   const what = kind === "topic" || kind === "concept" || kind === "skill" ? `this ${kind}` : "this";
   return `${countLabel(total, "question")} ${total === 1 ? "tests" : "test"} ${what}`;
 }
+/** What a question of the list is to the scope, said on its row. */
+export const IN_SCOPE_MARK: Record<GraphScopeKind, string | null> = { course: null, lecture: "In this lecture", slide: "Tied to this slide" };
+/**
+ * The Questions tab lists the questions of the whole course, while the header counts those of the scope. In a lecture
+ * or a slide scope the heading therefore says "in the course" and this sentence says how many of them the scope holds:
+ * "2 of them are tied to this slide." null in the course scope, for a question or a criterion (their one question is
+ * not a count), with no question at all, and when the scope's own count is not known (nothing is then claimed).
+ */
+export function questionsScopeSentence(kind: string, total: number, inScope: number | null | undefined, scopeKind: GraphScopeKind): string | null {
+  if (scopeKind === "course" || kind === "question" || kind === "criterion" || total <= 0 || inScope === null || inScope === undefined) return null;
+  const where = scopeKind === "slide" ? "tied to this slide" : "in this lecture";
+  if (inScope <= 0) return total === 1 ? `It is not ${where}.` : `None of them is ${where}.`;
+  if (inScope >= total) return total === 1 ? `It is ${where}.` : `All ${total} are ${where}.`;
+  return `${inScope} of them ${inScope === 1 ? "is" : "are"} ${where}.`;
+}
 
 export interface ConceptDetailProps {
   courseId: string;
@@ -124,6 +147,8 @@ export interface ConceptDetailProps {
   graphNode?: ConceptGraphNode | null;
   /** Slide scope: the strongest tie by which the slide supports the node. */
   tie?: AnchorTieKind | null;
+  /** Lecture and slide scope: the questions of the node that the scope holds, so their rows can say so. null when that is not known in full. */
+  scopeQuestions?: ReadonlySet<string> | null;
   place?: TreePlace | null;
   /** The address links out of the panel return to (the concept map as it is now). */
   returnTo: string;
@@ -141,6 +166,8 @@ function Scroll({ framed, children }: { framed: boolean; children: ReactNode }) 
 }
 const HEAD = "text-head font-semibold";
 const READ = "ll-measure text-read text-muted";
+/** Said while the detail of an item is read: on a large catalog that takes seconds, and a bare skeleton looks like an empty panel. */
+const READING = "Reading this item from the course catalog…";
 
 function SourceRow({ source, lectureTitle, state }: { source: Source; lectureTitle: (lectureId: string | null | undefined) => string | null; state: unknown }) {
   const kind = source.kind ?? "pages";
@@ -177,9 +204,14 @@ function Observation({ observation, questionTitle, skillLabel, ownSkill }: { obs
   );
 }
 
-export function ConceptDetail({ courseId, nodeId, tab, scope, graphNode, tie = null, place, returnTo, onClear, framed }: ConceptDetailProps) {
+export function ConceptDetail({ courseId, nodeId, tab, scope, graphNode: selectedNode, tie: selectedTie = null, scopeQuestions = null, place, returnTo, onClear, framed }: ConceptDetailProps) {
   const detail = useNodeDetail(courseId, nodeId);
   const data = detail.data ?? null;
+  // The item read before stays on the panel until the selected one arrives. What the scoped graph says of the
+  // selected node (its counts, where its support is, its tie) is then not said of the item still shown.
+  const waiting = !!data && detail.isPlaceholderData;
+  const graphNode = waiting ? null : selectedNode;
+  const tie = waiting ? null : selectedTie;
   const primary = primaryPage(data, scope, graphNode);
   // The lecture of the page that "Open page" opens: its ranges give the Play button.
   const lecture = useLecture(courseId, primary?.lectureId);
@@ -197,8 +229,8 @@ export function ConceptDetail({ courseId, nodeId, tab, scope, graphNode, tie = n
   }
   if (detail.isLoading) {
     return (
-      <div role="status" className="grid content-start gap-3 p-[var(--ll-panel-pad,16px)]" data-testid="outline-detail">
-        <span className="sr-only">Reading this item…</span>
+      <div role="status" className={cn("grid content-start gap-3 p-[var(--ll-panel-pad,16px)]", !framed && "mx-auto w-full max-w-[640px]")} data-testid="outline-detail">
+        <p className={READ}>{READING}</p>
         <Skeleton height={14} width="40%" /><Skeleton height={26} width="70%" /><Skeleton height={16} width="90%" /><Skeleton height={16} width="60%" />
       </div>
     );
@@ -227,12 +259,19 @@ export function ConceptDetail({ courseId, nodeId, tab, scope, graphNode, tie = n
   const skillLabel = new Map((data.evidence.skills ?? []).map((skill) => [skill.skill_id, skill.label]));
   const evidence = data.evidence;
   const observations = evidence.observations ?? [];
+  const scopeSentence = questionsScopeSentence(kind, data.questions_total, graphNode && graphNode.id === nodeId ? graphNode.counts?.questions : null, scope.kind);
+  const inScope = waiting ? null : scopeQuestions;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col" data-testid="outline-detail">
+    <div className="flex min-h-0 flex-1 flex-col" data-testid="outline-detail" aria-busy={waiting || undefined}>
+      {waiting && (
+        <p role="status" className={cn("flex-none border-b border-hairline bg-pad px-[var(--ll-panel-pad,16px)] py-2 text-ui text-ink", !framed && "mx-auto w-full max-w-[640px]")} data-testid="detail-pending">
+          {READING} The item read before stays below until it arrives.
+        </p>
+      )}
       <header className={cn("grid flex-none gap-1 border-b border-hairline p-[var(--ll-panel-pad,16px)] pb-4", !framed && "mx-auto w-full max-w-[640px]")}>
         <p className="flex flex-wrap items-center gap-x-1.5 text-ui text-muted">
-          <KindGlyph kind={(kind in GRAPH_NODE_KIND_LABEL ? kind : "concept") as GraphNodeKind} />
+          <Kind kind={(kind in GRAPH_NODE_KIND_LABEL ? kind : "concept") as KindGlyphKind} />
           <span className="font-semibold">{kicker.kind}</span>{kicker.place ? <span className="min-w-0 break-words">{kicker.place}</span> : null}
         </p>
         <h2 className="break-words text-title font-semibold tracking-[-0.01em]">{data.node.label}</h2>
@@ -265,9 +304,11 @@ export function ConceptDetail({ courseId, nodeId, tab, scope, graphNode, tie = n
 
       {tab === "questions" && (
         <Scroll framed={framed}>
-          <h3 className={HEAD}>
-            {questionsHeading(kind, data.questions_total)}
+          {/* The list is the course's; the header above counts the scope's. The heading and one sentence tell the two numbers apart. */}
+          <h3 className={HEAD} data-testid="questions-heading">
+            {questionsHeading(kind, data.questions_total)}{scope.kind !== "course" && kind !== "question" && kind !== "criterion" && data.questions_total > 0 ? " in the course" : ""}
           </h3>
+          {scopeSentence && <p className={cn(READ, "mt-1 text-ink")} data-testid="questions-scope">{scopeSentence}</p>}
           {data.questions.length === 0
             ? <p className={cn(READ, "mt-1")}>No catalogued question assesses this {kicker.kind.toLowerCase()}.</p>
             : (
@@ -284,6 +325,7 @@ export function ConceptDetail({ courseId, nodeId, tab, scope, graphNode, tie = n
                         {question.prompt_in_index === false ? "The wording of this question is kept in its original source. Open the source to read it." : question.prompt}
                       </p>
                       <p className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-ui text-muted">
+                        {inScope?.has(question.question_id) && IN_SCOPE_MARK[scope.kind] ? <span className="font-semibold text-ink" data-testid="question-in-scope">{IN_SCOPE_MARK[scope.kind]}</span> : null}
                         {question.tie_to_node === "assessment" && question.criterion_ids?.length ? <span>Through {countLabel(question.criterion_ids.length, "criterion", "criteria")} of this question.</span> : null}
                         <Link className="ll-link" to={`/courses/${courseId}/questions/${encodeURIComponent(question.question_id)}`} state={back}>Open the question</Link>
                       </p>

@@ -2,7 +2,9 @@
 // the build compiled into this page, and what the Brain says it is serving right now (`GET /api/health` → `build`).
 // Nothing is guessed: a fact that was not established is said to be unknown.
 //
-//   <BuildIdentity variant="shell" />     one discreet line: commit · profile · port
+//   <BuildIdentity variant="shell" />     ONE discreet line. In the rail: the build of this page (the commit) and nothing
+//                                         under it; the profile and the port are in its title and name, and in full in
+//                                         Settings. In the menu of a narrow window: commit · profile · port.
 //   <BuildIdentity variant="settings" />  the same facts in full, as text that can be read and copied
 //   <OlderPageLine />                     the one standing line of the shell: this page is older than the app being served
 import { WEB_BUILD, bundleMatchesBrain, loadedAssets, pageMatchesServed, type ServedIdentity } from "@/lib/build";
@@ -33,7 +35,7 @@ function Fact({ term, children }: { term: string; children: React.ReactNode }) {
 
 const unknown = <span className="text-muted">not established</span>;
 
-export function BuildIdentity({ variant, layout = "stack", className }: { variant: "shell" | "settings"; /** shell only: three short lines (a rail) or one line (a menu). */ layout?: "stack" | "line"; className?: string }) {
+export function BuildIdentity({ variant, layout = "rail", className }: { variant: "shell" | "settings"; /** shell only: the commit alone (a rail 76 px wide) or commit · profile · port (a menu). Always one line. */ layout?: "rail" | "line"; className?: string }) {
   const served = useServedIdentity(true);
   const identity = served.data ?? null;
   const line = buildLine(identity);
@@ -41,8 +43,8 @@ export function BuildIdentity({ variant, layout = "stack", className }: { varian
   if (variant === "shell") {
     const parts = [line.commit, line.profile, line.port === null ? null : String(line.port)].filter((part): part is string => part !== null);
     return (
-      <p className={cn("ll-num text-micro text-muted", layout === "stack" ? "flex flex-col items-center text-center" : "", className)} title={line.sentence} aria-label={line.sentence} data-testid="build-line">
-        {layout === "stack" ? parts.map((part) => <span key={part} className="max-w-full break-all">{part}</span>) : parts.join(" · ")}
+      <p className={cn("ll-num text-micro text-muted", layout === "rail" ? "max-w-full truncate text-center" : "", className)} title={line.sentence} aria-label={line.sentence} data-testid="build-line">
+        {layout === "rail" ? line.commit : parts.join(" · ")}
       </p>
     );
   }

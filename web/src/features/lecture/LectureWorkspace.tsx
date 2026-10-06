@@ -4,12 +4,13 @@
 //   stage zone     Pager · the original page · Transport (the ONE media transport, directly under the slide)
 //   context zone   ContextPanel: Tutor · Questions · Concepts · Transcript · Sources
 //
-// The stage (5.4). The slide and the bar are ONE block of one width, min(stage width, (stage height − bar height − 8 px)
-// × page shape), centred sideways. Beside its neighbours the block sits at the foot of the stage, so the bar's bottom
-// edge meets the bottom edge of the panel region and any slack is above the slide; alone in a pane it sits at the top.
-// Nothing is drawn above the page but the band and nothing under the bar: what used to stand there (readable text, the
-// learner's recent link corrections, a link conflict, notes) lives in the Sources tab, and a result of something the
-// learner just did is said once in a line over the top of the stage.
+// The stage (5.4, as corrected after the critics' round). The slide and the bar are ONE block of one width,
+// min(stage width, (stage height − bar height − 8 px) × page shape), centred sideways and placed at the TOP of the
+// stage in every arrangement: the slide's top edge is the panel region's top edge (12 px under the band), the bar is
+// 8 px under the slide, and whatever the stage has left is plain ground under the bar. Nothing is ever drawn between
+// the band and the page. What used to stand around the page (readable text, the learner's recent link corrections, a
+// link conflict, notes) lives in the Sources tab, and a result of something the learner just did is said once in a
+// line over the top of the stage.
 //
 // The address owns `page`, `panel` (a tab, or below 1180 px a pane), `focus`, `line` and `deck`; ./workspace-state holds
 // what the parts share (selected range, the one player, fit). Changing page pauses playback and never autoplays;
@@ -22,7 +23,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from "reac
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useApp } from "@/app/state";
-import { WorkspaceFrame, stageBlockWidth, useWorkspaceFrame } from "@/app/WorkspaceFrame";
+import { FRAME_SPECS, SEPARATOR_PX, WorkspaceFrame, contextDefaultPx, frameGroupWidth, outlineDefaultPx, stageBlockWidth, useWorkspaceFrame } from "@/app/WorkspaceFrame";
 import { ErrorGlyph } from "@/components/glyphs";
 import { Button, Callout, cn, Dialog, ErrorState, Field, IconButton, LoadingState, Segmented, formatMs } from "@/components/ui";
 import { apiGet, contentUrl, r2Paths } from "@/lib/api";
@@ -33,7 +34,7 @@ import { NBSP, groupRowLabel, groupingLabel, pagesRef } from "@/lib/labels";
 import { queryKeys, useLecture, useNotes, useResume, useSourceMapOverride, useTimingBuild } from "@/lib/queries";
 import { identityOf, isStructuralPage, nextContentPage, questionsForPage } from "@/lib/r2";
 import { draftAttachment, reviseAnnotation, sessionId, TERM, newOccurrenceAnnotation } from "@/lib/requests";
-import { usePageBox } from "@/lib/thumbs";
+import { useFirstPageShape, usePageBox } from "@/lib/thumbs";
 import type { LectureView, LogicalSlideKind, Occurrence, SlideRoleValue, SourceMapDocument, SourceMapOverrideRecord, SourceMapOverrideRequest } from "@/lib/types";
 import { ConceptsTab, conceptMapHref } from "@/features/concepts/ConceptsTab";
 import { ReturnLink } from "@/features/search/SearchOverlay";
@@ -48,7 +49,7 @@ import { Pager } from "./Pager";
 import { QuestionsTab } from "./QuestionsTab";
 import { DEFAULT_PAGE_SHAPE, SlideCanvas } from "./SlideCanvas";
 import { AddMatchDialog, EditMatchDialog, SourcesPanel, type NewMatchDraft } from "./SourcesPanel";
-import { GeneratedTextPanel, TranscriptPanel } from "./TranscriptPanel";
+import { TranscriptPanel } from "./TranscriptPanel";
 import { Transport } from "./Transport";
 import { LectureWorkspaceProvider, useLecturePlayback, useLectureWorkspace, useReportPlayback } from "./workspace-state";
 
@@ -79,7 +80,8 @@ function pagingAllowed(event: KeyboardEvent): boolean {
   const target = event.target as HTMLElement | null;
   if (!target || typeof target.closest !== "function") return true;
   if (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return false;
-  return !target.closest('[role="tablist"],[role="radiogroup"],[role="menu"],[role="slider"],[role="separator"],[role="listbox"],[role="tree"],[role="dialog"],media-controller,[data-testid="slide-frame"][tabindex]');
+  // The outline has its own arrow keys (LectureOutline: one Tab stop, the arrows move inside it), so none turns the page from there.
+  return !target.closest('[role="tablist"],[role="radiogroup"],[role="menu"],[role="slider"],[role="separator"],[role="listbox"],[role="tree"],[role="dialog"],media-controller,[data-testid="slide-frame"][tabindex],[data-testid="lecture-outline"]');
 }
 
 // ---- the stage block (pure; web/tests/lib/lecture-source.test.ts) -----------------------------------------------------------
@@ -109,6 +111,88 @@ export function stageBlock({ stageWidth, stageHeight, barHeight, aspect }: { sta
   const width = Math.max(Math.min(Math.floor(stageWidth), STAGE_MIN_BLOCK_PX), ruled);
   const slideHeight = Math.round(width / shape);
   return { width, slideHeight, slack: Math.max(0, Math.floor(stageHeight - slideHeight - STAGE_GAP_PX - barHeight)) };
+}
+
+// ---- a first-run layout made for the slide (pure) ---------------------------------------------------------------------------
+export interface SlideFirstWidths {
+  /** Width of the outline in pixels; 0 is closed. */
+  outline: number;
+  context: number;
+  stage: number;
+  slide: { width: number; height: number };
+  /** Empty stage under the bar. */
+  slack: number;
+}
+const clamp = (low: number, value: number, high: number): number => Math.min(Math.max(value, low), high);
+/** The narrowest the context panel is made by default: its minimum, and from 1800 px of window 22 % of it, up to 520 px. */
+export const contextFloorPx = (windowWidth: number): number => clamp(FRAME_SPECS.lecture.context.min, Math.round(0.22 * windowWidth), 520);
+/**
+ * The widths of a window nobody has arranged yet, made for the slide instead of from fixed shares of the window. The
+ * slide can use W* = (stage height − bar − 8 px) × page shape and no more. The context panel takes what is left beside
+ * it, never under its floor and never over the width the window alone would give it (`contextDefaultPx`). The outline
+ * starts open only where it costs the slide nothing: where the slide is still bound by the stage's height with the
+ * outline open and the panel at its floor. For a 16:9 deck that is no window up to 2560 × 1440; for a 4:3 deck it is
+ * 1920 and wider, and any short window. null until the stage has been measured (the frame then keeps its own default).
+ * `groupWidth` is the frame's Group: the window less the rail and the right gutter. A page of unknown shape counts as 4:3.
+ */
+export function slideFirstWidths({ windowWidth, groupWidth, stageHeight, barHeight, aspect }: { windowWidth: number; groupWidth: number; stageHeight: number; barHeight: number; aspect: number | null | undefined }): SlideFirstWidths | null {
+  const shape = aspect && Number.isFinite(aspect) && aspect > 0 ? aspect : DEFAULT_PAGE_SHAPE;
+  const area = Math.floor(groupWidth) - 2 * SEPARATOR_PX;
+  const ideal = Math.floor((stageHeight - barHeight - STAGE_GAP_PX) * shape);
+  if (!(area > 0) || !(ideal > 0)) return null;
+  const floor = contextFloorPx(windowWidth);
+  const ceiling = Math.max(floor, contextDefaultPx(windowWidth));
+  const open = outlineDefaultPx("lecture", windowWidth);
+  const outline = area - open - ideal >= floor ? open : 0;
+  const context = clamp(floor, area - outline - ideal, ceiling);
+  const stage = area - outline - context;
+  const block = stageBlock({ stageWidth: stage, stageHeight, barHeight, aspect: shape });
+  return { outline, context, stage, slide: { width: block.width, height: block.slideHeight }, slack: block.slack };
+}
+/**
+ * What the stage asks of a frame that can arrange itself for the slide (app/WorkspaceFrame). `proposeWidths` applies
+ * the widths only while the learner has arranged nothing (no stored layout, no separator or outline toggle used) and
+ * never stores them, so the layout keeps following the window and the deck. Both members are optional: a frame without
+ * them keeps its own first-run layout, made from the window's width alone.
+ */
+interface SlideFirstFrame {
+  groupWidth?: number | null;
+  proposeWidths?: (widths: { outline: number; context: number }) => void;
+}
+/** The shape of a deck's pages as last seen on this device, so a lecture opened again is laid out before its file has loaded. */
+const shapeKey = (sourceId: string): string => `ll.shape.${sourceId}`;
+
+// ---- a recording that is only offered to the lecture (pure) -----------------------------------------------------------------
+export interface OfferedSessionNote {
+  /** `offered`: the recording and transcript shown were offered by a file name. `ambiguous`: several sessions carry the number, so none is shown. */
+  state: "offered" | "ambiguous";
+  /** Two or three words that say what this is, for the start of the line. */
+  lead: string;
+  sentence: string;
+  /** The file names that carry the unit's number, as the view states them. */
+  files: string[];
+}
+/**
+ * What the screen owes the learner about how the recording came to this lecture (D79). The course records may link no
+ * session to a lecture unit; the Brain then OFFERS the one session whose recording or transcript file name carries the
+ * unit's number (`session_link: "suggested_by_file_name"`), and every range of the lecture rests on that suggestion.
+ * null when the course records link the session, or record none and nothing was offered. Nothing is worded as linked
+ * or confirmed, and the number and file names are the view's own or absent. The composition says it at the head of the
+ * Transcript tab; the transport says it for its ranges and the Sources tab beside the files (their own parts).
+ */
+export function offeredSessionNote(lecture: LectureView): OfferedSessionNote | null {
+  const evidence = (lecture as { session_link_evidence?: { state?: unknown; number?: unknown; files?: unknown } | null }).session_link_evidence ?? null;
+  const number = typeof evidence?.number === "number" ? ` (${evidence.number})` : "";
+  if (lecture.session_link === "suggested_by_file_name") {
+    return { state: "offered", lead: "Offered by file name.",
+      sentence: `The course records link no session to this lecture. The recording and the transcript shown with it are offered because a file name carries this unit's number${number}. `
+        + "Nobody has confirmed the suggestion, and every recording range of this lecture rests on it.",
+      files: Array.isArray(evidence?.files) ? evidence.files.filter((name): name is string => typeof name === "string") : [] };
+  }
+  if (lecture.session_link === "none_recorded" && evidence?.state === "ambiguous") {
+    return { state: "ambiguous", lead: "Nothing is offered.", sentence: `Two or more sessions carry this unit's number${number} in a file name, so none of them is offered as this lecture's recording.`, files: [] };
+  }
+  return null;
 }
 
 // ---- correcting the grouping of a page (pure) -------------------------------------------------------------------------------
@@ -701,9 +785,16 @@ function TranscriptTab({ lecture, focusLine, onQuote, onReportError }: { lecture
   const { slide, player } = useLectureWorkspace();
   const position = useLecturePlayback();
   const frame = useWorkspaceFrame();
+  // A transcript the course records link to no lecture is offered by its file name; the tab says so before its first line.
+  const offered = useMemo(() => offeredSessionNote(lecture), [lecture]);
   return (
     <div className={cn("flex min-h-0 w-full flex-1 flex-col gap-2 p-[var(--ll-panel-pad,16px)]", frame.arrangement !== "frame" && "mx-auto max-w-[640px]")}>
-      <GeneratedTextPanel recordings={lecture.recordings} onSeek={(ms) => player.current?.seekTo(ms)} />
+      {offered && (
+        <p className="ll-measure flex-none text-ui text-muted" data-testid="session-link-note" data-state={offered.state}>
+          <b className="font-semibold text-ink">{offered.lead}</b> {offered.sentence}
+          {offered.files.length > 0 && <span className="mt-1 block break-words">{offered.files.length === 1 ? "File: " : "Files: "}{offered.files.join(", ")}</span>}
+        </p>
+      )}
       <TranscriptPanel transcripts={lecture.transcripts} slideRanges={slide?.transcript_ranges ?? []} positionMs={position.ms} playing={position.playing} focusLine={focusLine}
         onSeek={(ms) => player.current?.seekTo(ms)} onQuote={onQuote} onReportError={onReportError} />
     </div>
@@ -778,8 +869,8 @@ function StageZone({ focus, hideSlide, pdfUrl, notice, onDismissNotice, onPageCo
   const [areaRef, area] = useContentBox<HTMLDivElement>();
   const [barRef, barHeight] = useHeight<HTMLDivElement>();
   const { shape } = usePageBox(pdfUrl, page);
+  const deckShape = useFirstPageShape(pdfUrl);
 
-  const alone = frame.arrangement === "panes";
   const choosing = lecture.display.kind === "choose_deck";
   const showsPage = !choosing && lecture.display.kind !== "unavailable" && !!pdfUrl;
   /** The block is sized by the rule (the whole page, or the place of a deck that cannot be shown); otherwise it fills the stage and the page scrolls inside it. */
@@ -787,6 +878,25 @@ function StageZone({ focus, hideSlide, pdfUrl, notice, onDismissNotice, onPageCo
   const block = stageBlock({ stageWidth: area.width, stageHeight: area.height, barHeight, aspect: showsPage ? shape : DEFAULT_PAGE_SHAPE });
   const identity = identityOf(lecture, page);
   const label = `${total ? identity.label : `Page ${page}`}${slide?.title ? `: ${slide.title}` : ""} — original source, colours unchanged`;
+
+  // A window nobody has arranged is laid out for the slide (`slideFirstWidths`): the stage proposes the widths and the
+  // frame applies them. The deck's shape is its first page's (one layout per deck, whatever page is on screen), read
+  // from the file, or remembered from the last time on this device while the file is still loading. Until one of the
+  // two is known nothing is proposed, so a 4:3 guess never arranges the window for a wide deck and back.
+  const deckId = showsPage ? lecture.deck?.source_id ?? null : null;
+  const remembered = useMemo(() => (deckId ? Number(stored(shapeKey(deckId))) || null : null), [deckId]);
+  useEffect(() => {
+    if (deckId && deckShape) store(shapeKey(deckId), deckShape.toFixed(4));
+  }, [deckId, deckShape]);
+  const layoutShape = deckId ? deckShape ?? remembered : null;
+  const { groupWidth, proposeWidths } = frame as SlideFirstFrame;
+  const proposal = frame.arrangement === "frame" && layoutShape && typeof window !== "undefined"
+    ? slideFirstWidths({ windowWidth: window.innerWidth, groupWidth: groupWidth ?? frameGroupWidth(window.innerWidth), stageHeight: area.height, barHeight, aspect: layoutShape }) : null;
+  const proposedOutline = proposal?.outline ?? null;
+  const proposedContext = proposal?.context ?? null;
+  useLayoutEffect(() => {
+    if (proposedOutline !== null && proposedContext !== null) proposeWidths?.({ outline: proposedOutline, context: proposedContext });
+  }, [proposedOutline, proposedContext, proposeWidths]);
 
   // A message about something just done leaves by itself; one that needs the learner (it has an action) stays until closed.
   useEffect(() => {
@@ -800,7 +910,7 @@ function StageZone({ focus, hideSlide, pdfUrl, notice, onDismissNotice, onPageCo
       {pager}
       <div ref={areaRef} className={cn("flex min-h-0 flex-1 flex-col items-center", frame.arrangement === "frame" ? "py-3" : "p-3", ruled ? "overflow-y-auto overflow-x-hidden [scrollbar-width:thin]" : "overflow-hidden")}
         data-testid="stage-area" data-fit={fit} data-slack={ruled ? block.slack : undefined}>
-        <div className={cn("flex flex-none flex-col gap-2", ruled ? (alone ? "mb-auto" : "mt-auto") : "min-h-0 w-full flex-1", choosing && "max-w-[46rem]")} style={ruled ? { width: block.width } : undefined} data-testid="stage-block">
+        <div className={cn("flex flex-none flex-col gap-2", ruled ? "mb-auto" : "min-h-0 w-full flex-1", choosing && "max-w-[46rem]")} style={ruled ? { width: block.width } : undefined} data-testid="stage-block">
           <div className={cn("flex flex-col", !ruled && "min-h-0 flex-1")} data-testid="stage-slide">
             {choosing ? (
               <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">

@@ -9,7 +9,7 @@ import { newId } from "@/lib/bundle";
 import { useReview } from "@/lib/queries";
 import { reviewItemPayload, type Conditions } from "@/lib/requests";
 import type { QuestionRecord, ReviewRow } from "@/lib/types";
-import { Callout, Lead, Picker, StateWords } from "@/features/search/SearchOverlay";
+import { Callout, Lead, Page, Picker, StateWords } from "@/features/search/SearchOverlay";
 import { useLocalRequests, useSubmitActions } from "@/features/tutor/actions";
 import { RequestCard } from "@/features/tutor/RequestCard";
 
@@ -39,9 +39,9 @@ export function ReviewHome() {
   const [notice, setNotice] = useState<string | null>(null);
   const [availableShown, setAvailableShown] = useState(20);
 
-  if (!courseId) return <EmptyState title="No course selected">Choose a course in the header.</EmptyState>;
-  if (review.isLoading) return <LoadingState label="Loading review…" />;
-  if (review.isError || !review.data) return <ErrorState error={review.error} retry={() => void review.refetch()} />;
+  if (!courseId) return <Page><EmptyState title="No course selected">Choose a course in the header.</EmptyState></Page>;
+  if (review.isLoading) return <Page><LoadingState label="Loading review…" /></Page>;
+  if (review.isError || !review.data) return <Page><ErrorState error={review.error} retry={() => void review.refetch()} /></Page>;
   const data = review.data;
   const due = data.items.filter((i) => i.is_due);
   const sessionSize = size ?? Math.min(data.default_session_size, Math.max(due.length, 1));
@@ -82,7 +82,7 @@ export function ReviewHome() {
   };
 
   return (
-    <div className="ll-page">
+    <Page>
       <PageHeader title="Review" subtitle={<Lead>{data.note}</Lead>} actions={<Button onClick={() => { setPrompt(""); setCreateOpen(true); }}>Create my own question</Button>} />
       {notice && <Callout tone="accent" role="status" className="mb-4" title="Review">{notice}</Callout>}
 
@@ -95,7 +95,7 @@ export function ReviewHome() {
                 options={Array.from({ length: Math.min(due.length, 25) }, (_, i) => i + 1).map((n) => ({ value: String(n), label: `${n} item${n === 1 ? "" : "s"}` }))} />
             </span>
             <Button variant="primary" onClick={start} data-testid="start-review">Start review</Button>
-            <p className="ll-measure text-ui text-muted">You can stop at any point; unanswered items are simply not reviewed.</p>
+            <p className="ll-measure text-read text-muted">You can stop at any point; unanswered items are simply not reviewed.</p>
           </div>
         )}
       </section>
@@ -173,7 +173,7 @@ export function ReviewHome() {
           }}>{editing ? "Save new version" : "Save only"}</Button></>}>
         <Field label="Question (include any givens the answer needs)" htmlFor="own-q"><textarea id="own-q" className="ll-input min-h-[7rem]" value={prompt} onChange={(e) => setPrompt(e.target.value)} /></Field>
       </Dialog>
-    </div>
+    </Page>
   );
 }
 
@@ -201,9 +201,9 @@ export function ReviewSession() {
   const [finished, setFinished] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!stored || !courseId) return <EmptyState title="This review session is no longer available" action={<Link className="ll-btn" to="/review">Back to review</Link>}>Review sessions are kept only for the current browser tab. Nothing was recorded for unanswered items.</EmptyState>;
-  if (review.isLoading) return <LoadingState label="Loading review items…" />;
-  if (review.isError || !review.data) return <ErrorState error={review.error} />;
+  if (!stored || !courseId) return <Page reading><EmptyState title="This review session is no longer available" action={<Link className="ll-btn" to="/review">Back to review</Link>}>Review sessions are kept only for the current browser tab. Nothing was recorded for unanswered items.</EmptyState></Page>;
+  if (review.isLoading) return <Page reading><LoadingState label="Loading review items…" /></Page>;
+  if (review.isError || !review.data) return <Page reading><ErrorState error={review.error} /></Page>;
   const items = stored.items.map((id) => review.data!.items.find((i) => i.item_id === id)).filter((i): i is ReviewRow => !!i);
   const item = items[index];
   const answered = Object.values(done).filter((v) => v === "answered").length;
@@ -211,7 +211,7 @@ export function ReviewSession() {
 
   if (finished || !item) {
     return (
-      <div className="ll-page ll-page-reading">
+      <Page reading>
         <PageHeader title="Review session finished" subtitle="Only items you actually answered were recorded as reviews." />
         <dl className="flex flex-wrap gap-x-12 gap-y-4" data-testid="review-summary">
           <div><dt className="text-ui text-muted">Answered</dt><dd className="ll-num text-title font-semibold">{answered}</dd></div>
@@ -224,9 +224,9 @@ export function ReviewSession() {
             return request ? <RequestCard key={requestId} request={request} showContext={false} /> : null;
           })}
         </div>
-        <p className="ll-measure mt-4 text-ui text-muted">Feedback that is still pending stays in Activity. A pending or uncertain grade is not treated as a wrong answer.</p>
+        <p className="ll-measure mt-4 text-read text-muted">Feedback that is still pending stays in Activity. A pending or uncertain grade is not treated as a wrong answer.</p>
         <div className="mt-5 flex flex-wrap gap-2"><Link className="ll-btn ll-btn-primary" to="/review">Back to review</Link><Link className="ll-btn" to="/study">Back to study</Link></div>
-      </div>
+      </Page>
     );
   }
 
@@ -255,7 +255,7 @@ export function ReviewSession() {
   };
 
   return (
-    <div className="ll-page ll-page-reading">
+    <Page reading>
       <PageHeader title="Review session" subtitle={`Item ${index + 1} of ${items.length}`} actions={<Button onClick={() => setFinished(true)}>Stop here</Button>} />
       <article className="ll-region flex flex-col gap-4 p-4 min-[900px]:p-6" aria-label="Review item">
         <p className="ll-measure whitespace-pre-wrap text-head" data-testid="review-prompt">{item.question.prompt}</p>
@@ -270,7 +270,7 @@ export function ReviewSession() {
               <Button onClick={() => { setDone((d) => ({ ...d, [item.item_id]: "skipped" })); next(); }}>Skip</Button>
               <Button variant="primary" busy={busy} disabled={!text.trim()} onClick={submitAnswer} data-testid="submit-review">Submit</Button>
             </div>
-            <p className="ll-measure text-ui text-muted">Skipping records nothing. With a hint, your answer is kept as practice and is not fed to the scheduler as a rating.{!text.trim() ? " Submit is off until you have written an answer." : ""}</p>
+            <p className="ll-measure text-read text-muted">Skipping records nothing. With a hint, your answer is kept as practice and is not fed to the scheduler as a rating.{!text.trim() ? " Submit is off until you have written an answer." : ""}</p>
           </>
         ) : (
           <>
@@ -281,6 +281,6 @@ export function ReviewSession() {
         {error && <Callout tone="danger" role="alert" title="Not sent">{error}</Callout>}
       </article>
       <div className="mt-4"><Button variant="quiet" onClick={() => navigate("/review")}>Leave session</Button></div>
-    </div>
+    </Page>
   );
 }

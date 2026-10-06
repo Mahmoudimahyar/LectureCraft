@@ -8,14 +8,13 @@
 import { useCallback, useMemo } from "react";
 import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { KindGlyph } from "@/components/glyphs";
 import { Button, Section, Sections, StaleNotice } from "@/components/ui";
 import { R2_ACTION, ROLE_LABEL, conceptScopeHeading, countLabel, groupRowLabel, staleViewLine } from "@/lib/labels";
 import { identityOf, isStale, isStructuralPage } from "@/lib/r2";
 import type { ConceptsTabProps } from "@/features/lecture/contracts";
 import type { OutlineRow } from "@/lib/types";
 import { useScopeGraph } from "./ConceptMap";
-import { ConceptTree, type TreePlace } from "./ConceptTree";
+import { ConceptTree, Kind, type TreePlace } from "./ConceptTree";
 import { conceptMapHref as mapHref, sourceTies, topicConceptCounts } from "./map-model";
 
 /** The address of the concept map of a scope (`course`, `lecture:<id>`, `slide:<lecture>:<page>`). */
@@ -87,7 +86,7 @@ export function ConceptsTab({ courseId, lecture, page, slide, onGoToPage, nextCo
               {legacy.map((concept) => (
                 <li key={concept.concept_id}>
                   <Link to={mapHref(courseId, slideScope, concept.concept_id)} state={back} className="grid grid-cols-[12px_minmax(0,1fr)] items-start gap-x-2 rounded-row px-2 py-1.5 text-ink no-underline hover:bg-pad">
-                    <KindGlyph kind="concept" className="mt-1.5" />
+                    <Kind kind="concept" className="mt-1.5" />
                     <span className="min-w-0 break-words text-read">{concept.label}</span>
                   </Link>
                 </li>

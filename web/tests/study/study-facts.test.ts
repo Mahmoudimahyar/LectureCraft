@@ -3,8 +3,9 @@
 // is said in words, a line breaks only between facts, and nothing is derived from an id or invented.
 import { describe, expect, it } from "vitest";
 import {
-  NO_LECTURES_SENTENCE, STUDY_CLOSING_LINE, STUDY_FIRST_RUN, STUDY_SAMPLE_SENTENCE, chosenCourseId, courseCounts, courseTabLine, draftSentence, latestPlace, lectureDeckContent, lectureFacts,
-  lectureHeading, lectureKicker, lectureShortName, otherSynchronisedPlace, readLastPlace, slidesProblem, stoppedSentence, studyPlace, unlinkedSessionsSentence, type TimingLectureRow,
+  NO_LECTURES_SENTENCE, STUDY_CLOSING_LINE, STUDY_FIRST_RUN, STUDY_READING_LINE, STUDY_SAMPLE_SENTENCE, awaitsTimingFact, chosenCourseId, courseCounts, courseTabLine, coursesToRemember, draftSentence,
+  latestPlace, lectureDeckContent, lectureFacts, lectureHeading, lectureKicker, lectureShortName, otherSynchronisedPlace, readLastPlace, readRememberedCourses, slidesProblem, stoppedSentence,
+  storedPlaceCourse, studyPlace, unlinkedSessionsSentence, type TimingLectureRow,
 } from "@/features/study/study-facts";
 import { factUnits, factsLine } from "@/lib/format";
 import { sampleCourseTiming } from "@/lib/fixtures/r2-sample";
@@ -39,6 +40,15 @@ describe("lectureKicker, lectureHeading, lectureShortName", () => {
     expect(lectureKicker("lecture-03", "lecture 3: cloning")).toBeNull();
     expect(lectureKicker("week-2-intro", "Introduction")).toBeNull();
     expect(lectureKicker("lecture-03", "Lecture 30 overview")).not.toBeNull(); // 30 is not 03
+  });
+
+  it("also hears the number in a title written like a file name (underscores around it), and never half a number", () => {
+    expect(lectureKicker("lecture-00", "Lecture_0_SampleOverview_260101 - Tagged (synthetic)")).toBeNull();
+    expect(lectureKicker("lecture-13", "lecture_13_notes (synthetic)")).toBeNull();
+    expect(lectureKicker("lecture-02", "lecture-02")).toBeNull();
+    expect(lectureKicker("lecture-01", "Lecture_13_notes (synthetic)")).not.toBeNull(); // 13 is not 1
+    expect(lectureKicker("lecture-03", "Prelecture 3 reading (synthetic)")).not.toBeNull(); // another word
+    expect(lectureHeading("lecture-00", "Lecture_0_SampleOverview_260101 - Tagged (synthetic)")).toBe("Lecture_0_SampleOverview_260101 - Tagged (synthetic)");
   });
 
   it("composes the heading and the short name from what is known, never altering the title", () => {
@@ -264,5 +274,77 @@ describe("fixed sentences of the page", () => {
     expect(STUDY_SAMPLE_SENTENCE).toBe("These are synthetic sample courses, not your own.");
     expect(STUDY_CLOSING_LINE).toBe("The numbers say what exists and what was recorded. They do not measure what you know.");
     expect(NO_LECTURES_SENTENCE).toBe("No lectures are registered for this course.");
+  });
+});
+
+// ---- fix round (2026-10-06): a suggested session link, the timing answer still on its way, the names kept for the first frame ----
+describe("lectureFacts: a recording offered by file name only (session_link suggested_by_file_name)", () => {
+  it("says so right after the recording fact, with and without the timing answer", () => {
+    const offered = lecture({ session_link: "suggested_by_file_name" });
+    expect(lectureFacts(offered).map(plain)).toEqual(["91 pages", "1 recording", "offered by file name", "18 questions"]);
+    expect(lectureFacts(offered, timingRow("lecture-91")).map(plain)).toEqual(["91 pages", "recording 1 h 10 min", "offered by file name", "transcribed in part", "18 questions"]);
+    expect(lectureFacts(offered)[2]).toContain(NBSP); // one unit: the line may break before it, never inside it
+  });
+
+  it("does not say it for a session the course records link, nor where there is no recording to offer", () => {
+    expect(lectureFacts(lecture()).map(plain)).not.toContain("offered by file name");
+    const transcriptOnly = lecture({ session_link: "suggested_by_file_name", sessions: [session("transcript_only_no_recording", ["lecture_transcript"])] });
+    expect(lectureFacts(transcriptOnly).map(plain)).toEqual(["91 pages", "no recording", "18 questions"]);
+  });
+});
+
+describe("awaitsTimingFact", () => {
+  it("is true for a lecture whose session holds a recording: the timing answer will add its length and stage", () => {
+    expect(awaitsTimingFact(lecture())).toBe(true);
+    expect(awaitsTimingFact(lecture({ sessions: [] }))).toBe(false);
+    expect(awaitsTimingFact(lecture({ sessions: [session("transcript_only_no_recording", ["lecture_transcript"])] }))).toBe(false);
+  });
+});
+
+describe("the course names kept on this device for the first frame", () => {
+  const workspace = {
+    fixture_label: null,
+    courses: [
+      { course_id: "sample-a", display_name: "Sample course A (synthetic)", binding: "bound", problem: null, lecture_units: 14, catalogued_questions: 120, recorded_attempts: 9 },
+      { course_id: "sample-e", display_name: "Sample course E (synthetic)", binding: "unbound", problem: "The course folder is not on this PC." },
+    ] as WorkspaceCourse[],
+  };
+
+  it("keeps the names, the binding and the number of lecture rows, and no count that would be shown as a fact", () => {
+    const kept = readRememberedCourses(coursesToRemember(workspace));
+    expect(kept).toEqual({
+      sample: false,
+      courses: [
+        { course_id: "sample-a", display_name: "Sample course A (synthetic)", binding: "bound", problem: null, rows: 14 },
+        { course_id: "sample-e", display_name: "Sample course E (synthetic)", binding: "unbound", problem: "The course folder is not on this PC.", rows: null },
+      ],
+    });
+    expect(coursesToRemember(workspace)).not.toContain("120");
+    expect(readRememberedCourses(coursesToRemember({ ...workspace, fixture_label: "SAMPLE PROFILE" }))?.sample).toBe(true);
+  });
+
+  it("refuses anything that is not such a list", () => {
+    expect(readRememberedCourses(null)).toBeNull();
+    expect(readRememberedCourses("")).toBeNull();
+    expect(readRememberedCourses("not json")).toBeNull();
+    expect(readRememberedCourses(JSON.stringify({ sample: false, courses: [] }))).toBeNull(); // an empty list is not worth a frame
+    expect(readRememberedCourses(JSON.stringify({ sample: false, courses: [{ course_id: "a" }] }))).toBeNull();
+    expect(readRememberedCourses(JSON.stringify({ sample: false, courses: [{ course_id: 3, display_name: "A", binding: "bound" }] }))).toBeNull();
+    expect(readRememberedCourses(JSON.stringify([1, 2]))).toBeNull();
+  });
+});
+
+describe("storedPlaceCourse", () => {
+  it("reads the course of a stored place from its key, and nothing from another key", () => {
+    expect(storedPlaceCourse("ll.last.sample-a")).toBe("sample-a");
+    expect(storedPlaceCourse("ll.last.")).toBeNull();
+    expect(storedPlaceCourse("ll.deck.sample-a.lecture-01")).toBeNull();
+    expect(storedPlaceCourse("ll.course")).toBeNull();
+  });
+});
+
+describe("the line of a slow first load", () => {
+  it("names what is being read", () => {
+    expect(STUDY_READING_LINE).toBe("Reading your course folders…");
   });
 });

@@ -1,8 +1,8 @@
 // The Study home as rendered (design specification 6): what it says to assistive technology and which links it offers.
 // jsdom: structure, names and addresses, not pixels (those are looked at in a browser). Page pictures are not drawn here
 // (lib/thumbs is replaced), so every row shows its neutral placeholder. All data is synthetic.
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { Tabs } from "radix-ui";
@@ -18,17 +18,22 @@ const mocks = vi.hoisted(() => ({
   lecture: vi.fn(),
   resume: vi.fn(),
   draft: vi.fn(),
+  thumb: vi.fn(),
+  near: { current: false },
 }));
 vi.mock("@/app/state", () => ({ useApp: () => mocks.app.current }));
 vi.mock("@/lib/queries", () => ({ useCourse: (id?: string) => mocks.course(id), useCourseTiming: (id?: string) => mocks.timing(id), useLecture: (c?: string, l?: string, d?: string | null) => mocks.lecture(c, l, d) }));
 vi.mock("@/lib/api", () => ({ apiGet: (path: string) => mocks.resume(path), contentUrl: (relative: string) => `/api/${relative}` }));
 vi.mock("@/lib/db", () => ({ getDraft: (id: string) => mocks.draft(id) }));
-vi.mock("@/lib/thumbs", () => ({ useNearViewport: () => [{ current: null }, false], useThumb: () => ({ thumb: null, shape: null }), useFirstPageShape: () => null }));
+vi.mock("@/lib/thumbs", () => ({
+  useNearViewport: () => [{ current: null }, mocks.near.current], useFirstPageShape: () => null, cachedThumb: () => null,
+  requestThumb: (url: string, page: number) => mocks.thumb(url, page),
+}));
 
 import { CoursePane, CourseTabs, LectureRow } from "@/features/study/CourseBrowser";
 import { ResumeFirstRun, ResumeView } from "@/features/study/ResumeBlock";
 import { CourseLectures, StudyHome } from "@/features/study/StudyPages";
-import { NO_LECTURES_SENTENCE, STUDY_CLOSING_LINE, STUDY_FIRST_RUN, STUDY_SAMPLE_SENTENCE, type TimingLectureRow } from "@/features/study/study-facts";
+import { NO_LECTURES_SENTENCE, STUDY_CLOSING_LINE, STUDY_FIRST_RUN, STUDY_READING_LINE, STUDY_SAMPLE_SENTENCE, coursesToRemember, readRememberedCourses, type TimingLectureRow } from "@/features/study/study-facts";
 
 const text = (element: Element | null): string => (element?.textContent ?? "").split(NBSP).join(" ");
 /** Matches an accessible name whatever kind of space holds its units together. */
@@ -75,8 +80,8 @@ function Where() {
   const location = useLocation();
   return <span data-testid="where">{location.pathname + location.search}</span>;
 }
-function page(element: ReactElement, at = "/study") {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function page(element: ReactElement, at = "/study", client: QueryClient = newClient()) {
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[at]}>
@@ -99,6 +104,8 @@ beforeEach(() => {
   mocks.lecture.mockReset().mockImplementation((c?: string, l?: string) => query(c && l ? sampleLectureView : undefined));
   mocks.resume.mockReset().mockImplementation(async (path: string) => noResume(path.split("/")[1]!));
   mocks.draft.mockReset().mockResolvedValue(undefined);
+  mocks.thumb.mockReset().mockImplementation(() => new Promise(() => undefined)); // a picture that is still being made
+  mocks.near.current = false;
   setApp();
 });
 
@@ -133,6 +140,16 @@ describe("ResumeView", () => {
     expect(screen.queryByRole("link", { name: "Start from page 1" })).toBeNull();
   });
 
+  it("shows a picture that is still being made as loading, and keeps a place for a course name it does not know yet", () => {
+    const { rerender } = inRouter(<ResumeView {...props} pictureLoading courseName={null} />);
+    const picture = screen.getByTestId("resume-picture");
+    expect(picture.querySelector('[data-state="loading"]')).not.toBeNull();
+    expect(screen.getByText(/^Resume in/).querySelector('[data-pending="course"]')).not.toBeNull();
+    rerender(<MemoryRouter><ResumeView {...props} /></MemoryRouter>);
+    expect(screen.getByTestId("resume-picture").querySelector('[data-state="loading"]')).toBeNull(); // no picture will come: a still block
+    expect(screen.getByText("Resume in Sample course A (synthetic)")).toBeInTheDocument();
+  });
+
   it("is one sentence on a first run", () => {
     render(<ResumeFirstRun />);
     expect(screen.getByText(STUDY_FIRST_RUN)).toBeInTheDocument();
@@ -162,7 +179,7 @@ describe("LectureRow", () => {
 
   it("is one link named by the lecture, described by its facts, to the lecture", () => {
     inRouter(<ul><LectureRow courseId="sample-course" lecture={lecture("lecture-90", "Sample topic (synthetic)")} timing={timingOf("lecture-90")} leftAt={null} /></ul>);
-    const link = screen.getByRole("link", { name: named("Lecture 90 Sample topic (synthetic)") });
+    const link = screen.getByRole("link", { name: named("Lecture 90 – Sample topic (synthetic)") });
     expect(link).toHaveAttribute("href", "/courses/sample-course/lectures/lecture-90");
     expect(text(document.getElementById(link.getAttribute("aria-describedby")!))).toBe("12 pages, recording 1 h 20 min, 4 ranges, 8 questions");
     expect(link.querySelector("img")).toBeNull(); // no picture yet: the neutral placeholder
@@ -190,6 +207,70 @@ describe("LectureRow", () => {
     expect(text(blocked!)).toContain("slides cannot be shown");
     expect(text(blocked!)).toContain("This deck is not a PDF.");
   });
+
+  it("names every row by one line: a title that already says the lecture number stands alone", () => {
+    inRouter(
+      <ul>
+        <LectureRow courseId="c" lecture={lecture("lecture-05", "Lecture 05 – Sampling (synthetic)")} leftAt={null} />
+        <LectureRow courseId="c" lecture={lecture("lecture-08", "Signal detection (synthetic)")} leftAt={null} />
+      </ul>,
+    );
+    expect(screen.getByRole("link", { name: named("Lecture 05 – Sampling (synthetic)") })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: named("Lecture 08 – Signal detection (synthetic)") })).toBeInTheDocument();
+    // one structure for every row: a title line and the facts, no separate line above some titles
+    const shape = screen.getAllByRole("link").map((link) => link.querySelectorAll(":scope > span:last-child > *").length);
+    expect(shape).toEqual([2, 2]);
+  });
+
+  it("says that a recording is only offered by file name", () => {
+    inRouter(<ul><LectureRow courseId="c" lecture={lecture("lecture-03", "Sample topic (synthetic)", { session_link: "suggested_by_file_name" })} timing={timingOf("lecture-91")} leftAt={null} /></ul>);
+    expect(text(document.getElementById(screen.getByRole("link").getAttribute("aria-describedby")!))).toBe("12 pages, recording 1 h 10 min, offered by file name, transcribed in part, 8 questions");
+  });
+
+  it("keeps a place for the timing words while the timing answer is on its way, and reads out only what is known", () => {
+    const { rerender } = inRouter(<ul><LectureRow courseId="c" lecture={lecture("lecture-90", "Sample topic (synthetic)")} timingPending leftAt={null} /></ul>);
+    const link = screen.getByRole("link");
+    expect(link.querySelector('[data-pending="timing"]')).not.toBeNull();
+    expect(link).toHaveAccessibleDescription(/^12\s+pages,\s+1\s+recording,\s+8\s+questions$/); // \s also matches the spaces that hold a fact together
+    // the answer arrived: the words stand where the place was kept
+    rerender(<MemoryRouter><ul><LectureRow courseId="c" lecture={lecture("lecture-90", "Sample topic (synthetic)")} timing={timingOf("lecture-90")} timingPending={false} leftAt={null} /></ul></MemoryRouter>);
+    expect(screen.getByRole("link").querySelector('[data-pending="timing"]')).toBeNull();
+    expect(text(screen.getByRole("listitem"))).toContain("12 pages, recording 1 h 20 min, 4 ranges, 8 questions");
+  });
+
+  it("keeps no place where the timing answer will add nothing (a lecture without a recording)", () => {
+    inRouter(<ul><LectureRow courseId="c" lecture={lecture("lecture-93", "Notes (synthetic)", { sessions: [] })} timingPending leftAt={null} /></ul>);
+    expect(screen.getByRole("link").querySelector('[data-pending="timing"]')).toBeNull();
+  });
+
+  it("shows a picture that is still being made as loading, the finished picture in its place, and a failed one as a still block", async () => {
+    mocks.near.current = true;
+    let finish: (thumb: { src: string; width: number; height: number; aspect: number }) => void = () => undefined;
+    mocks.thumb.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const { unmount } = inRouter(<ul><LectureRow courseId="c" lecture={lecture("lecture-01", "Sample topic (synthetic)")} leftAt={null} /></ul>);
+    const placeholder = screen.getByRole("link").querySelector('[data-thumb="placeholder"]')!;
+    expect(placeholder).toHaveAttribute("data-state", "loading");
+    expect(mocks.thumb).toHaveBeenCalledWith("/api/sources/c/src-lecture-01-slides/content", 1);
+    await act(async () => finish({ src: "blob:first-page", width: 320, height: 180, aspect: 16 / 9 }));
+    expect(screen.getByRole("link").querySelector("img")).toHaveAttribute("src", "blob:first-page");
+    expect(screen.getByRole("link").querySelector('[data-thumb="placeholder"]')).toBeNull();
+    unmount();
+
+    mocks.thumb.mockImplementation(() => Promise.reject(new Error("The file could not be read.")));
+    inRouter(<ul><LectureRow courseId="c" lecture={lecture("lecture-02", "Sample topic (synthetic)")} leftAt={null} /></ul>);
+    await waitFor(() => expect(screen.getByRole("link").querySelector('[data-thumb="placeholder"]')).toHaveAttribute("data-state", "none"));
+    expect(screen.getByRole("link").querySelector("img")).toBeNull(); // nothing is drawn in place of a page that could not be rendered
+  });
+
+  it("does not show a lecture without slides, or one whose slides cannot be shown, as loading", () => {
+    inRouter(
+      <ul>
+        <LectureRow courseId="c" lecture={lecture("lecture-01", "Notes only (synthetic)", { deck: null, displayable: false, pages: null, disposition: "no_source" })} leftAt={null} />
+        <LectureRow courseId="c" lecture={lecture("lecture-02", "Slides file (synthetic)", { displayable: false, pages: null, disposition: "blocked: This deck is not a PDF." })} leftAt={null} />
+      </ul>,
+    );
+    expect([...document.querySelectorAll('[data-thumb="placeholder"]')].map((node) => node.getAttribute("data-state"))).toEqual(["none", "none"]);
+  });
 });
 
 describe("CoursePane", () => {
@@ -209,6 +290,8 @@ describe("CoursePane", () => {
     expect(screen.getByText(NO_LECTURES_SENTENCE)).toBeInTheDocument();
     rerender(<MemoryRouter><CoursePane {...base} course={COURSES[0]!} view={undefined} loading /></MemoryRouter>);
     expect(screen.getByRole("status")).toHaveTextContent("Loading lectures…");
+    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
+    expect(document.querySelectorAll('[data-skeleton="lecture-row"]')).toHaveLength(2); // as many rows as the course has lectures (COURSES[0].lecture_units)
     const retry = vi.fn();
     rerender(<MemoryRouter><CoursePane {...base} course={COURSES[0]!} view={undefined} error={new Error("The Brain did not answer.")} onRetry={retry} /></MemoryRouter>);
     expect(screen.getByRole("alert")).toHaveTextContent("The Brain did not answer.");
@@ -231,6 +314,33 @@ describe("CoursePane", () => {
     fireEvent.click(within(line).getByRole("link", { name: "Library" }));
     expect(onActivate).toHaveBeenCalledTimes(1);
     expect(text(screen.getByRole("list", { name: /^Lectures of/ }))).toContain("no recording linked"); // the lecture with no session of its own
+  });
+
+  it("keeps the line of totals as a place while they are not known, and never shows a remembered number", () => {
+    const remembered: WorkspaceCourse = { course_id: SAMPLE_COURSE_ID, display_name: "Sample course A (synthetic)", binding: "bound", problem: null };
+    inRouter(<CoursePane {...base} course={remembered} view={undefined} loading skeletonRows={4} />);
+    expect(screen.getByRole("heading", { level: 3, name: "Sample course A (synthetic)" })).toBeInTheDocument();
+    expect(screen.queryByTestId("course-counts")).toBeNull();
+    expect(document.querySelector('[data-pending="counts"]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-skeleton="lecture-row"]')).toHaveLength(4);
+    expect(screen.getByRole("link", { name: "Concept map" })).toBeInTheDocument(); // the ways into the course do not wait
+  });
+
+  it("asks for the pictures so that they arrive from the top row down (the picture queue serves the last request first)", async () => {
+    mocks.near.current = true;
+    const lectures = ["lecture-01", "lecture-02", "lecture-03", "lecture-04"].map((id) => lecture(id, `${id} (synthetic)`));
+    inRouter(<CoursePane {...base} course={COURSES[0]!} view={courseView(SAMPLE_COURSE_ID, { lectures })} />);
+    await waitFor(() => expect(mocks.thumb).toHaveBeenCalled());
+    const asked = mocks.thumb.mock.calls.map((call) => /src-(lecture-\d+)-slides/.exec(String(call[0]))![1]);
+    // the top row first (it starts at once when nothing is being drawn), then from the bottom up, and the top row once
+    // more, so that it is also the next one served when something else was being drawn
+    expect(asked).toEqual(["lecture-01", "lecture-04", "lecture-03", "lecture-02", "lecture-01"]);
+  });
+
+  it("hands the rows the place for their timing words while the timing answer is on its way", () => {
+    inRouter(<CoursePane {...base} course={COURSES[0]!} view={courseView(SAMPLE_COURSE_ID)} timingPending />);
+    const rows = within(screen.getByRole("list", { name: /^Lectures of/ })).getAllByRole("listitem");
+    expect(rows.map((row) => !!row.querySelector('[data-pending="timing"]'))).toEqual([true, false]); // the second lecture has no recording
   });
 });
 
@@ -334,10 +444,132 @@ describe("Study home", () => {
     setApp({ workspace: undefined, workspaceLoading: true });
     const { unmount } = page(<StudyHome />);
     expect(screen.getByRole("status")).toHaveTextContent("Loading your courses…");
+    // a first visit: the frame of the page that follows is there at once, in grey where nothing is known yet
+    expect(screen.getByTestId("study-home")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("heading", { level: 2, name: "Courses" })).toBeInTheDocument();
+    expect(screen.getByText(STUDY_FIRST_RUN)).toBeInTheDocument(); // the device knows it has opened nothing
+    expect(screen.getByTestId("course-tabs-skeleton").children).toHaveLength(5);
+    expect(document.querySelectorAll('[data-skeleton="lecture-row"]').length).toBeGreaterThan(0);
+    expect(screen.getByText(STUDY_CLOSING_LINE)).toBeInTheDocument();
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(mocks.course).toHaveBeenCalledWith(SAMPLE_COURSE_ID); // the course that was active on this device is asked for beside the workspace
+    expect(screen.queryByRole("listitem")).toBeNull(); // and nothing of it is shown before the workspace has named it
     unmount();
     setApp({ workspace: undefined, workspaceLoading: false, workspaceError: new Error("The Brain on this PC did not answer.") });
     page(<StudyHome />);
     expect(screen.getByRole("alert")).toHaveTextContent("The Brain on this PC did not answer.");
+  });
+});
+
+describe("Study home: the first frame, a slow load and a revisit", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("keeps the course names of a successful load on this device", () => {
+    page(<StudyHome />);
+    const kept = readRememberedCourses(window.localStorage.getItem("ll.study.courses"));
+    expect(kept?.sample).toBe(true);
+    expect(kept?.courses.map((course) => course.display_name)).toEqual(COURSES.map((course) => course.display_name));
+    expect(kept?.courses[4]).toMatchObject({ binding: "unbound", problem: "The course folder is not on this PC." });
+  });
+
+  it("paints the courses it remembers, their lectures and the place you left while the workspace is still being read", () => {
+    window.localStorage.setItem("ll.study.courses", coursesToRemember({ fixture_label: null, courses: COURSES }));
+    window.localStorage.setItem(`ll.last.${SAMPLE_COURSE_ID}`, JSON.stringify({ lectureId: SAMPLE_LECTURE_ID, page: 4, title: "stored title", at: 20 }));
+    setApp({ workspace: undefined, workspaceLoading: true });
+    page(<StudyHome />);
+    expect(screen.getByTestId("study-home")).toHaveAttribute("aria-busy", "true");
+    const tabs = within(screen.getByRole("tablist", { name: "Courses" })).getAllByRole("tab");
+    expect(tabs).toHaveLength(5);
+    expect(text(tabs[0]!)).toContain("Sample course A (synthetic)");
+    expect(text(tabs[0]!)).toContain("Left at Lecture 90, page 4");
+    // the active course is asked for at once, beside the workspace, and its lectures are shown as soon as they are there
+    expect(within(screen.getByRole("tabpanel")).getAllByRole("listitem")).toHaveLength(2);
+    const resume = screen.getByRole("region", { name: "Resume" });
+    expect(within(resume).getByText("Resume in Sample course A (synthetic)")).toBeInTheDocument();
+    expect(within(resume).getByRole("link", { name: "Resume lecture" })).toHaveAttribute("href", `/courses/${SAMPLE_COURSE_ID}/lectures/${SAMPLE_LECTURE_ID}?page=4`);
+    expect(screen.queryByText(STUDY_SAMPLE_SENTENCE)).toBeNull(); // remembered as the learner's own courses
+  });
+
+  it("leads with the place you left on a first load that remembers no course names", () => {
+    window.localStorage.setItem("ll.last.sample-b", JSON.stringify({ lectureId: "lecture-02", page: 9, title: "Older place", at: 10 }));
+    mocks.lecture.mockImplementation(() => query(undefined, { isLoading: true }));
+    setApp({ workspace: undefined, workspaceLoading: true });
+    page(<StudyHome />);
+    const resume = screen.getByRole("region", { name: "Resume" });
+    expect(text(within(resume).getByRole("heading", { level: 2 }))).toBe("Lecture 02 – Older place");
+    expect(within(resume).getByRole("link", { name: "Resume lecture" })).toHaveAttribute("href", "/courses/sample-b/lectures/lecture-02?page=9");
+    expect(within(resume).getByTestId("resume-picture").querySelector('[data-state="loading"]')).not.toBeNull();
+    expect(screen.queryByText(STUDY_FIRST_RUN)).toBeNull();
+  });
+
+  it("says at once that nothing was opened on this device, without waiting for the positions of other devices", () => {
+    mocks.resume.mockImplementation(() => new Promise(() => undefined)); // never answers
+    page(<StudyHome />);
+    expect(screen.getByText(STUDY_FIRST_RUN)).toBeInTheDocument();
+    expect(screen.queryByText(/Looking for where you left off/)).toBeNull();
+  });
+
+  it("says after two seconds what a slow load is doing, and not before", () => {
+    vi.useFakeTimers();
+    setApp({ workspace: undefined, workspaceLoading: true });
+    const { unmount } = page(<StudyHome />);
+    expect(screen.queryByText(STUDY_READING_LINE)).toBeNull();
+    act(() => { vi.advanceTimersByTime(1_900); });
+    expect(screen.queryByText(STUDY_READING_LINE)).toBeNull();
+    act(() => { vi.advanceTimersByTime(200); });
+    expect(screen.getByTestId("study-status")).toHaveTextContent(STUDY_READING_LINE);
+    unmount();
+
+    // the same while the lectures of the chosen course are read
+    setApp();
+    mocks.course.mockImplementation((id?: string) => query(undefined, { isLoading: !!id }));
+    page(<StudyHome />);
+    expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByText(STUDY_READING_LINE)).toBeNull();
+    act(() => { vi.advanceTimersByTime(2_100); });
+    expect(screen.getByTestId("study-status")).toHaveTextContent(STUDY_READING_LINE);
+  });
+
+  it("is not busy and says nothing about reading once everything is there", () => {
+    vi.useFakeTimers();
+    page(<StudyHome />);
+    act(() => { vi.advanceTimersByTime(5_000); });
+    expect(screen.getByTestId("study-home")).not.toHaveAttribute("aria-busy");
+    expect(screen.getByRole("tabpanel")).not.toHaveAttribute("aria-busy");
+    expect(screen.getByTestId("study-status")).toBeEmptyDOMElement();
+  });
+
+  it("shows the lectures it had when you come back while the course is being read again", () => {
+    const client = newClient();
+    const first = page(<StudyHome />, "/study", client);
+    expect(within(screen.getByRole("tabpanel")).getAllByRole("listitem")).toHaveLength(2);
+    first.unmount();
+    // back from a lecture: the cached answer is gone and the course is read again
+    mocks.course.mockImplementation((id?: string) => query(undefined, { isLoading: !!id }));
+    mocks.timing.mockImplementation((id?: string) => query(undefined, { isLoading: !!id }));
+    page(<StudyHome />, "/study", client);
+    const rows = within(screen.getByRole("tabpanel")).getAllByRole("listitem");
+    expect(rows).toHaveLength(2);
+    expect(text(rows[0]!)).toContain("12 pages, recording 1 h 20 min, 4 ranges, 8 questions"); // with the timing words it had
+    expect(screen.queryByText("Loading lectures…")).toBeNull();
+    expect(screen.getByTestId("study-home")).not.toHaveAttribute("aria-busy");
+  });
+
+  it("still says so when reading the course again fails", () => {
+    const client = newClient();
+    page(<StudyHome />, "/study", client).unmount();
+    mocks.course.mockImplementation((id?: string) => query(undefined, { isError: !!id, error: id ? new Error("The Brain did not answer.") : null }));
+    page(<StudyHome />, "/study", client);
+    expect(within(screen.getByRole("tabpanel")).getByRole("alert")).toHaveTextContent("The Brain did not answer.");
+  });
+
+  it("does not call an address unknown while the courses are still being read", () => {
+    window.localStorage.setItem("ll.study.courses", coursesToRemember({ fixture_label: null, courses: COURSES.slice(0, 2) }));
+    setApp({ workspace: undefined, workspaceLoading: true });
+    page(<StudyHome />, "/courses/sample-d");
+    expect(screen.queryByRole("heading", { name: "No course is configured under this address" })).toBeNull();
   });
 });
 

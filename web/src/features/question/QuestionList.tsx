@@ -14,6 +14,10 @@
 // A question with none of them shows one of the two no-link lines with its recorded reason; "no slide named" alone is
 // never written. Wording comes from lib/labels; nothing here derives a state from a count or a file name. Rows from a
 // Brain that sends no R2 field fall back to the anchors of the course record and claim nothing more.
+//
+// Sizes (R2-V7): every SENTENCE of an entry is set at the reading size (the prompt, what a link rests on, its reason,
+// the note under Accept and Reject); the interface size is kept for single labels (the question's name, the state
+// word, "Sources") and for the buttons. A source of the Sources line is one press target that holds its whole label.
 import { createContext, useContext, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -23,15 +27,16 @@ import { BasisLabel, StateLabel } from "@/components/labels";
 import { Button, EmptyState, ErrorState, LoadingState, PageHeader, StaleNotice, cn } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import {
-  CATALOG_FIELD_LABEL, DECISION_NOTE, NARROWED_SENTENCE, NO_LINK_LINE, QUESTION_LIST_LABEL, R2_ACTION, TIE_SENTENCE, countLabel, nb, noLinkSentence, pageRef, pageRuns, pageSupportCount,
+  CATALOG_FIELD_LABEL, DECISION_NOTE, NARROWED_SENTENCE, NO_LINK_LINE, QUESTION_LIST_LABEL, R2_ACTION, TIE_SENTENCE, countLabel, criterionName, nb, noLinkSentence, pageRef, pageRuns, pageSupportCount,
   pageSupportSentence, pagesRef, positionLabel, relatedSentence, sectionTieSentence, staleViewLine, suggestionCheckOf, supportSentence, transcriptLinesRef,
 } from "@/lib/labels";
 import { queryKeys, useCourse, useQuestionBank, useSuggestionDecision } from "@/lib/queries";
-import { lectureQuestionCounts, whereLine, type IdentityView } from "@/lib/r2";
+import { lectureQuestionCounts, questionDivisionSentence, whereLine, type IdentityView } from "@/lib/r2";
 import type {
   CatalogField, EvidenceObject, LectureQuestionTie, LectureSuggestedTie, LectureView, LineRange, NoLink, QuestionAnchor, QuestionRow, RelatedQuestion, SectionTieDetail, SlidePosition,
-  SlideQuestionTie, SlideSuggestedTie, SuggestionDecision, SuggestionHistory,
+  SlideQuestionTie, SlideSuggestedTie, SuggestionDecision, SuggestionHistory, TieCriterion,
 } from "@/lib/types";
+import { Page, Picker } from "@/features/search/SearchOverlay";
 
 const rangesText = (ranges: Array<[number, number]>) => ranges.map(([a, b]) => (a === b ? String(a) : `${a}–${b}`)).join(", ");
 
@@ -75,6 +80,36 @@ const nameText = (question: Pick<EntryQuestion, "question_id" | "collection" | "
   const { place, title } = questionName(question);
   return title ? `${place} · ${title}` : place;
 };
+
+/** One run of a prompt: plain, or the words between a pair of emphasis marks. */
+export interface PromptPart { text: string; mark: "strong" | "em" | null }
+// A pair of ** or * that hugs its words and stands at a word edge, as the course catalog writes a prompt's lead-in
+// ("**Model one cell.** Find …"). An asterisk of a formula (2*x*y, a * b) and an unclosed mark are left as written.
+const EMPHASIS = /(?<![\w*\\])(\*\*|\*)(?=[^\s*])([^*\n]*?[^\s*])\1(?![\w*])/g;
+/**
+ * A catalogued prompt as runs, its emphasis marks read instead of printed. Only `**strong**` and `*emphasis*` are read;
+ * every other character of the wording is kept as recorded (no list, heading, link or underscore is interpreted).
+ */
+export function promptParts(text: string): PromptPart[] {
+  const parts: PromptPart[] = [];
+  let at = 0;
+  for (const match of text.matchAll(EMPHASIS)) {
+    const start = match.index ?? 0;
+    if (start > at) parts.push({ text: text.slice(at, start), mark: null });
+    parts.push({ text: match[2]!, mark: match[1] === "**" ? "strong" : "em" });
+    at = start + match[0].length;
+  }
+  if (at < text.length) parts.push({ text: text.slice(at), mark: null });
+  return parts;
+}
+/** The wording of a question with its emphasis drawn; the words themselves are the catalog's, unchanged. */
+export function PromptText({ children }: { children: string }) {
+  return (
+    <>
+      {promptParts(children).map((part, index) => (part.mark === "strong" ? <strong key={index}>{part.text}</strong> : part.mark === "em" ? <em key={index}>{part.text}</em> : <span key={index}>{part.text}</span>))}
+    </>
+  );
+}
 
 /** In place of the wording of a question whose wording is kept in its source (design spec 5.9). */
 export const SOURCE_WORDING_SENTENCE = "The wording of this question is kept in its original source. Open the source to read it.";
@@ -179,7 +214,13 @@ export interface QuestionNav {
   fileName?: (sourceId: string) => string | null;
   /** The Brain refused a decision because the list is older than the suggestions (409). */
   onConflict?: () => void;
+  /**
+   * A decision on a suggested link was sent ("sent", at the press) or was not recorded ("failed"). The list uses it to
+   * keep a line where a rejected link stood, since the link itself leaves the list with the next view.
+   */
+  onDecide?: (event: DecisionEvent) => void;
 }
+export interface DecisionEvent { suggestionId: string; decision: SuggestionDecision; outcome: "sent" | "failed" }
 const NavContext = createContext<QuestionNav>({});
 /** Gives the entries under it the lecture they stand in. Without it an entry links to the lecture or the file by address. */
 export const QuestionNavProvider = NavContext.Provider;
@@ -191,13 +232,29 @@ const lectureHref = (courseId: string, lectureId: string, query: Record<string, 
 
 interface RefTarget { courseId: string; lectureId: string | null; sourceId: string | null; onDeck: boolean }
 
-/** One page citation: a link that turns the slide (or opens the lecture or the file at that page), then its qualifier. The page on screen is bold text. */
-function PageLink({ citation, target }: { citation: PageCitation; target: RefTarget }) {
+// A source of the Sources line is one press target that holds its whole label ("p. 4  build 1 of 3"): the small text
+// button of the sheet, 28 px high and 44 px to a finger, the page in the label's weight and what follows it in muted
+// words. The page on screen is no link: it wears the selection idiom (tint, accent text, a 1.5 px ring) and says "on screen".
+const SOURCE_BUTTON = "ll-btn ll-btn-xs ll-num gap-1.5 whitespace-nowrap font-normal";
+const SOURCE_HERE = "ll-num inline-flex min-h-7 items-center gap-1.5 whitespace-nowrap rounded-row bg-tint px-2.5 py-0.5 text-ui shadow-[inset_0_0_0_1.5px_var(--ll-accent-text)]";
+const SOURCE_PLAIN = "ll-num inline-flex min-h-7 items-center gap-1.5 whitespace-nowrap text-ui";
+
+/**
+ * One page citation: a link that turns the slide (or opens the lecture or the file at that page), then its qualifier.
+ * In a sentence it is a text link and the page on screen is bold text; `as="source"` (the Sources line) makes it one
+ * press target holding the qualifier too, and marks the page on screen instead.
+ */
+function PageLink({ citation, target, as = "text" }: { citation: PageCitation; target: RefTarget; as?: "text" | "source" }) {
   const nav = useQuestionNav();
+  const source = as === "source";
   const qualifier = citation.qualifier ? <>{" "}<span className="ll-qualifier">{citation.qualifier}</span></> : null;
-  if (citation.current) return <span className="whitespace-nowrap"><b className="ll-num font-semibold text-ink">{citation.label}</b>{qualifier}</span>;
+  if (citation.current) {
+    return source ? <span className={SOURCE_HERE} aria-current="page"><b className="font-semibold text-accent-text">{citation.label}</b>{qualifier}</span>
+      : <span className="whitespace-nowrap"><b className="ll-num font-semibold text-ink">{citation.label}</b>{qualifier}</span>;
+  }
   const here = target.onDeck && !!nav.onGoToPage && (target.lectureId === null || target.lectureId === (nav.lectureId ?? null));
-  const className = "ll-link ll-num";
+  const className = source ? SOURCE_BUTTON : "ll-link ll-num";
+  const inside = source ? <><span className="font-semibold">{citation.label}</span>{qualifier}</> : citation.label;
   let link: ReactNode;
   if (here) {
     link = <a className={className} href={`?page=${citation.page}`} title={`Turn the slide to page ${citation.page}`}
@@ -205,30 +262,32 @@ function PageLink({ citation, target }: { citation: PageCitation; target: RefTar
         if (!plainClick(event)) return;
         event.preventDefault();
         nav.onGoToPage!(citation.page);
-      }}>{citation.label}</a>;
-  } else if (target.onDeck && target.lectureId) link = <Link className={className} to={lectureHref(target.courseId, target.lectureId, { page: citation.page })}>{citation.label}</Link>;
-  else if (target.sourceId) link = <Link className={className} to={`/courses/${target.courseId}/sources/${encodeURIComponent(target.sourceId)}?page=${citation.page}`}>{citation.label}</Link>;
-  else link = <span className="ll-num">{citation.label}</span>;
-  return <span className="whitespace-nowrap">{link}{qualifier}</span>;
+      }}>{inside}</a>;
+  } else if (target.onDeck && target.lectureId) link = <Link className={className} to={lectureHref(target.courseId, target.lectureId, { page: citation.page })}>{inside}</Link>;
+  else if (target.sourceId) link = <Link className={className} to={`/courses/${target.courseId}/sources/${encodeURIComponent(target.sourceId)}?page=${citation.page}`}>{inside}</Link>;
+  else link = source ? <span className={SOURCE_PLAIN}>{inside}</span> : <span className="ll-num">{citation.label}</span>;
+  return source ? link : <span className="whitespace-nowrap">{link}{qualifier}</span>;
 }
 
 /** Transcript lines as one citation: it opens the Transcript tab at those lines. Lines are never worded as pages. */
-function LinesLink({ lines, target }: { lines: readonly LineRange[]; target: RefTarget }) {
+function LinesLink({ lines, target, as = "text" }: { lines: readonly LineRange[]; target: RefTarget; as?: "text" | "source" }) {
   const nav = useQuestionNav();
   const label = transcriptLinesRef(lines);
   const first = lines[0];
   if (!label || !first) return null;
+  const source = as === "source";
+  const className = source ? cn(SOURCE_BUTTON, "font-semibold") : "ll-link ll-num";
   const here = !!nav.onOpenLines && (target.lectureId === null || target.lectureId === (nav.lectureId ?? null));
   if (here) {
-    return <a className="ll-link ll-num" href={`?panel=transcript&line=${first[0]}`} title="Open these lines in the transcript"
+    return <a className={className} href={`?panel=transcript&line=${first[0]}`} title="Open these lines in the transcript"
       onClick={(event) => {
         if (!plainClick(event)) return;
         event.preventDefault();
         nav.onOpenLines!(first[0], first[1]);
       }}>{label}</a>;
   }
-  if (target.lectureId) return <Link className="ll-link ll-num" to={lectureHref(target.courseId, target.lectureId, { panel: "transcript", line: first[0] })}>{label}</Link>;
-  return <span className="ll-num">{label}</span>;
+  if (target.lectureId) return <Link className={className} to={lectureHref(target.courseId, target.lectureId, { panel: "transcript", line: first[0] })}>{label}</Link>;
+  return <span className={source ? SOURCE_PLAIN : "ll-num"}>{label}</span>;
 }
 
 const listedNodes = (items: ReactNode[]): ReactNode[] => items.flatMap((item, index) => (index === 0 ? [item] : [index === items.length - 1 ? " and " : ", ", item]))
@@ -243,57 +302,113 @@ function refNodes(ref: Pick<CourseRef, "pages" | "lines">, target: RefTarget): R
 
 // ---- the basis of a link ------------------------------------------------------------------------------------------------
 const sentenceCase = (text: string): string => (text ? text[0]!.toUpperCase() + text.slice(1) : text);
+const listedWords = (items: readonly string[]): string => (items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`);
 const BLOCK = "flex flex-col gap-1";
 /** Under a basis label, aligned with its words (the glyph is 15 px and 6 px away). */
 const UNDER = "pl-[21px]";
+/**
+ * The measure of a sentence of a question entry. The sheet's 68ch lets a dense line of this face reach 85 characters
+ * at the 18 px reading size (measured at 2560 px); 62ch keeps every rendered line under the 80 the contract allows (R2-V6).
+ */
+export const PROSE = "max-w-[62ch]";
+/** A sentence of an entry: the reading size, in muted words, on the measure of prose. */
+const SENTENCE = `${PROSE} text-read text-muted`;
+/** A basis label whose words are a sentence: the label's own class sets the interface size, so the reading size and the glyph's place on the first line are set here. */
+const BASIS = `${PROSE} text-read [&>svg]:mt-[calc((var(--ll-lh-read)-15px)/2)]`;
 
-/** Accept and Reject on a suggested link without a decision; Take back on one the learner confirmed. The decision is the learner's own local record. */
-function DecisionControls({ courseId, suggestionId, decision, about }: { courseId: string; suggestionId: string; decision: "confirmed" | "rejected" | null; about: string }) {
+/** What a rejected link leaves in its place: "You rejected the suggested link pp. 5–6." */
+export const rejectedSentence = (pages: readonly number[]): string => `You rejected the suggested link${pages.length ? ` ${pagesRef(pages)}` : ""}.`;
+
+/** Sends a decision on one suggested link and tells the list it stands in; a 409 goes to the list, any other refusal is said beside the button. */
+function useDecide(courseId: string, suggestionId: string) {
   const nav = useQuestionNav();
   const mutation = useSuggestionDecision(courseId);
   const [failure, setFailure] = useState<string | null>(null);
   const send = (next: SuggestionDecision) => {
     setFailure(null);
+    nav.onDecide?.({ suggestionId, decision: next, outcome: "sent" });
     mutation.mutate({ suggestionId, decision: next }, {
       onError: (error) => {
+        nav.onDecide?.({ suggestionId, decision: next, outcome: "failed" });
         // A decision made against an older list: the list says so and is read again; nothing was recorded.
         if (error instanceof ApiError && error.status === 409) nav.onConflict?.();
         else setFailure(error.message);
       },
     });
   };
-  const sending = mutation.isPending ? mutation.variables?.decision : null;
+  return { send, failure, pending: mutation.isPending, sending: mutation.isPending ? mutation.variables?.decision ?? null : null };
+}
+const NotRecorded = ({ failure }: { failure: string | null }) => (failure ? <p role="alert" className={SENTENCE}><span className="font-semibold text-ink">The decision was not recorded.</span> {failure}</p> : null);
+
+/** Accept and Reject on a suggested link without a decision; Take back on one the learner confirmed. The decision is the learner's own local record. */
+function DecisionControls({ courseId, suggestionId, decision, about }: { courseId: string; suggestionId: string; decision: "confirmed" | "rejected" | null; about: string }) {
+  const { send, failure, pending, sending } = useDecide(courseId, suggestionId);
   return (
     <div className={cn(UNDER, "flex flex-col gap-1")} data-testid="question-decision">
       {decision === null ? (
         <>
           <div className="mt-0.5 flex flex-wrap items-center gap-2">
-            <Button size="xs" busy={sending === "confirmed"} disabled={mutation.isPending} aria-label={`${R2_ACTION.accept} the suggested link of ${about}`} onClick={() => send("confirmed")}>{R2_ACTION.accept}</Button>
-            <Button size="xs" busy={sending === "rejected"} disabled={mutation.isPending} aria-label={`${R2_ACTION.reject} the suggested link of ${about}`} onClick={() => send("rejected")}>{R2_ACTION.reject}</Button>
+            <Button size="xs" busy={sending === "confirmed"} disabled={pending} aria-label={`${R2_ACTION.accept} the suggested link of ${about}`} onClick={() => send("confirmed")}>{R2_ACTION.accept}</Button>
+            <Button size="xs" busy={sending === "rejected"} disabled={pending} aria-label={`${R2_ACTION.reject} the suggested link of ${about}`} onClick={() => send("rejected")}>{R2_ACTION.reject}</Button>
           </div>
-          <p className="text-ui text-muted">{DECISION_NOTE}</p>
+          <p className={SENTENCE}>{DECISION_NOTE}</p>
         </>
       ) : (
         <div className="mt-0.5">
-          <Button size="xs" busy={sending === "cleared"} disabled={mutation.isPending} aria-label={`${R2_ACTION.take_back} your decision on the suggested link of ${about}`} onClick={() => send("cleared")}>{R2_ACTION.take_back}</Button>
+          <Button size="xs" busy={sending === "cleared"} disabled={pending} aria-label={`${R2_ACTION.take_back} your decision on the suggested link of ${about}`} onClick={() => send("cleared")}>{R2_ACTION.take_back}</Button>
         </div>
       )}
-      {failure && <p role="alert" className="text-ui text-muted"><span className="font-semibold text-ink">The decision was not recorded.</span> {failure}</p>}
+      <NotRecorded failure={failure} />
     </div>
   );
 }
 
+/**
+ * What Reject leaves where the link stood, until the page changes: what was rejected and Take back beside it. The
+ * rejected link is not a link any more (it stays in the history of the lecture's list); this line is only the way back.
+ * `name` heads the line when the question itself left the list with its link.
+ */
+export function RejectedStub({ courseId, suggestionId, pages, about, name, as: Tag = "div", className }: {
+  courseId: string; suggestionId: string; pages: readonly number[]; about: string; name?: ReactNode; as?: "li" | "div"; className?: string;
+}) {
+  const { send, failure, pending, sending } = useDecide(courseId, suggestionId);
+  return (
+    <Tag className={cn("flex flex-col gap-1", className)} data-testid="rejected-stub" data-suggestion-id={suggestionId}>
+      {name ? <p className="min-w-0 text-ui font-semibold text-muted [overflow-wrap:anywhere]">{name}</p> : null}
+      <p className={cn(SENTENCE, "flex flex-wrap items-center gap-x-3 gap-y-1")}>
+        <span>{rejectedSentence(pages)}</span>
+        <Button size="xs" busy={sending === "cleared"} disabled={pending} aria-label={`${R2_ACTION.take_back} your decision on the suggested link of ${about}`} onClick={() => send("cleared")}>{R2_ACTION.take_back}</Button>
+      </p>
+      <NotRecorded failure={failure} />
+    </Tag>
+  );
+}
+
 type SuggestedTie = SlideSuggestedTie | LectureSuggestedTie;
-/** What follows the support sentence of every suggested link: what the second pass did to it, and the producer's reason, verbatim. */
-function SuggestionTail({ tie }: { tie: SuggestedTie }) {
+/** After the support sentence of a suggested link: what the second pass did to it, in its own words. */
+function CheckNotes({ tie }: { tie: SuggestedTie }) {
   const check = suggestionCheckOf(tie);
   return (
     <>
       {tie.verdict === "narrowed" && <>{" "}{NARROWED_SENTENCE}</>}
       {check === "rejected_by_check" && tie.verdict_note ? <>{" "}{tie.verdict_note}</> : null}
-      {tie.rationale ? <>{" "}Why: {tie.rationale}</> : null}
     </>
   );
+}
+/** The producer's reason for a suggested link, verbatim, as a paragraph of its own under the support sentence. */
+function Why({ tie }: { tie: SuggestedTie }) {
+  return tie.rationale ? <p className={cn(UNDER, SENTENCE)} data-testid="question-rationale"><span className="text-ink">Why:</span> {tie.rationale}</p> : null;
+}
+
+/**
+ * The criteria of a link that its producer placed on this page, by name; null when it made no page-by-page statement,
+ * when what it placed here does not add up to the count shown, or when the page carries every criterion the link names
+ * (they are named in the sentence before).
+ */
+function criteriaNamedHere(criteria: readonly TieCriterion[] | null | undefined, page: number, count: number | null): string | null {
+  const all = criteria ?? [];
+  const here = all.filter((criterion) => (criterion.pages ?? []).includes(page));
+  return here.length > 0 && here.length === count && here.length < all.length ? listedWords(here.map(criterionName)) : null;
 }
 
 /** A tie of the slide on screen (`slides[].question_ties`): one basis label, its sentence, and where its support is inside a group. */
@@ -301,10 +416,14 @@ export function SlideTieBasis({ courseId, tie, identity, about }: { courseId: st
   const where = whereLine(identity, tie);
   const whereNode = where ? <>{" "}<span className="text-ink" data-testid="question-tie">{sentenceCase(where)}.</span></> : null;
   if (tie.tie === "agent_inferred") {
-    const here = pageSupportSentence(pageSupportCount(tie, identity.page), tie.criteria_total);
+    const count = pageSupportCount(tie, identity.page);
+    const supported = pageSupportSentence(count, tie.criteria_total);
+    const named = supported ? criteriaNamedHere(tie.criteria, identity.page, count) : null;
+    const here = supported && named ? `${supported.replace(/\.$/, "")}: ${named}.` : supported;
     return (
       <div className={BLOCK} data-testid="question-basis" data-tie="agent_inferred">
-        <BasisLabel tie={tie} sentence={<>{supportSentence(tie)}{here ? <>{" "}<strong className="font-semibold text-ink">{here}</strong></> : null}<SuggestionTail tie={tie} />{whereNode}</>} />
+        <BasisLabel tie={tie} className={BASIS} sentence={<>{supportSentence(tie)}{here ? <>{" "}<strong className="font-semibold text-ink">{here}</strong></> : null}<CheckNotes tie={tie} />{whereNode}</>} />
+        <Why tie={tie} />
         <DecisionControls courseId={courseId} suggestionId={tie.suggestion_id} decision={tie.learner_decision} about={about} />
       </div>
     );
@@ -314,7 +433,7 @@ export function SlideTieBasis({ courseId, tie, identity, about }: { courseId: st
   const elsewhere = tie.why?.trim() || `${tie.tie === "exact" ? "A reviewed anchor of the course record names" : "The course record names"} ${pagesRef(tie.support_pages) || "another page of this sequence"}.`;
   return (
     <div className={BLOCK} data-testid="question-basis" data-tie={tie.tie}>
-      <BasisLabel tie={tie} sentence={<>{named ? TIE_SENTENCE[tie.tie] : elsewhere}{tie.catalog_field === "page" ? <>{" "}{sentenceCase(CATALOG_FIELD_LABEL.page)}.</> : null}{whereNode}</>} />
+      <BasisLabel tie={tie} className={BASIS} sentence={<>{named ? TIE_SENTENCE[tie.tie] : elsewhere}{tie.catalog_field === "page" ? <>{" "}{sentenceCase(CATALOG_FIELD_LABEL.page)}.</> : null}{whereNode}</>} />
     </div>
   );
 }
@@ -328,7 +447,7 @@ export function CourseRefBasis({ courseId, courseRef }: { courseId: string; cour
   const opening = courseRef.tie === "exact" ? "A reviewed anchor of the course record names" : "The course record names";
   return (
     <div className={BLOCK} data-testid="question-basis" data-tie={courseRef.tie}>
-      <BasisLabel tie={{ tie: courseRef.tie }} sentence={<>
+      <BasisLabel tie={{ tie: courseRef.tie }} className={BASIS} sentence={<>
         {refs.length ? <>{opening} {listedNodes(refs)}{file ? <> of <span className="break-words">{file}</span></> : null}.</> : TIE_SENTENCE[courseRef.tie]}
         {courseRef.tie === "stated" && courseRef.pages.length > 0 ? " Its page basis is not reviewed." : ""}
         {courseRef.catalogField === "page" ? <>{" "}{sentenceCase(CATALOG_FIELD_LABEL.page)}.</> : null}
@@ -341,7 +460,7 @@ export function CourseRefBasis({ courseId, courseRef }: { courseId: string; cour
 export function SectionTieBasis({ section }: { section: SectionTieDetail | null | undefined }) {
   return (
     <div className={BLOCK} data-testid="question-basis" data-tie="section">
-      <BasisLabel tie={{ tie: "stated", granularity: "section" }} sentence={sectionTieSentence(section)} />
+      <BasisLabel tie={{ tie: "stated", granularity: "section" }} className={BASIS} sentence={sectionTieSentence(section)} />
     </div>
   );
 }
@@ -355,10 +474,11 @@ export function LectureSuggestedBasis({ courseId, tie, about }: { courseId: stri
   const counted = tie.criteria_total > 0 && support.startsWith("Supports ");
   return (
     <div className={BLOCK} data-testid="question-basis" data-tie="agent_inferred">
-      <BasisLabel tie={tie} sentence={<>
+      <BasisLabel tie={tie} className={BASIS} sentence={<>
         {pages.length === 0 ? support : counted ? <>{listedNodes(pages)} {single ? "supports" : "support"} {support.slice("Supports ".length)}</> : <>Names {listedNodes(pages)}. {support}</>}
-        <SuggestionTail tie={tie} />
+        <CheckNotes tie={tie} />
       </>} />
+      <Why tie={tie} />
       <DecisionControls courseId={courseId} suggestionId={tie.suggestion_id} decision={tie.learner_decision} about={about} />
     </div>
   );
@@ -368,7 +488,7 @@ export function LectureSuggestedBasis({ courseId, tie, about }: { courseId: stri
 export function RelatedBasis({ via }: { via: RelatedQuestion["via_concepts"] | null | undefined }) {
   return (
     <div className={BLOCK} data-testid="question-basis" data-tie="concept_related">
-      <BasisLabel tie={{ tie: "concept_related" }} sentence={relatedSentence(via)} />
+      <BasisLabel tie={{ tie: "concept_related" }} className={BASIS} sentence={relatedSentence(via)} />
     </div>
   );
 }
@@ -382,7 +502,7 @@ export function NoLinkLine({ courseId, noLink, history, lectureId, about }: { co
   const rejected = noLink.state === "no_suggestion" && noLink.reason === "rejected_by_learner" ? history?.rejected_by_learner ?? [] : [];
   return (
     <div className={BLOCK} data-testid="question-no-link" data-state={noLink.state}>
-      <span className="ll-basis">
+      <span className={cn("ll-basis", BASIS)}>
         <Minus aria-hidden />
         <span className="min-w-0">
           <span className="ll-basis-strong">{NO_LINK_LINE[noLink.state]?.label ?? String(noLink.state).replace(/_/g, " ")}.</span>{" "}{sentenceCase(noLinkSentence(noLink))}
@@ -391,7 +511,7 @@ export function NoLinkLine({ courseId, noLink, history, lectureId, about }: { co
       </span>
       {shown && rejected.map((entry) => (
         <div key={entry.suggestion_id} className={cn(UNDER, "flex flex-col gap-1")} data-testid="rejected-suggestion">
-          <p className="text-ui text-muted">
+          <p className={SENTENCE}>
             The link you rejected{entry.pages.length ? <> named {listedNodes(pageCitations(entry.pages).map((citation) => <PageLink key={citation.page} citation={citation}
               target={{ courseId, lectureId: entry.lecture_id ?? lectureId ?? null, sourceId: entry.source_id, onDeck: true }} />))}</> : null}. It is not shown as a link.
           </p>
@@ -440,7 +560,7 @@ export function QuestionEntry({ courseId, question, evidence, variant = "bank", 
         </p>
         {evidence ? <StateLabel evidence={evidence} /> : null}
       </div>
-      {wording && <p className={cn("ll-measure text-read", !question.prompt_in_index && "text-muted")} data-testid="question-prompt">{wording}</p>}
+      {wording && <p className={cn(PROSE, "text-read", !question.prompt_in_index && "text-muted")} data-testid="question-prompt">{question.prompt_in_index ? <PromptText>{wording}</PromptText> : wording}</p>}
       {sources}
       {children}
       {!compact && (
@@ -454,17 +574,23 @@ export function QuestionEntry({ courseId, question, evidence, variant = "bank", 
   );
 }
 
-/** The Sources line of an entry: the pages its ties name as citations, then its transcript lines. */
+/**
+ * The Sources line of an entry: the pages its ties name, then its transcript lines, each one press target with its
+ * whole label inside; the page on screen is marked and is no link. On a touch screen the rows stand further apart, so
+ * the 44 px press areas of two rows never meet.
+ */
 export function SourcesLine({ courseId, pages, lines, lectureId }: { courseId: string; pages: readonly number[]; lines: readonly LineRange[]; lectureId: string | null }) {
   const nav = useQuestionNav();
   const target: RefTarget = { courseId, lectureId, sourceId: null, onDeck: true };
   const cited = pageCitations(pages, { current: nav.page ?? null, positionOf: nav.positionOf });
   if (cited.length === 0 && lines.length === 0) return null;
   return (
-    <p className="flex flex-wrap gap-x-4 text-ui leading-6" data-testid="question-sources">
+    <p className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 text-ui" data-testid="question-sources">
       <span className="text-muted">Sources</span>{" "}
-      {cited.map((citation) => <span key={citation.page}><PageLink citation={citation} target={target} />{" "}</span>)}
-      {lines.length > 0 && <LinesLink lines={lines} target={target} />}
+      <span className="flex flex-wrap items-center gap-x-2 gap-y-2 [@media(pointer:coarse)]:gap-y-4">
+        {cited.map((citation) => <span key={citation.page} className="contents"><PageLink citation={citation} target={target} as="source" />{" "}</span>)}
+        {lines.length > 0 && <LinesLink lines={lines} target={target} as="source" />}
+      </span>
     </p>
   );
 }
@@ -531,6 +657,8 @@ export function positionsOf(lecture: Pick<LectureView, "slides">): (page: number
 
 const STEP = 20;
 const words = (value: string): string => value.replace(/_/g, " ");
+/** The value of a filter of the question bank that filters nothing (a picker's option cannot have an empty value). */
+const ANY = "any";
 
 /**
  * The lecture's own list: every question the catalog holds for the lecture, in catalog order, each with all its ties
@@ -555,13 +683,13 @@ export function LectureQuestionsPanel({ courseId, lecture, onGoToPage }: { cours
         {lecture.questions.gap ? (
           <div className="ll-measure flex flex-col gap-1 py-1" role="note">
             <p className="text-ui font-semibold">No question collection for this lecture</p>
-            <p className="text-ui text-muted">{lecture.questions.gap} Nothing was generated to fill the gap.</p>
+            <p className={SENTENCE}>{lecture.questions.gap} Nothing was generated to fill the gap.</p>
           </div>
         ) : (
           <>
-            <p className="ll-measure mb-1 text-ui text-muted" data-testid="lecture-questions-division">
+            <p className={cn(SENTENCE, "mb-1")} data-testid="lecture-questions-division">
               {counts.known
-                ? `${countLabel(counts.all, "question")}: ${counts.courseAnchor} anchored by the course, ${counts.agentInferred} with a suggested link, ${counts.withoutLink} without a link.`
+                ? questionDivisionSentence(counts)
                 : `${lecture.questions.collections.map((c) => `${c.collection}: ${c.count}`).join(" · ")}. These belong to this lecture because the course catalog ties their collection to this unit's files.`}
             </p>
             {all.length > STEP && <input type="search" className="ll-input ll-measure mb-1 mt-1" placeholder="Find a question in this lecture" aria-label="Find a question in this lecture" value={find}
@@ -581,11 +709,11 @@ export function LectureQuestionsPanel({ courseId, lecture, onGoToPage }: { cours
         {related.length > 0 && (
           <section aria-labelledby="lq-related" className="mt-3 border-t border-hairline pt-3" data-testid="lecture-questions-related">
             <h4 id="lq-related" className="flex items-baseline justify-between gap-3 text-ui font-semibold text-muted"><span>Related through another question</span>{" "}<span className="ll-num font-normal">{related.length}</span></h4>
-            <p className="ll-measure mt-1 text-ui text-muted">Not part of this lecture's collections. The course catalog relates each to one of this lecture's questions; a relation is context and grants no credit.</p>
+            <p className={cn(SENTENCE, "mt-1")}>Not part of this lecture's collections. The course catalog relates each to one of this lecture's questions; a relation is context and grants no credit.</p>
             <QuestionEntries>
               {related.map((row) => (
                 <QuestionListItem key={row.question_id} courseId={courseId} row={row} variant="list">
-                  {(row.via ?? []).length > 0 && <p className="text-ui text-muted">{(row.via ?? []).map((v) => `${words(v.relation)} ${v.direction === "from_lecture_question" ? "of" : "for"} ${v.question_id}`).join(" · ")}</p>}
+                  {(row.via ?? []).length > 0 && <p className={SENTENCE}>{(row.via ?? []).map((v) => `${words(v.relation)} ${v.direction === "from_lecture_question" ? "of" : "for"} ${v.question_id}`).join(" · ")}</p>}
                 </QuestionListItem>
               ))}
             </QuestionEntries>
@@ -625,8 +753,11 @@ export function QuestionBankPage() {
   const rows = bank.data.pages.flatMap((p) => p.items);
   const filtered = Object.values(filter).some(Boolean);
   const lectureRow = filter.lecture ? first.lectures.find((l) => l.lecture_id === filter.lecture) : null;
+  // A reading page of the page column (the kit's `Page`): its title starts where every other page's title starts, and
+  // the title, the collections, the filters and the list share one measure, so the list no longer sits under a header
+  // twice its width.
   return (
-    <div className="ll-page" data-testid="question-bank">
+    <Page reading testId="question-bank">
       <PageHeader title="Question bank" subtitle={<span data-testid="bank-total">{first.total} question{first.total === 1 ? "" : "s"} in the course catalog{filtered ? ` · ${first.matching} match the filters` : ""}</span>}
         actions={<><Link className="ll-btn ll-btn-sm ll-btn-quiet" to={`/courses/${courseId}`}>{course.data?.display_name ?? courseId.toUpperCase()}</Link>
           <Link className="ll-btn ll-btn-sm" to="/review" onClick={() => app.setCourseId(courseId)}>Review</Link></>} />
@@ -643,7 +774,7 @@ export function QuestionBankPage() {
                       <span className="flex items-baseline justify-between gap-2"><span className={cn("font-semibold", on && "text-accent-text")}>{c.collection}</span><span className="ll-num text-ui text-muted">{countLabel(c.count, "question")}</span></span>
                       <span className="text-ui text-muted">
                         {(c.lecture_ids ?? []).length ? (c.lecture_ids ?? []).map((l) => l.replace("-", " ")).join(", ") : "not tied to a lecture unit"}
-                        {c.without_wording ? ` · ${c.without_wording} read in the original` : ""}{c.anchor_unresolved ? ` · ${c.anchor_unresolved} name no location` : ""}
+                        {c.without_wording ? ` · ${c.without_wording} read in the original` : ""}{c.anchor_unresolved ? ` · ${c.anchor_unresolved} with no page or line named` : ""}
                       </span>
                     </button>
                   </li>
@@ -651,36 +782,32 @@ export function QuestionBankPage() {
               })}
             </ul>
           </section>
-          <form className="mb-2 flex flex-wrap items-center gap-2" role="search" onSubmit={(e) => { e.preventDefault(); set("q", text.trim()); }}>
-            <input type="search" className="ll-input max-w-sm" placeholder="Search by id, title or wording" aria-label="Search questions" value={text} onChange={(e) => setText(e.target.value)} />
-            <Button type="submit">Search</Button>
-            <select className="ll-input w-auto" aria-label="Lecture" value={filter.lecture ?? ""} onChange={(e) => set("lecture", e.target.value)}>
-              <option value="">Any lecture</option>
-              {first.lectures.map((l) => <option key={l.lecture_id} value={l.lecture_id}>{l.title ?? l.lecture_id} ({l.count})</option>)}
-            </select>
-            <select className="ll-input w-auto" aria-label="Origin" value={filter.origin ?? ""} onChange={(e) => set("origin", e.target.value)}>
-              <option value="">Any origin</option>
-              <option value="course_source">From course material</option>
-              <option value="generated_practice">Generated practice</option>
-            </select>
-            <select className="ll-input w-auto" aria-label="Slide reference" value={filter.anchor ?? ""} onChange={(e) => set("anchor", e.target.value)}>
-              <option value="">Any slide reference</option>
-              <option value="slide_named">Names a slide</option>
-              <option value="no_slide">Names no slide</option>
-              <option value="unresolved">No location in the record</option>
-            </select>
-            {filtered && <Button variant="quiet" onClick={() => { setText(""); setParams(new URLSearchParams(), { replace: true }); }}>Clear filters</Button>}
+          {/* The search field with its button, then the three filters as the app's own pickers (never the browser's select). */}
+          <form className="mb-3 flex flex-col gap-2" role="search" onSubmit={(e) => { e.preventDefault(); set("q", text.trim()); }}>
+            <div className="flex items-center gap-2">
+              <input type="search" className="ll-input min-w-0 flex-1" placeholder="Search by id, title or wording" aria-label="Search questions" value={text} onChange={(e) => setText(e.target.value)} />
+              <Button type="submit">Search</Button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filters">
+              <Picker label="Lecture" testId="bank-filter-lecture" value={filter.lecture ?? ANY} onChange={(value) => set("lecture", value === ANY ? "" : value)}
+                options={[{ value: ANY, label: "Any lecture" }, ...first.lectures.map((l) => ({ value: l.lecture_id, label: `${l.title ?? l.lecture_id} (${l.count})` }))]} />
+              <Picker label="Origin" testId="bank-filter-origin" value={filter.origin ?? ANY} onChange={(value) => set("origin", value === ANY ? "" : value)}
+                options={[{ value: ANY, label: "Any origin" }, { value: "course_source", label: "From course material" }, { value: "generated_practice", label: "Generated practice" }]} />
+              <Picker label="Slide reference" testId="bank-filter-anchor" value={filter.anchor ?? ANY} onChange={(value) => set("anchor", value === ANY ? "" : value)}
+                options={[{ value: ANY, label: "Any slide reference" }, { value: "slide_named", label: "Names a slide" }, { value: "no_slide", label: "Names no slide" }, { value: "unresolved", label: "No location in the record" }]} />
+              {filtered && <Button variant="quiet" onClick={() => { setText(""); setParams(new URLSearchParams(), { replace: true }); }}>Clear filters</Button>}
+            </div>
           </form>
           {conflict && <SuggestionsChangedNotice className="mb-2" onRefresh={() => { setConflict(false); void client.invalidateQueries({ queryKey: ["question-bank", courseId] }); void client.invalidateQueries({ queryKey: queryKeys.lecture(courseId).slice(0, 2) }); }} />}
           {lectureRow?.gap && (
             <div className="ll-measure mb-2 flex flex-col gap-1" role="note">
               <p className="text-ui font-semibold">No question collection for this lecture</p>
-              <p className="text-ui text-muted">{lectureRow.gap} Nothing was generated to fill the gap.</p>
+              <p className={SENTENCE}>{lectureRow.gap} Nothing was generated to fill the gap.</p>
             </div>
           )}
           {rows.length === 0 ? <EmptyState title="No question matches these filters">The catalog still holds {first.total}; clear a filter to see them.</EmptyState> : (
             <QuestionNavProvider value={nav}>
-              <QuestionEntries className="max-w-[80ch]">{rows.map((row) => <QuestionListItem key={row.question_id} courseId={courseId} row={row} />)}</QuestionEntries>
+              <QuestionEntries className="max-w-none">{rows.map((row) => <QuestionListItem key={row.question_id} courseId={courseId} row={row} />)}</QuestionEntries>
             </QuestionNavProvider>
           )}
           <p className="mt-3 flex flex-wrap items-center gap-2 text-ui text-muted" data-testid="bank-count">
@@ -690,14 +817,14 @@ export function QuestionBankPage() {
           {first.guidance.errors.length > 0 && (
             <div className="ll-measure mt-3 flex flex-col gap-1" role="note">
               <p className="text-ui font-semibold">Some assessor guidance entries could not be matched</p>
-              <p className="text-ui text-muted">
+              <p className={SENTENCE}>
                 {first.guidance.errors.length} entr{first.guidance.errors.length === 1 ? "y" : "ies"} in the course's guidance files {first.guidance.errors.length === 1 ? "is" : "are"} not used ({[...new Set(first.guidance.errors.map((e) => words(e.code)))].join(", ")}). Questions stay available; those answers are assessed without that guidance.
               </p>
             </div>
           )}
-          <p className="ll-measure mt-3 text-ui text-muted">{first.note}</p>
+          <p className={cn(SENTENCE, "mt-3")}>{first.note}</p>
         </>
       )}
-    </div>
+    </Page>
   );
 }

@@ -38,14 +38,14 @@ export function DockedTransport({ position, range, available, onToggle, onOpenSl
   const second = range
     ? `${rangeKindParts(range).label}${onPage ? ` for page ${onPage}` : ""}`
     : note !== undefined ? note
-      : pageRanges?.noRange ? noRangeLine(pageRanges.noRange, state?.lecture.recordings ?? []).name
+      : pageRanges?.noRange ? noRangeLine(pageRanges.noRange, state?.lecture.recordings ?? []).brief // the name without its figures: the strip is one short line
         : pageRanges && pageRanges.ranges.length > 0 ? `Page ${onPage} has ${pageRanges.ranges.length === 1 ? "1 range" : `${pageRanges.ranges.length} ranges`}` : null;
   const press = playLabel(position.playing, range);
   return (
     <div role="group" aria-label="Recording" className="relative grid h-[52px] grid-cols-[32px_minmax(0,1fr)] items-center gap-3 border-t border-hairline bg-raised pl-3 pr-4" data-testid="dock">
       {progress !== null && <span aria-hidden className="absolute inset-x-0 -top-px h-0.5"><span className="block h-full bg-accent-text" style={{ width: `${progress * 100}%` }} /></span>}
       <button type="button" onClick={onToggle} aria-label={press} title={press} data-testid="dock-play"
-        className="grid size-8 cursor-pointer place-items-center rounded-full border-0 bg-accent text-on-accent transition-colors duration-[var(--ll-motion-small)] hover:bg-accent-hover">
+        className="relative grid size-8 cursor-pointer place-items-center rounded-full border-0 bg-accent text-on-accent transition-colors duration-[var(--ll-motion-small)] hover:bg-accent-hover after:absolute after:-inset-1.5 after:content-['']">
         {position.playing ? <Pause aria-hidden className="size-4" fill="currentColor" strokeWidth={0} /> : <Play aria-hidden className="size-4 translate-x-px" fill="currentColor" strokeWidth={1.5} />}
       </button>
       <button type="button" onClick={onOpenSlide} data-testid="dock-open"

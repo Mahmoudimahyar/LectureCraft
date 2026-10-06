@@ -20,8 +20,8 @@ import {
   ASSISTANCE_LABEL, CONDITION_LABEL, NODE_TYPE_LABEL, PRIOR_EXPOSURE_LABEL, R2_ACTION, REFERENCE_LABEL, RELATION_LABEL, SKILL_STATUS, TIME_BASIS_LABEL, evidenceSummarySentence, unlistedLabel,
 } from "@/lib/labels";
 import { useConceptGraph, useConcepts, useHistory, useProgress } from "@/lib/queries";
-import type { ConceptEdge, ConceptGraphView, ConceptNode, Episode, EvidenceObject, EvidenceObservation, OutlineNodeView, SkillRow } from "@/lib/types";
-import { Callout, Disclosure, Lead, Picker, ReturnLink } from "@/features/search/SearchOverlay";
+import type { ConceptEdge, ConceptGraphView, ConceptNode, Episode, EvidenceObject, EvidenceObservation, HistoryAttempt, OutlineNodeView, SkillRow } from "@/lib/types";
+import { Callout, Details, Disclosure, Lead, Page, Picker, ReturnLink } from "@/features/search/SearchOverlay";
 import { useSubmitActions } from "@/features/tutor/actions";
 
 const STATUS = SKILL_STATUS as Record<SkillRow["status"], { label: string; tone: "success" | "caution" | "unassessed" | "danger" | "neutral" }>;
@@ -77,6 +77,31 @@ function AttemptConditions({ episode, observation }: { episode: Episode; observa
  */
 export function attemptRecordLine(episode: Pick<Episode, "reference_access" | "confidence" | "prior_exposure">): string {
   return `${REFERENCE_LABEL[episode.reference_access] ?? unlistedLabel(episode.reference_access)} · confidence ${episode.confidence} · prior exposure: ${unlistedLabel(episode.prior_exposure)}`;
+}
+
+// ---- plain words where an identifier stood (tested in tests/features/other-pages-seams.test.tsx) -----------------------------
+/**
+ * The rule versions of the facet table as a sentence. The coverage figures keep their rule versions beside them (R1-F3);
+ * what goes is the identifier ("evidence-conditions/1"), whose number is all it says. A version that cannot be read
+ * from the identifier is shown as recorded; no number is made up for it.
+ */
+export function ruleVersionSentence(rules: { evidence_conditions: string; facet_mapping: number | string }): string {
+  const version = /\/(\d+)$/.exec(String(rules.evidence_conditions))?.[1];
+  const conditions = version ? `version ${version} of the rules for evidence conditions` : `the rules for evidence conditions recorded as “${rules.evidence_conditions}”`;
+  return `Counted with ${conditions} and version ${rules.facet_mapping} of the mapping of skills to kinds of performance.`;
+}
+/** The catalog's label of each skill, by skill id. A skill without a label is left out, so that it is named by its identifier. */
+export function skillLabelIndex(skills: ReadonlyArray<Pick<SkillRow, "skill_id" | "label">> | null | undefined): Map<string, string> {
+  const index = new Map<string, string>();
+  for (const skill of skills ?? []) if (skill.label) index.set(skill.skill_id, skill.label);
+  return index;
+}
+/** A skill in the catalog's own words; its identifier, as recorded, only where the catalog sent no label. */
+export const skillLabel = (index: ReadonlyMap<string, string>, skillId: string): string => index.get(skillId) ?? skillId;
+/** The first line of an attempt in the history: when it was recorded, when it happened (never invented), and its mode as recorded. */
+export function attemptWhenLine(attempt: Pick<HistoryAttempt, "mode" | "recorded_at" | "occurred_at" | "time_basis">): string {
+  const happened = attempt.occurred_at ? `happened ${formatWhen(attempt.occurred_at)}` : "time of the response not recorded";
+  return `Recorded ${formatWhen(attempt.recorded_at)} · ${happened} (${TIME_BASIS_LABEL[attempt.time_basis] ?? unlistedLabel(attempt.time_basis)}) · mode: ${unlistedLabel(attempt.mode)}`;
 }
 
 function EvidenceLine({ row }: { row: SkillRow }) {
@@ -159,9 +184,9 @@ export function ProgressPage() {
     return true;
   }), [progress.data, status, conditions]);
 
-  if (!courseId) return <EmptyState title="No course selected">Choose a course in the header.</EmptyState>;
-  if (progress.isLoading) return <LoadingState label="Reading recorded evidence…" />;
-  if (progress.isError || !progress.data) return <ErrorState error={progress.error} retry={() => void progress.refetch()} />;
+  if (!courseId) return <Page><EmptyState title="No course selected">Choose a course in the header.</EmptyState></Page>;
+  if (progress.isLoading) return <Page><LoadingState label="Reading recorded evidence…" /></Page>;
+  if (progress.isError || !progress.data) return <Page><ErrorState error={progress.error} retry={() => void progress.refetch()} /></Page>;
   const data = progress.data;
   const s = data.summary;
   const facts = [
@@ -172,7 +197,7 @@ export function ProgressPage() {
   ];
 
   return (
-    <div className="ll-page">
+    <Page>
       <PageHeader title="Progress" subtitle="What your recorded responses showed — not a score."
         actions={<><Link className="ll-btn" to={`/courses/${courseId}/concepts`}>{R2_ACTION.concept_map}</Link><Link className="ll-btn" to="/history">Study history</Link></>} />
       {data.owner_view_status === "stale" && <Callout tone="caution" className="mb-4" title="The course's own summary view is out of date">Its original attempt records are intact and are what you see here; only the generated summary lags. <Link className="ll-link" to="/settings/maintenance">Maintenance</Link></Callout>}
@@ -183,8 +208,8 @@ export function ProgressPage() {
 
       <section aria-labelledby="facets-h" className="mb-8" data-testid="facet-summary">
         <h2 id="facets-h" className="text-head font-semibold">Recorded evidence by kind of performance</h2>
-        <p className="ll-measure mb-3 mt-1 text-ui text-muted">Unit: distinct skills of this course's catalog ({s.skills}). "Unaided" means an observed, demonstrated response recorded with no assistance, no reference and no known prior exposure.
-          Rules: conditions {data.rules.evidence_conditions}, facet mapping v{data.rules.facet_mapping}.</p>
+        <p className="ll-measure mb-3 mt-1 text-read text-muted">Unit: distinct skills of this course's catalog ({s.skills}). "Unaided" means an observed, demonstrated response recorded with no assistance, no reference and no known prior exposure.{" "}
+          <span data-testid="rule-versions">{ruleVersionSentence(data.rules)}</span></p>
         <div className="ll-region overflow-x-auto px-4 py-2 min-[900px]:px-5" tabIndex={0} role="region" aria-label="Evidence by kind of performance (scrolls sideways on a narrow screen)">
           <table className="ll-num w-full min-w-[46rem] border-collapse text-left text-ui">
             <thead><tr className="border-b border-hairline align-bottom text-muted">
@@ -206,7 +231,7 @@ export function ProgressPage() {
             </tbody>
           </table>
         </div>
-        <p className="ll-measure mt-3 text-ui text-muted" data-testid="criterion-evidence">{data.criterion_evidence.criteria_in_catalog} criteria are listed in the catalog; {data.criterion_evidence.attempts_with_criterion_observations} recorded attempts carry observations per criterion. {data.criterion_evidence.note}</p>
+        <p className="ll-measure mt-3 text-read text-muted" data-testid="criterion-evidence">{data.criterion_evidence.criteria_in_catalog} criteria are listed in the catalog; {data.criterion_evidence.attempts_with_criterion_observations} recorded attempts carry observations per criterion. {data.criterion_evidence.note}</p>
       </section>
 
       <section aria-labelledby="skills-h">
@@ -255,8 +280,8 @@ export function ProgressPage() {
           </ul>
         )}
       </section>
-      <ul className="ll-measure mt-6 list-disc pl-5 text-ui text-muted">{data.notes.map((n) => <li key={n}>{n}</li>)}<li>A due review or time passing is not evidence of forgetting.</li></ul>
-    </div>
+      <ul className="ll-measure mt-6 list-disc pl-5 text-read text-muted">{data.notes.map((n) => <li key={n}>{n}</li>)}<li>A due review or time passing is not evidence of forgetting.</li></ul>
+    </Page>
   );
 }
 
@@ -268,11 +293,11 @@ export function ConceptDetail() {
   const node: ConceptNode | undefined = concepts.data?.nodes[typedId];
   // The five-state evidence of a skill, with its composition, from the node detail the concept views use.
   const detail = useNodeDetail(courseId, typedId, node?.type === "skill");
-  if (concepts.isLoading) return <LoadingState label="Loading structure…" />;
-  if (concepts.isError || !concepts.data) return <><ReturnLink /><ErrorState error={concepts.error} /></>;
+  if (concepts.isLoading) return <Page reading><LoadingState label="Loading structure…" /></Page>;
+  if (concepts.isError || !concepts.data) return <Page reading><ReturnLink /><ErrorState error={concepts.error} /></Page>;
   const view = concepts.data;
   if (!node) {
-    return <><ReturnLink /><EmptyState title="This item is not in the course's catalogs">It may not be mapped yet. That is a gap in the system's mapping, not a statement about what you know.</EmptyState></>;
+    return <Page reading><ReturnLink /><EmptyState title="This item is not in the course's catalogs">It may not be mapped yet. That is a gap in the system's mapping, not a statement about what you know.</EmptyState></Page>;
   }
   const outgoing = view.edges.filter((e) => e.from === typedId);
   const incoming = view.edges.filter((e) => e.to === typedId);
@@ -292,19 +317,19 @@ export function ConceptDetail() {
   const groups = [...group(incoming, "from"), ...group(outgoing, "to")];
   const r2 = detail.data?.evidence;
   return (
-    <div className="ll-page ll-page-reading">
+    <Page reading>
       <ReturnLink />
-      <PageHeader title={node.label} subtitle={<span className="inline-flex flex-wrap items-center gap-x-2 text-ui">{kind && <KindGlyph kind={kind} />}<span className="text-ink">{NODE_TYPE_LABEL[node.type] ?? node.type}</span> <span className="break-all">{node.id}</span></span>} />
+      <PageHeader title={node.label} subtitle={<span className="inline-flex flex-wrap items-center gap-x-2 text-ui">{kind && <KindGlyph kind={kind} />}<span className="text-ink">{NODE_TYPE_LABEL[node.type] ?? node.type}</span></span>} />
       {node.mapping === "system_mapping_incomplete" && <Callout tone="unassessed" className="mb-4" title="System mapping incomplete">This skill is not linked to a concept in the course catalog. That is a coverage gap in the catalog — it says nothing about you.</Callout>}
       {node.type === "skill" && (
         <section className="mb-6 flex flex-col gap-1.5" aria-labelledby="ev-h">
           <h2 id="ev-h" className="text-head font-semibold">Recorded evidence for this skill</h2>
           {r2?.state && <SkillState evidence={r2 as EvidenceObject} />}
-          {r2?.summary && <p className="ll-measure text-ui text-muted">{evidenceSummarySentence(r2.summary)}</p>}
+          {r2?.summary && <p className="ll-measure text-read text-muted">{evidenceSummarySentence(r2.summary)}</p>}
           {Object.keys(evidence).length === 0 ? <p className="text-muted">Not assessed: no attempt has observed this skill.</p> : (
-            <p className="ll-measure text-ui">Outcomes of the recorded observations: {Object.entries(evidence).map(([outcome, count]) => `${count} × ${outcomeWords(outcome)}`).join(", ")}.</p>
+            <p className="ll-measure text-read">Outcomes of the recorded observations: {Object.entries(evidence).map(([outcome, count]) => `${count} × ${outcomeWords(outcome)}`).join(", ")}.</p>
           )}
-          <p className="ll-measure text-ui text-muted">Counts of observations across attempts (a regrade replaces, it does not add). <Link className="ll-link" to="/progress">See the attempts in Progress</Link>.</p>
+          <p className="ll-measure text-read text-muted">Counts of observations across attempts (a regrade replaces, it does not add). <Link className="ll-link" to="/progress">See the attempts in Progress</Link>.</p>
         </section>
       )}
       {groups.length === 0 ? <p className="text-muted">No relationship to other items is recorded.</p> : (
@@ -321,13 +346,14 @@ export function ConceptDetail() {
                   </li>
                 ))}
               </ul>
-              <p className="ll-measure mt-2 text-ui text-muted">Source: {list[0]!.provenance}.{list[0]!.scope === "question_to_question" ? " This is a relation between questions; it is not a concept prerequisite and gives no automatic credit." : ""}</p>
+              <p className="ll-measure mt-2 text-read text-muted">Source: {list[0]!.provenance}.{list[0]!.scope === "question_to_question" ? " This is a relation between questions; it is not a concept prerequisite and gives no automatic credit." : ""}</p>
             </section>
           ))}
         </div>
       )}
-      <p className="ll-measure mt-4 text-ui text-muted">{view.note}</p>
-    </div>
+      <p className="ll-measure mt-4 text-read text-muted">{view.note}</p>
+      <Details className="mt-3" rows={[["Catalog identifier", node.id]]} />
+    </Page>
   );
 }
 
@@ -338,13 +364,17 @@ export function HistoryPage() {
   const history = useHistory(courseId);
   const [filter, setFilter] = useState("");
   const [onlyRevised, setOnlyRevised] = useState(false);
-  if (!courseId) return <EmptyState title="No course selected">Choose a course in the header.</EmptyState>;
-  if (history.isLoading) return <LoadingState label="Reading history…" />;
-  if (history.isError || !history.data) return <ErrorState error={history.error} retry={() => void history.refetch()} />;
+  // Only for the catalog's labels of the skills: an assessment names its skill in words, and by identifier until they load.
+  const progress = useProgress(courseId);
+  const names = useMemo(() => skillLabelIndex(progress.data?.skills), [progress.data]);
+  if (!courseId) return <Page reading><EmptyState title="No course selected">Choose a course in the header.</EmptyState></Page>;
+  if (history.isLoading) return <Page reading><LoadingState label="Reading history…" /></Page>;
+  if (history.isError || !history.data) return <Page reading><ErrorState error={history.error} retry={() => void history.refetch()} /></Page>;
   const data = history.data;
-  const attempts = data.attempts.filter((a) => (!filter || `${a.question.prompt} ${a.attempt_id} ${a.effective.observations.map((o) => o.skill_id).join(" ")}`.toLowerCase().includes(filter.toLowerCase())) && (!onlyRevised || a.revisions.length > 0));
+  // The filter still finds an attempt by its identifier and by a skill's identifier, which now stand under "Details".
+  const attempts = data.attempts.filter((a) => (!filter || `${a.question.prompt} ${a.attempt_id} ${a.effective.observations.map((o) => `${o.skill_id} ${skillLabel(names, o.skill_id)}`).join(" ")}`.toLowerCase().includes(filter.toLowerCase())) && (!onlyRevised || a.revisions.length > 0));
   return (
-    <div className="ll-page ll-page-reading">
+    <Page reading>
       <ReturnLink />
       <PageHeader title="Study history" subtitle={<Lead>{data.note}</Lead>} />
       <Tabs defaultValue="attempts">
@@ -362,9 +392,7 @@ export function HistoryPage() {
                   <li key={a.attempt_id} id={a.attempt_id} aria-current={here ? "true" : undefined}
                     className={cn("relative flex flex-col gap-3 border-t border-hairline p-4 first:border-t-0 first:rounded-t-region last:rounded-b-region min-[900px]:px-5",
                       here && "bg-tint before:absolute before:bottom-4 before:left-0 before:top-4 before:w-[3px] before:rounded-r-[3px] before:bg-accent-text before:content-['']")}>
-                    <p className="ll-measure text-ui text-muted">
-                      <span className="break-all text-ink">{a.attempt_id}</span> · {unlistedLabel(a.mode)} · recorded {formatWhen(a.recorded_at)} · {a.occurred_at ? `happened ${formatWhen(a.occurred_at)}` : "time of the response not recorded"} ({TIME_BASIS_LABEL[a.time_basis] ?? a.time_basis})
-                    </p>
+                    <p className="ll-measure text-ui text-muted">{attemptWhenLine(a)}</p>
                     <div><p className={FIELD}>Question shown</p><p className="ll-measure">{a.question.prompt}</p></div>
                     <div>
                       <p className={FIELD}>Your response {a.response.availability === "full_capture" ? "(full capture)" : a.response.availability === "capture_unavailable" ? "(excerpt; the full capture is no longer available)" : "(excerpt only — the full text was not retained)"}</p>
@@ -374,7 +402,7 @@ export function HistoryPage() {
                       <p className={FIELD}>{a.revisions.length ? "Assessment in effect (after correction)" : "Assessment"}</p>
                       {a.effective.observations.map((o) => (
                         <div key={o.skill_id}>
-                          <p><span className="font-semibold">{outcomeWords(o.outcome)}</span> <span className="break-words text-muted">· {o.skill_id} · {ASSISTANCE_LABEL[o.assistance as string] ?? String(o.assistance)}</span></p>
+                          <p><span className="font-semibold">{outcomeWords(o.outcome)}</span> <span className="break-words text-muted">· {skillLabel(names, o.skill_id)} · {ASSISTANCE_LABEL[o.assistance as string] ?? String(o.assistance)}</span></p>
                           <p className="ll-measure text-muted">{o.analysis}</p>
                         </div>
                       ))}
@@ -383,11 +411,12 @@ export function HistoryPage() {
                     {a.revisions.length > 0 && (
                       <Disclosure className="text-ui" title={`${a.revisions.length} correction${a.revisions.length === 1 ? "" : "s"} — the original assessment is kept`}>
                         <ul className="ll-measure list-disc pb-1 pl-5">
-                          <li>Original: {a.original_observations.map((o) => `${o.skill_id}: ${outcomeWords(o.outcome)}`).join("; ")}</li>
+                          <li>Original: {a.original_observations.map((o) => `${skillLabel(names, o.skill_id)}: ${outcomeWords(o.outcome)}`).join("; ")}</li>
                           {a.revisions.map((r) => <li key={r.event_id}>{formatWhen(r.recorded_at)} — {r.reason} <span className="text-muted">(a regrade of the same response, not a new answer)</span></li>)}
                         </ul>
                       </Disclosure>
                     )}
+                    <Details rows={[["Attempt", a.attempt_id], [a.effective.observations.length === 1 ? "Skill" : "Skills", a.effective.observations.map((o) => o.skill_id).join(", ")], ["Question", a.question.question_id]]} />
                     {a.question.question_id && <div><Link className="ll-btn ll-btn-sm" to={`/courses/${courseId}/questions/${encodeURIComponent(a.question.question_id)}`}>Try again (new answer)</Link></div>}
                   </li>
                 );
@@ -400,23 +429,24 @@ export function HistoryPage() {
             <ul className="ll-region flex flex-col">
               {data.conversations.map((c) => (
                 <li key={c.run_id} className="border-t border-hairline p-4 first:border-t-0 min-[900px]:px-5">
-                  <h2 className="mb-3 break-all text-ui text-muted">{c.run_id}</h2>
+                  <h2 className="mb-3 text-ui text-muted">{c.entries[0]?.at ? `Conversation of ${formatWhen(c.entries[0].at)}` : "Conversation"}</h2>
                   <ol className="flex flex-col gap-3">
                     {c.entries.map((e, i) => (
                       <li key={i} className={cn("flex flex-col gap-0.5", e.kind === "tutor" && "rounded-control bg-pad p-3")}>
                         <span className={FIELD}>{e.kind === "tutor" ? "Tutor reply (as delivered)" : e.kind === "submission" ? `Your ${e.interaction?.replace(/_/g, " ")}` : "Your question"} · {formatWhen(e.at)}</span>
-                        {e.prompt && <p className="ll-measure text-ui text-muted">Asked: {e.prompt}</p>}
+                        {e.prompt && <p className="ll-measure text-read text-muted">Asked: {e.prompt}</p>}
                         <p className="ll-measure whitespace-pre-wrap">{e.text}</p>
                         {e.kind === "learner_question" && <span className="text-ui text-muted">Not assessed</span>}
                       </li>
                     ))}
                   </ol>
+                  <Details className="mt-3" rows={[["Run", c.run_id]]} />
                 </li>
               ))}
             </ul>
           )}
         </TabPanel>
       </Tabs>
-    </div>
+    </Page>
   );
 }

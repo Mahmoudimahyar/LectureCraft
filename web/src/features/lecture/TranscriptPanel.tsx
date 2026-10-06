@@ -1,11 +1,16 @@
 // The Transcript tab (design specification 5.11, UI08): two labelled things that are never mixed (R2-T4).
 //
-//   Course transcript       the course's own text. A line shows a time only where the Brain says it has one: a line the
-//                           accepted text alignment timed (`generated_line_times`), or the first line of a stretch a
-//                           link ties to the recording (`line_times`). Every other line shows its line number and is not
-//                           a link. Pressing a time seeks the ONE player. The lines of the selected range sit under one
-//                           divider that carries what the range is and "Range 1 of 2", with a rule down their left edge;
-//                           the line being spoken is on a pad. Search, follow playback and quoting lines into a question stay.
+//   Course transcript       the course's own text, as SPEECH: one row per line of talk. A line that is only a speaker
+//                           tag ("[Speaker 1]") is folded into the talk that follows it as a muted prefix, shown where
+//                           the speaker changes; a blank line of the file is not drawn. Nothing is renumbered: a row
+//                           keeps the line number of its talk, and stands for its tag's line too (`transcriptRows`).
+//                           A row shows a time only where the Brain says it has one: a line the accepted text alignment
+//                           timed (`generated_line_times`), or the first line of a stretch a link ties to the recording
+//                           (`line_times`). Every other row has an empty gutter (its line number is in the name of its
+//                           quote button) and is not a link. Pressing a time seeks the ONE player. The lines of the
+//                           selected range sit under one divider that carries what the range is and "Range 1 of 2",
+//                           with a rule down their left edge; the line being spoken is on a pad. Search, follow playback
+//                           and quoting lines into a question stay.
 //   Generated speech text   text generated on this PC from the recording, with its own times; labelled generated and
 //                           not reviewed, with what it covers and what was withheld. Gaps are said as gaps, never filled.
 //
@@ -89,6 +94,52 @@ export function linesOfRange(transcript: TimedTranscript | null | undefined, ran
     for (const row of transcript.line_times ?? []) if (same(row.recording_source_id) && Math.min(row.end_ms, range.end_ms) > Math.max(row.start_ms, range.start_ms)) add(row.start, row.end);
   }
   return [...lines].sort((a, b) => a - b);
+}
+
+// ---- rows: speech only -------------------------------------------------------------------------------------------------------
+/**
+ * The speaker a line names when it is nothing but a speaker tag: "[Speaker 1]" (a whole line in square brackets) or
+ * "Dr. Example:" (a few words closed by a colon). null for every line of talk, however short.
+ */
+export function speakerTag(line: string): string | null {
+  const text = line.trim();
+  const bracketed = /^\[([^\[\]]{1,40})\]$/.exec(text);
+  if (bracketed) return bracketed[1]!.trim() || null;
+  const named = /^([^.?!,;:]{1,40}):$/.exec(text);
+  return named && named[1]!.trim().split(/\s+/).length <= 4 ? named[1]!.trim() : null;
+}
+/** One drawn row of the course transcript: a line of talk, with the tag line that names its speaker when one stands directly before it. */
+export interface TranscriptRow {
+  /** The line of the talk (1-based, as in the file): what the row is called, quoted by and found by. */
+  n: number;
+  /** The lines of the file the row stands for: its tag's line (if any) to its own. */
+  first: number;
+  last: number;
+  speaker: string | null;
+  text: string;
+}
+/**
+ * The rows of a transcript: every line that is not blank, in order, a speaker tag folded into the line after it. A tag
+ * with no talk after it (a blank line, another tag, the end) stays a row of its own, as written: no line of the file
+ * with text in it goes unseen. Line numbers are the file's; nothing is renumbered.
+ */
+export function transcriptRows(lines: readonly string[]): TranscriptRow[] {
+  const rows: TranscriptRow[] = [];
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index]!;
+    if (line.trim() === "") continue;
+    const speaker = speakerTag(line);
+    const next = lines[index + 1];
+    if (speaker !== null && next !== undefined && next.trim() !== "" && speakerTag(next) === null) {
+      rows.push({ n: index + 2, first: index + 1, last: index + 2, speaker, text: next });
+      index += 1;
+    } else rows.push({ n: index + 1, first: index + 1, last: index + 1, speaker: null, text: line });
+  }
+  return rows;
+}
+/** The row that stands for a line of the file; for a blank line, the row after it. null past the last row. */
+export function rowOfLine(rows: readonly TranscriptRow[], line: number): TranscriptRow | null {
+  return rows.find((row) => row.last >= line) ?? null;
 }
 
 /** The lines being spoken at a position: the line whose own time holds it, or the linked stretch that does. null when no time of the transcript holds it. */
@@ -177,7 +228,8 @@ function useWorkspaceIfAny(): LectureWorkspaceState | null {
   }
 }
 
-const GUTTER = "w-[3.75rem] flex-none text-left";
+/** The gutter: a time where the row has one, the quote button under it or in its place. 52 px, so the text keeps 300 px in a panel of 377. */
+const GUTTER = "w-[3.25rem] flex-none text-left";
 const span = (range: { start: number; end: number }): string => (range.start === range.end ? `${range.start}` : `${range.start}–${range.end}`);
 
 export function TranscriptPanel({ transcripts, slideRanges, positionMs, playing, focusLine, onSeek, onQuote, onReportError, range: rangeProp, rangeOrdinal: ordinalProp, recordings: recordingsProp, timing: timingProp }: TranscriptPanelProps) {
@@ -205,6 +257,9 @@ export function TranscriptPanel({ transcripts, slideRanges, positionMs, playing,
   const timing = timingProp !== undefined ? timingProp : workspace?.lecture.timing ?? null;
 
   const times = useMemo(() => lineTimeIndex(transcript), [transcript]);
+  const rows = useMemo(() => transcriptRows(transcript?.lines ?? []), [transcript]);
+  /** The row drawn for a line of the file (a speaker tag's line is its talk's row; a blank line, the row after it). */
+  const lineOfRow = useCallback((line: number): number | null => rowOfLine(rows, line)?.n ?? null, [rows]);
   // The range's own evidence names lines of the transcript the timing was made with: the one that carries its rows, else the lecture's first.
   const evidenceApplies = !!transcript && ((transcript.generated_line_times?.length ?? 0) > 0 || (transcript.text_alignment?.length ?? 0) > 0 || transcripts[0]?.source_id === transcript.source_id);
   const rangeLines = useMemo(() => linesOfRange(transcript, range, { evidenceApplies }), [transcript, range, evidenceApplies]);
@@ -216,29 +271,33 @@ export function TranscriptPanel({ transcripts, slideRanges, positionMs, playing,
   const inRange = useMemo(() => new Set(rangeLines), [rangeLines]);
   const marked = inRange.size ? inRange : slideLines;
   const firstMarked = useMemo(() => (marked.size ? Math.min(...marked) : null), [marked]);
-  const lastOfRange = rangeLines.length ? rangeLines[rangeLines.length - 1]! : null;
+  // The divider stands before the first row that holds a line of the range, and "After this range" after the last one.
+  const rangeRows = useMemo(() => rows.filter((row) => rangeLines.some((line) => line >= row.first && line <= row.last)), [rows, rangeLines]);
+  const firstOfRange = rangeRows[0]?.n ?? null;
+  const lastOfRange = rangeRows.length ? rangeRows[rangeRows.length - 1]!.n : null;
   const active = useMemo(() => linesAt(times, positionMs), [times, positionMs]);
 
   // Follow playback: keep the line being spoken in view, until the learner scrolls away.
   useEffect(() => {
     if (!follow || !playing || !active || filter.trim()) return;
-    const node = scrollRef.current?.querySelector<HTMLElement>(`[data-line="${active[0]}"]`);
+    const node = scrollRef.current?.querySelector<HTMLElement>(`[data-line="${lineOfRow(active[0])}"]`);
     if (node && typeof node.scrollIntoView === "function") {
       programmatic.current = Date.now();
       node.scrollIntoView({ block: "nearest" });
     }
-  }, [active, follow, playing, filter]);
+  }, [active, follow, playing, filter, lineOfRow]);
 
   // A line the address names is shown and selected.
   useEffect(() => {
     if (!focusLine) return;
-    const node = scrollRef.current?.querySelector<HTMLElement>(`[data-line="${focusLine}"]`);
-    if (node) {
+    const row = rowOfLine(rows, focusLine);
+    const node = row ? scrollRef.current?.querySelector<HTMLElement>(`[data-line="${row.n}"]`) : null;
+    if (row && node) {
       programmatic.current = Date.now();
       if (typeof node.scrollIntoView === "function") node.scrollIntoView({ block: "center" });
-      setSelection({ start: focusLine, end: focusLine });
+      setSelection({ start: row.first, end: row.last });
     }
-  }, [focusLine, transcript]);
+  }, [focusLine, rows]);
 
   // Another slide or another range: its lines come into view (unless the address names a line, or a search is open).
   // While the tab is hidden nothing can be scrolled: it is done when the tab is shown.
@@ -249,12 +308,12 @@ export function TranscriptPanel({ transcripts, slideRanges, positionMs, playing,
     const line = pendingMark.current;
     if (!scroll || line === null || scroll.clientHeight === 0) return;
     pendingMark.current = null;
-    const node = scroll.querySelector<HTMLElement>(`[data-divider="range"]`) ?? scroll.querySelector<HTMLElement>(`[data-line="${line}"]`);
+    const node = scroll.querySelector<HTMLElement>(`[data-divider="range"]`) ?? scroll.querySelector<HTMLElement>(`[data-line="${lineOfRow(line)}"]`);
     if (node) {
       programmatic.current = Date.now();
       scroll.scrollTop = Math.max(0, node.offsetTop - 40); // below the fade at the top edge; the line before stays in sight
     }
-  }, []);
+  }, [lineOfRow]);
   useEffect(() => {
     if (firstMarked === null || focusLine || filter.trim()) return;
     pendingMark.current = firstMarked;
@@ -287,12 +346,17 @@ export function TranscriptPanel({ transcripts, slideRanges, positionMs, playing,
   const hasCourse = !!transcript;
   const generatedShown = generatedOpen ?? !hasCourse;
   const closing = transcript ? transcriptClosingLine(transcript, !!timing) : null;
-  const matches = transcript && filter.trim() ? transcript.lines.map((text, i) => ({ text, n: i + 1 })).filter((line) => line.text.toLowerCase().includes(filter.trim().toLowerCase())) : null;
+  const tagOf = (row: TranscriptRow): string => (row.speaker !== null && transcript ? transcript.lines[row.first - 1]!.trim() : ""); // the tag as the file writes it
+  const sought = filter.trim().toLowerCase();
+  const matches = transcript && sought ? rows.filter((row) => row.text.toLowerCase().includes(sought) || tagOf(row).toLowerCase().includes(sought)) : null;
+  const shown = matches ?? rows;
   const selectedText = selection && transcript ? transcript.lines.slice(selection.start - 1, selection.end).join("\n") : "";
   const selectionRef: SourceRef | null = selection && transcript?.sha256 && transcript.version_id
     ? { source_id: transcript.source_id, version_id: transcript.version_id, sha256: transcript.sha256, locator: { kind: "lines", start: selection.start, end: selection.end } } : null;
-  const pick = (line: number, extend: boolean) => {
-    setSelection((current) => (extend && current ? { start: Math.min(current.start, line), end: Math.max(current.end, line) } : current && current.start === line && current.end === line ? null : { start: line, end: line }));
+  // A row is selected with the tag line that names its speaker, so a quote carries who said it.
+  const pick = (row: TranscriptRow, extend: boolean) => {
+    setSelection((current) => (extend && current ? { start: Math.min(current.start, row.first), end: Math.max(current.end, row.last) }
+      : current && current.start === row.first && current.end === row.last ? null : { start: row.first, end: row.last }));
   };
   const linked = transcript ? slideRanges.filter((entry) => entry.source.source_id === transcript.source_id).sort((a, b) => a.start - b.start) : [];
   const reviewedLinks = linked.filter((entry) => entry.review_state === "confirmed");
@@ -340,40 +404,50 @@ export function TranscriptPanel({ transcripts, slideRanges, positionMs, playing,
               {suggestedLinks.length > 0 && <span>Lines {suggestedLinks.map(span).join(", ")} are a suggested match for this slide: found by comparing words, not reviewed, and not a time in the recording.</span>}
             </p>
             <ol aria-label="Transcript lines" data-testid="transcript-lines">
-              {(matches ?? transcript.lines.map((text, i) => ({ text, n: i + 1 }))).map(({ text, n }) => {
-                const time = times.get(n) ?? null;
-                const spoken = !!active && n >= active[0] && n <= active[1];
-                const chosen = !!selection && n >= selection.start && n <= selection.end;
-                const ruled = marked.has(n);
+              {shown.map((row, at) => {
+                const { n } = row;
+                const overlaps = (from: number, to: number, other: TranscriptRow = row): boolean => from <= other.last && to >= other.first;
+                // The row's time: its talk's own, else the one its tag line carries (a linked stretch may begin on the tag).
+                const time = times.get(n) ?? (row.first !== n ? times.get(row.first) ?? null : null);
+                const spoken = !!active && overlaps(active[0], active[1]);
+                const chosen = !!selection && overlaps(selection.start, selection.end);
+                let ruled = false;
+                for (let line = row.first; line <= row.last && !ruled; line++) ruled = marked.has(line);
                 const quiet = !matches && inRange.size > 0 && !ruled;
-                // A stretch of lines (a linked stretch being spoken, several selected lines) is one block: only its ends are rounded.
+                // A stretch of rows (a linked stretch being spoken, several selected rows) is one block: only its ends are rounded.
                 const block = spoken || chosen;
-                const joined = (line: number) => !matches && ((!!active && spoken && line >= active[0] && line <= active[1]) || (!!selection && chosen && line >= selection.start && line <= selection.end));
+                const joined = (other: TranscriptRow | undefined) => !!other && !matches && ((spoken && !!active && overlaps(active[0], active[1], other)) || (chosen && !!selection && overlaps(selection.start, selection.end, other)));
+                // Who speaks is said where it changes (and on every row of a search, which stand out of their order).
+                const tag = row.speaker !== null && (!!matches || shown[at - 1]?.speaker !== row.speaker) ? tagOf(row) : "";
                 return (
-                  <li key={n} data-line={n} aria-current={spoken ? "true" : undefined}>
-                    {!matches && inRange.size > 0 && n === rangeLines[0] && range && (
+                  <li key={n} data-line={n} data-lines={row.first === n ? undefined : `${row.first}-${row.last}`} aria-current={spoken ? "true" : undefined}>
+                    {!matches && n === firstOfRange && range && (
                       <p className="flex items-center justify-between gap-3 pb-2 pt-1 text-ui font-semibold" data-divider="range" data-testid="range-divider">
                         <BasisLabel basis={rangeBasis(range)} className="text-ink">{rangeKindWords(range)}</BasisLabel>
                         {ordinal && <span className="ll-num ll-nb flex-none">{rangeOrdinalLabel(ordinal.index, ordinal.of)}</span>}
                       </p>
                     )}
-                    <div className={cn("group/line flex items-start gap-3 border-l-2 py-2 pl-3 pr-0.5 transition-colors duration-[var(--ll-motion-small)]",
-                      !(block && joined(n - 1)) && "rounded-tr-row", !(block && joined(n + 1)) && "rounded-br-row",
+                    <div className={cn("group/line flex items-start gap-2 border-l-2 py-2 pl-2 transition-colors duration-[var(--ll-motion-small)]", time && "[@media(pointer:coarse)]:min-h-[68px]",
+                      !(block && joined(shown[at - 1])) && "rounded-tr-row", !(block && joined(shown[at + 1])) && "rounded-br-row",
                       ruled ? "border-accent-text" : "border-transparent", spoken && "bg-pad", chosen && "bg-tint")}>
-                      {time ? (
-                        <button type="button" className={cn(GUTTER, "ll-num cursor-pointer rounded-thumb border-0 bg-transparent p-0 text-ui leading-[var(--ll-lh-read)] hover:text-accent-text hover:underline", spoken ? "font-semibold text-accent-text" : "text-muted")}
-                          onClick={() => onSeek(time.ms)} aria-label={`Go to ${clockLabel(time.ms)} in the recording (${timeBasisWords(time)})`} title={`Play from ${clockLabel(time.ms)} (${timeBasisWords(time)})`}>
-                          {clockLabel(time.ms)}
+                      {/* The gutter: the time where the row has one; the quote button under it, or in its place. No line number is drawn. */}
+                      <div className={cn(GUTTER, "relative")}>
+                        {time && (
+                          <button type="button" className={cn("ll-num block cursor-pointer rounded-thumb border-0 bg-transparent p-0 text-left text-meta leading-[var(--ll-lh-read)] hover:text-accent-text hover:underline", spoken ? "font-semibold text-accent-text" : "text-muted")}
+                            onClick={() => onSeek(time.ms)} aria-label={`Go to ${clockLabel(time.ms)} in the recording (${timeBasisWords(time)})`} title={`Play from ${clockLabel(time.ms)} (${timeBasisWords(time)})`}>
+                            {clockLabel(time.ms)}
+                          </button>
+                        )}
+                        <button type="button" onClick={(event) => pick(row, event.shiftKey)} aria-label={`Select line ${n}${chosen ? " (selected)" : ""}`} aria-pressed={chosen}
+                          title={`Line ${n}. Select it to ask about it; Shift-press another to select the lines between`}
+                          className={cn("ll-ib ll-ib-sm -ml-1.5 text-muted transition-opacity duration-[var(--ll-motion-small)] hover:text-ink focus-visible:opacity-100 group-hover/line:opacity-100 [@media(pointer:coarse)]:opacity-100",
+                            time ? "absolute left-0 top-[22px] h-6 min-w-6" : "-mt-0.5", chosen ? "text-accent-text opacity-100" : "opacity-0")}>
+                          <Quote aria-hidden />
                         </button>
-                      ) : <span className={cn(GUTTER, "ll-num ll-nb text-meta leading-[var(--ll-lh-read)] text-muted")}>line {n}</span>}
-                      <p className={cn("min-w-0 flex-1 break-words text-read", quiet && "text-muted")}>{text || <span className="text-muted">(blank line)</span>}</p>
-                      <button type="button" onClick={(event) => pick(n, event.shiftKey)} aria-label={`Select line ${n}${chosen ? " (selected)" : ""}`} aria-pressed={chosen} title="Select this line to ask about it; Shift-press another to select the lines between"
-                        className={cn("ll-ib ll-ib-sm -ml-2 flex-none text-muted transition-opacity duration-[var(--ll-motion-small)] hover:text-ink focus-visible:opacity-100 group-hover/line:opacity-100 [@media(pointer:coarse)]:opacity-100",
-                          chosen ? "text-accent-text opacity-100" : "opacity-0")}>
-                        <Quote aria-hidden />
-                      </button>
+                      </div>
+                      <p className={cn("min-w-0 flex-1 break-words text-read", quiet && "text-muted")}>{tag && <span className="text-muted" data-testid="speaker-tag">{tag} </span>}{row.text}</p>
                     </div>
-                    {!matches && n === lastOfRange && n < transcript.lines.length && <p className="mt-3 border-t border-hairline pb-1 pt-3 text-ui text-muted" data-testid="after-range">After this range</p>}
+                    {!matches && n === lastOfRange && at < shown.length - 1 && <p className="mt-3 border-t border-hairline pb-1 pt-3 text-ui text-muted" data-testid="after-range">After this range</p>}
                   </li>
                 );
               })}

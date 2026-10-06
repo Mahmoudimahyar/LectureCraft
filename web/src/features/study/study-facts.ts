@@ -19,6 +19,8 @@ export const NO_LECTURES_SENTENCE = "No lectures are registered for this course.
 export const RESUME_ACTION = "Resume lecture";
 export const START_ACTION = "Start from page 1";
 export const RESUME_PICTURE_LABEL = "Open the lecture at the page you left";
+/** The one muted line of a first load that takes longer than two seconds (the Brain reads the course folders over a synced drive). */
+export const STUDY_READING_LINE = "Reading your course folders…";
 
 // ---- a lecture's name ----------------------------------------------------------------------------------------------------
 const UNIT_ID = /^lecture-(\d+)$/i;
@@ -30,7 +32,9 @@ const UNIT_ID = /^lecture-(\d+)$/i;
 export function lectureKicker(lectureId: string, title?: string | null): string | null {
   const digits = UNIT_ID.exec(lectureId)?.[1];
   if (!digits) return null;
-  const said = new RegExp(`\\blecture[\\s_-]*0*${Number(digits)}\\b`, "i");
+  // The word "lecture" on its own, then the same number, not followed by another digit. A title written like a file name
+  // ("Lecture_3_Topic") says it too: an underscore after the number is no part of it.
+  const said = new RegExp(`(?<![A-Za-z])lecture[\\s_-]*0*${Number(digits)}(?![0-9])`, "i");
   return title && said.test(title) ? null : nb(`Lecture ${digits}`);
 }
 const idWords = (lectureId: string): string => lectureId.replace(/[-_]+/g, " ");
@@ -91,14 +95,33 @@ function stageFact(timing: TimingLectureRow | null | undefined): string | null {
 }
 
 /**
- * The facts of one lecture row, in order: its pages, its recording (with the length where the Brain measured it), where
- * its timing stands, its questions. `timing` is the lecture's row of `GET …/timing`; without it only what the course view
- * holds is said. `unlinkedRecordings`: recordings of the course that sit in dated sessions linked to no lecture.
+ * Said after the recording of a lecture whose session the course records link to no unit: the session is offered only
+ * because the file name of its recording or transcript carries this unit's lecture number (`session_link`
+ * `suggested_by_file_name`, read API 1.1). Nobody has confirmed it, so the row says where the pairing comes from.
+ */
+export const OFFERED_BY_FILE_NAME = nb("offered by file name");
+function offeredFact(lecture: CourseLecture, timing: TimingLectureRow | null | undefined): string | null {
+  if (lecture.session_link !== "suggested_by_file_name") return null;
+  return (timing ? timing.recordings.length : sessionRecordings(lecture)) > 0 ? OFFERED_BY_FILE_NAME : null;
+}
+
+/**
+ * True for a lecture whose session holds a recording: the timing answer will say its length and where its timing stands.
+ * While that answer is on its way the row keeps a place for those words, so it does not change height when they arrive.
+ */
+export const awaitsTimingFact = (lecture: CourseLecture): boolean => sessionRecordings(lecture) > 0;
+
+/**
+ * The facts of one lecture row, in order: its pages, its recording (with the length where the Brain measured it, and
+ * "offered by file name" where the session is only suggested), where its timing stands, its questions. `timing` is the
+ * lecture's row of `GET …/timing`; without it only what the course view holds is said. `unlinkedRecordings`: recordings
+ * of the course that sit in dated sessions linked to no lecture. The questions fact is always the last one.
  */
 export function lectureFacts(lecture: CourseLecture, timing?: TimingLectureRow | null, options: { unlinkedRecordings?: number } = {}): string[] {
   const facts: Array<string | null> = [
     slidesFact(lecture),
     recordingFact(lecture, timing, options.unlinkedRecordings ?? 0),
+    offeredFact(lecture, timing),
     stageFact(timing),
     lecture.questions.count > 0 ? countLabel(lecture.questions.count, "question") : "no questions in the catalog",
   ];
@@ -150,6 +173,49 @@ export function unlinkedSessionsSentence(view: Pick<CourseView, "unlinked_sessio
   const head = recorded === total ? `${countLabel(total, "dated session")} with a recording ${verb}` : `${countLabel(total, "dated session")} ${verb}`;
   const tail = recorded > 0 && recorded < total ? `, ${recorded} of them with a recording` : "";
   return `${head} not linked to a lecture by the course records${tail}. No pairing is assumed.`;
+}
+
+// ---- the names kept on this device for the first frame ---------------------------------------------------------------------
+/**
+ * What the Study home keeps of the last successful load of the workspace (`ll.study.courses`), so the next first frame
+ * shows the courses at once instead of grey blocks: each course's id, name and binding, and how many lecture rows its
+ * pane has (the size of the skeleton only). No count is kept that the page would show as a fact: totals are said only
+ * from an answer of the Brain.
+ */
+export interface RememberedCourse { course_id: string; display_name: string; binding: string; problem: string | null; rows: number | null }
+export interface RememberedCourses { sample: boolean; courses: RememberedCourse[] }
+
+export function coursesToRemember(workspace: { fixture_label?: string | null; courses: readonly WorkspaceCourse[] }): string {
+  const kept: RememberedCourses = {
+    sample: !!workspace.fixture_label,
+    courses: workspace.courses.map((course) => ({ course_id: course.course_id, display_name: course.display_name, binding: course.binding, problem: course.problem ?? null,
+      rows: typeof course.lecture_units === "number" ? course.lecture_units : null })),
+  };
+  return JSON.stringify(kept);
+}
+
+/** Parses what `coursesToRemember` wrote; anything else (and an empty list) is refused, and the page draws its skeleton. */
+export function readRememberedCourses(raw: string | null | undefined): RememberedCourses | null {
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as { sample?: unknown; courses?: unknown } | null;
+    if (!value || typeof value !== "object" || !Array.isArray(value.courses) || value.courses.length === 0) return null;
+    const courses: RememberedCourse[] = [];
+    for (const entry of value.courses as Array<Partial<RememberedCourse> | null>) {
+      if (!entry || typeof entry.course_id !== "string" || entry.course_id === "" || typeof entry.display_name !== "string" || typeof entry.binding !== "string") return null;
+      courses.push({ course_id: entry.course_id, display_name: entry.display_name, binding: entry.binding, problem: typeof entry.problem === "string" ? entry.problem : null,
+        rows: typeof entry.rows === "number" && Number.isInteger(entry.rows) && entry.rows >= 0 ? entry.rows : null });
+    }
+    return { sample: value.sample === true, courses };
+  } catch {
+    return null;
+  }
+}
+
+const LAST_PLACE_KEY = "ll.last.";
+/** The course of a place stored by the lecture workspace, from its storage key `ll.last.<course>`; null for any other key. */
+export function storedPlaceCourse(key: string): string | null {
+  return key.startsWith(LAST_PLACE_KEY) && key.length > LAST_PLACE_KEY.length ? key.slice(LAST_PLACE_KEY.length) : null;
 }
 
 /** The course to show: the one asked for (a route or a chosen tab), then the active course, then the first configured. */

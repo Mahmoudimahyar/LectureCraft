@@ -90,6 +90,8 @@ STATE_CHANGING_ROUTES = {
     ("POST", "/api/export"), ("POST", "/api/cleanup/{course_id}/apply"), ("POST", "/api/evidence-deletion"), ("POST", "/api/acceptance/run"),
     ("POST", "/api/courses/{course_id}/questions/{question_id}/verify-rendition"),
     ("POST", "/api/courses/{course_id}/suggestions/{suggestion_id}/decision"),
+    ("POST", "/api/courses/{course_id}/lectures/{lecture_id}/source-map/overrides"),
+    ("POST", "/api/courses/{course_id}/lectures/{lecture_id}/timing/build"),
 }
 
 
@@ -177,6 +179,10 @@ def test_every_state_changing_route_of_the_read_only_profile_leaves_course_and_p
         suggestion = inferred_anchors.suggestion_id("BE505-L01-Q04", 1, deck_sha, [2, 3])
         call("POST", "/api/courses/{course_id}/suggestions/{suggestion_id}/decision", f"/api/courses/be505/suggestions/{suggestion}/decision", {200}, json={"decision": "confirmed"})
         assert (tmp_path / "private-state" / "inferred-anchors" / "decisions" / "be505" / f"{suggestion}.r1.json").is_file()
+        # A learner's correction of how pages are grouped, and a rebuild of the derived timing links: both app-private (R2-S5, R2-T10).
+        call("POST", "/api/courses/{course_id}/lectures/{lecture_id}/source-map/overrides", "/api/courses/be505/lectures/lecture-01/source-map/overrides", {200, 409, 422},
+             json={"op": "role", "pages": [1], "value": "structural_title_or_section", "reason": "It is the title page."})
+        call("POST", "/api/courses/{course_id}/lectures/{lecture_id}/timing/build", "/api/courses/be505/lectures/lecture-01/timing/build", {200})
         assert used == STATE_CHANGING_ROUTES
 
         assert {cid: _tree(root) for cid, root in roots.items()} == before

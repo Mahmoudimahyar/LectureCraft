@@ -11,6 +11,9 @@ guessed from ordinal position.
 """
 from __future__ import annotations
 
+import contextlib
+import contextvars
+
 from pathlib import Path
 import hashlib
 import re
@@ -214,7 +217,35 @@ def _session_state(items: list[dict]) -> str:
     return "other_material_only"
 
 
+_REQUEST_MEMO: contextvars.ContextVar[dict | None] = contextvars.ContextVar("ll_inventory_request_memo", default=None)
+
+
+@contextlib.contextmanager
+def request_memo():
+    """Within one request the course folder is listed once: every reader that asks for the inventory inside this block
+    gets the same object (treat it as read-only). Nothing is remembered after the block, so the next request sees every
+    change on disk. Nested blocks share the outermost memo."""
+    if _REQUEST_MEMO.get() is not None:
+        yield
+        return
+    token = _REQUEST_MEMO.set({})
+    try:
+        yield
+    finally:
+        _REQUEST_MEMO.reset(token)
+
+
 def build_inventory(binding: CourseBinding) -> dict[str, Any]:
+    memo = _REQUEST_MEMO.get()
+    if memo is None:
+        return _build_inventory(binding)
+    key = (binding.course_id, str(binding.root))
+    if key not in memo:
+        memo[key] = _build_inventory(binding)
+    return memo[key]
+
+
+def _build_inventory(binding: CourseBinding) -> dict[str, Any]:
     root = binding.root
     result: dict[str, Any] = {"course_id": binding.course_id, "term": binding.term, "display_name": binding.display_name, "binding": binding.status,
                               "lectures": [], "sessions": [], "unlinked_sessions": [], "other_sources": [], "enumeration_truncated": False,

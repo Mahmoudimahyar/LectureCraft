@@ -16,7 +16,7 @@ from typing import Any
 
 import yaml
 
-from . import concept_graph
+from . import concept_graph, inferred_anchors, question_ties, slide_identity, timing_links
 from . import contracts as c
 from .annotations import AnnotationStore, media_duration_ms, precision_of
 from .config import Settings
@@ -24,10 +24,11 @@ from .evidence import EvidenceReader, CONDITIONS, CONDITIONS_VERSION, condition_
 from .outline import OUTLINE_VERSION, OutlineModel
 from .fsutil import replace_atomic
 from .journal import Journal, JobState as S, TERMINAL
-from .ownerio import OwnerReadError
+from .ownerio import OwnerReadError, study_maps
 from .ownerio.attempts import learning_view_status, read_attempt_records
 from .ownerio.catalogs import read_families, read_guidance, read_question_index, read_skills
 from .ownerio.inventory import build_inventory, other_materials, primary_deck
+from .ownerio.inventory import request_memo as inventory_request_memo
 from .ownerio.question_links import build_question_bank, parse_locator
 from .ownerio.renditions import compare_rendition, load_rendition_checks, record_rendition_check
 from .preparation import Preparation, file_sha256
@@ -61,15 +62,31 @@ class Projector:
         self._now = now or (lambda: "1970-01-01T00:00:00Z")
         self._hashes: dict[str, str] = {}  # path|size|mtime -> sha256, for files compared as bytes
         self._mapping: dict[str, Any] | None = None
+        self._catalog_memo: dict[tuple[str, str], tuple[tuple, Any]] = {}  # (course, catalog) -> ((size, mtime_ns), parsed)
+        self._generated_memo: dict[tuple[str, str], Any] | None = None  # generated speech of the recordings of the request in progress
 
     # ---- shared readers ------------------------------------------------------------------------
     def _catalogs(self, course_id: str) -> dict[str, Any]:
+        """The owner's catalogs, parsed once per version of their bytes: a file is read again as soon as its size or
+        modification time differs (parsing the YAML catalogs took about a second of every lecture request)."""
         root = self.settings.course(course_id).root
         out: dict[str, Any] = {"skills": {"skills": {}, "topics": {}}, "families": {}, "questions": None, "problems": []}
-        for key, reader in (("skills", read_skills), ("families", read_families), ("questions", read_question_index)):
+        for key, reader, name in (("skills", read_skills, "skills.yaml"), ("families", read_families, "question-families.yaml"), ("questions", read_question_index, "question-index.json")):
+            try:
+                stat = (root / "learning" / name).stat()
+                stamp: tuple | None = (stat.st_size, stat.st_mtime_ns)
+            except OSError:
+                stamp = None
+            cached = self._catalog_memo.get((course_id, key))
+            if stamp is not None and cached is not None and cached[0] == stamp:
+                out[key] = cached[1]
+                continue
             try:
                 out[key] = reader(root, course_id)
+                if stamp is not None:
+                    self._catalog_memo[(course_id, key)] = (stamp, out[key])
             except OwnerReadError as exc:
+                self._catalog_memo.pop((course_id, key), None)
                 out["problems"].append({"catalog": key, "code": exc.code, "detail": exc.message})
         return out
 
@@ -216,6 +233,15 @@ class Projector:
 
     # ---- lecture -------------------------------------------------------------------------------
     def lecture_view(self, course_id: str, lecture_id: str, *, deck: str | None = None) -> dict[str, Any] | None:
+        outer = self._generated_memo
+        self._generated_memo = {} if outer is None else outer
+        try:
+            with inventory_request_memo():
+                return self._lecture_view(course_id, lecture_id, deck=deck)
+        finally:
+            self._generated_memo = outer
+
+    def _lecture_view(self, course_id: str, lecture_id: str, *, deck: str | None = None) -> dict[str, Any] | None:
         binding = self.settings.course(course_id)
         root = binding.root
         inventory = build_inventory(binding)
@@ -362,7 +388,7 @@ class Projector:
                     times = sorted(line_times.get(item["source_id"], []), key=lambda t: t["start"])
                     transcripts.append(dict(base, lines=lines, line_times=times, timing="annotated" if times else "untimed",
                                             timing_note=None if times else "This transcript has no verified timing: line references only, no playback highlight."))
-        return {"course_id": course_id, "lecture_id": lecture_id, "title": lecture["title"], "session_link": lecture["session_link"],
+        view = {"course_id": course_id, "lecture_id": lecture_id, "title": lecture["title"], "session_link": lecture["session_link"],
                 "deck": ({"source_id": deck["source_id"], "version_id": deck_identity[0], "sha256": deck_identity[1], "filename": deck["filename"], "state": deck["state"],
                           "registration": deck["registration"], "rendition": deck["rendition"]} if deck else None),
                 "deck_choice": choice, "questions": lecture_questions,
@@ -375,6 +401,35 @@ class Projector:
                 "sessions": [{"session_id": s["session_id"], "state": s["state"]} for s in lecture["sessions"]], "preparation": stages,
                 "other_materials": other_materials(dict(lecture, deck_choice=choice)),
                 "link_conflicts": [{"conflict_id": x["conflict_id"], "annotation_id": x["annotation_id"], "proposed": x["proposed"], "current": x["current"]} for x in loaded["conflicts"]]}
+        return self._enrich_r2(view, course_id=course_id, lecture_id=lecture_id, lecture=lecture, deck=deck, inventory=inventory, catalogs=catalogs, bank=bank)
+
+    def _enrich_r2(self, view: dict[str, Any], *, course_id: str, lecture_id: str, lecture: dict, deck: dict | None, inventory: dict, catalogs: dict, bank: dict) -> dict[str, Any]:
+        """Amendment R2: slide identity, then question ties, then timing links, each by its own module (docs/engineering/r2-read-api.md,
+        section 4). Every step reads; none writes. A damaged private file of one step never breaks reading the lecture."""
+        root = self.settings.course(course_id).root
+        source_map, reason = slide_identity.map_for(self.settings, course_id, lecture, deck)
+        slide_identity.enrich(view, source_map=source_map, reason=reason)
+        index = catalogs["questions"]
+        inferred = inferred_anchors.load(self.settings, course_id, index=index, inventory=inventory, deck_sha256_of=lambda item: self._bytes_sha(course_id, item),
+                                         guidance_text_of=inferred_anchors.guidance_reader(root, index))
+        try:  # the course's own study maps (D78): coarse, course-stated placements, listed apart from page ties
+            maps = study_maps.read_study_maps(root, inventory, sha_of=lambda path: file_sha256(path, self._hashes))
+            sections = study_maps.section_ties(maps, bank)
+            map_digests = {lecture_key: record["source"]["sha256"] for lecture_key, record in maps["lectures"].items()}
+        except Exception:  # noqa: BLE001 - an unreadable note is reported by its own readback, never by a broken lecture
+            sections, map_digests = None, {}
+        reader = EvidenceReader(self._records(course_id))
+        question_ties.enrich(view, bank=bank, index=index, source_map=view.get("source_map"), inferred=inferred, decisions=inferred_anchors.decisions(self.settings, course_id),
+                             evidence_of=reader.question, section_ties=sections)
+        ready = view["source_map"].get("state") == "ready"
+        view.setdefault("revisions", {}).update(
+            deck_sha256=(view.get("deck") or {}).get("sha256"), map_revision=view["source_map"].get("map_revision") if ready else None,
+            question_index_sha256=(index or {}).get("sha256"), inferred_anchors_sha256=inferred["file"]["sha256"], study_map_sha256=map_digests.get(lecture_id),
+            evidence_revision=reader.revision)
+        generated = {r["source_id"]: self._derived_current(course_id, r["source_id"]) for r in view.get("recordings") or []}
+        view = timing_links.enrich_view(self.settings, course_id, lecture_id, view, preparation=self.preparation, source_map=source_map, generated=generated)
+        view["revisions"].setdefault("timing_links", [])
+        return view
 
     # ---- questions -----------------------------------------------------------------------------
     def question_view(self, course_id: str, question_id: str) -> dict[str, Any] | None:
@@ -465,17 +520,29 @@ class Projector:
 
     def _generated_text(self, course_id: str, source_id: str) -> dict[str, Any] | None:
         """Speech text generated elsewhere and imported from a verified manifest. Its times belong to that text only."""
-        from .derived import Derived
-
-        try:
-            current = Derived(self.settings, self.journal, preparation=self.preparation).current(course_id, source_id)
-        except Exception:  # noqa: BLE001 - a damaged derived store must never break reading a lecture
-            return None
+        current = self._derived_current(course_id, source_id)
         if current is None:
             return None
         return {**{k: current[k] for k in ("generation", "created_at", "window", "duration_ms", "coverage_fraction", "covers_whole_recording", "text_origin", "review_state", "establishes", "note")},
+                **{k: current.get(k) for k in ("covered_intervals", "unresolved_intervals", "unresolved_seconds", "processed_fraction")},
                 "producer": {k: current["producer"].get(k) for k in ("tool", "model", "language")},
                 "segments": [{"start_ms": s["start_ms"], "end_ms": s["end_ms"], "text": s["text"]} for s in current["segments"][:4000]], "segments_total": len(current["segments"])}
+
+    def _derived_current(self, course_id: str, source_id: str) -> dict[str, Any] | None:
+        """The generation served for a recording, read once per request (it is a megabyte of words for a long lecture)."""
+        from .derived import Derived
+
+        memo = self._generated_memo
+        key = (course_id, source_id)
+        if memo is not None and key in memo:
+            return memo[key]
+        try:
+            current = Derived(self.settings, self.journal, preparation=self.preparation).current(course_id, source_id)
+        except Exception:  # noqa: BLE001 - a damaged derived store must never break reading a lecture
+            current = None
+        if memo is not None:
+            memo[key] = current
+        return current
 
     def _facet_mapping(self) -> dict[str, Any]:
         if self._mapping is None:

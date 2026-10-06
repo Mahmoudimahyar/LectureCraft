@@ -58,3 +58,97 @@ def test_outline_rows_and_node_detail_carry_the_r2_evidence_state_and_openable_s
     assert paged and all(s["href"].startswith(f"/courses/{COURSE}/") and s["label"] for s in paged), "a source page is a link the learner can open"
     slide = client.get(f"/api/courses/{COURSE}/outline", params={"scope": "slide:lecture-01:2"}).json()
     assert slide["scope"]["kind"] == "slide" and "question_ids" not in slide["scope"]
+
+
+NO_RANGE_STATES = {"recording_unavailable", "no_range_expected", "audio_unprocessed", "association_not_run", "ambiguous", "not_discussed"}
+EVIDENCE_STATES = {"unknown", "not_applicable", "not_separately_observed", "assisted", "independent"}
+
+
+def test_the_lecture_view_carries_identity_ties_ranges_and_timing_for_every_page(client):
+    view = client.get(f"/api/courses/{COURSE}/lectures/lecture-01").json()
+    assert view["source_map"]["state"] in {"ready", "unavailable"} and (view["source_map"]["state"] == "ready" or view["source_map"]["reason"])
+    assert view["slides"], "the synthetic lecture has pages"
+    for slide in view["slides"]:
+        identity = slide["identity"]
+        assert identity["page_index"] == slide["page"] and identity["label"].startswith(f"PDF page {slide['page']} of {view['page_count']}")
+        assert slide["role"]["value"] and isinstance(slide["role"]["forced_requirements"], bool)
+        assert isinstance(slide["question_ties"], list) and isinstance(slide["section_ties"], list) and isinstance(slide["related_questions"], list)
+        assert all(tie["tie"] in {"exact", "stated", "agent_inferred"} and tie["evidence"]["state"] in EVIDENCE_STATES for tie in slide["question_ties"])
+        assert isinstance(slide["ranges"], list)
+        assert (slide["no_range"] is None) == bool(slide["ranges"]), "a page has ranges or exactly one stated reason for having none"
+        assert slide["no_range"] is None or slide["no_range"]["state"] in NO_RANGE_STATES
+    tied = [tie for slide in view["slides"] for tie in slide["question_ties"]]
+    assert any(tie["question_id"] == "BE505-L01-Q01" and tie["where"] == "on_this_page" for tie in tied), "the course's own page anchor is a tie on that page"
+    counts = view["questions"]["counts"]
+    assert counts["all"] == len(view["questions"]["all"]) and counts["course_anchor"] + counts["agent_inferred"] + counts["without_link"] == counts["all"]
+    assert all(("ties" in row) and ("no_link" in row) and row["evidence"]["state"] in EVIDENCE_STATES for row in view["questions"]["all"])
+    assert view["timing"]["stage"] in {"no_recording", "audio_unprocessed", "partly_processed", "processed", "associated"}
+    assert {"deck_sha256", "map_revision", "question_index_sha256", "inferred_anchors_sha256", "timing_links", "evidence_revision"} <= set(view["revisions"])
+
+
+def test_a_stored_suggestion_shows_as_a_suggested_tie_and_a_learner_decision_is_reflected(client, settings):
+    from lecture_brain import inferred_anchors
+
+    context = inferred_anchors.course_context(settings, COURSE)
+    deck = next(d for l in context["inventory"]["lectures"] if l["lecture_id"] == "lecture-01" for d in l["decks"] if d["source_id"] == "src-lecture-01-slides")
+    sha = context["deck_sha256_of"](deck)
+    inferred_anchors.store(settings, COURSE, {
+        "contract": "ll.inferred-anchors/1", "course_id": COURSE, "produced_at": "2026-10-05T12:00:00Z", "producer": "claude-session", "question_index_sha256": context["index"]["sha256"],
+        "items": [{"question_id": "BE505-L01-Q04", "question_version": 1, "lecture_id": "lecture-01", "source_id": "src-lecture-01-slides", "source_sha256": sha, "pages": [2, 3], "regions": None,
+                   "criteria": ["BE505-L01-Q04.C01"], "coverage": "partial", "rationale": "Synthetic: the named pages show the parts this criterion asks about.", "state": "agent_inferred",
+                   "verifier": None}]})
+    view = client.get(f"/api/courses/{COURSE}/lectures/lecture-01").json()
+    suggested = [tie for slide in view["slides"] if slide["page"] in (2, 3) for tie in slide["question_ties"] if tie["tie"] == "agent_inferred"]
+    assert {tie["question_id"] for tie in suggested} == {"BE505-L01-Q04"} and all(tie["state"] == "agent_inferred" and tie["learner_decision"] is None for tie in suggested)
+    assert view["revisions"]["inferred_anchors_sha256"]
+    decided = client.post(f"/api/courses/{COURSE}/suggestions/{suggested[0]['suggestion_id']}/decision", json={"decision": "rejected"})
+    assert decided.status_code == 200
+    after = client.get(f"/api/courses/{COURSE}/lectures/lecture-01").json()
+    assert not [tie for slide in after["slides"] for tie in slide["question_ties"] if tie["tie"] == "agent_inferred"], "a rejected suggestion is no longer shown as a link"
+
+
+def test_generated_speech_text_states_what_was_covered_and_what_was_withheld(client, settings):
+    view = client.get(f"/api/courses/{COURSE}/lectures/lecture-02").json()
+    for recording in view["recordings"]:
+        generated = recording["generated_text"]
+        assert generated is None or {"covered_intervals", "unresolved_intervals", "unresolved_seconds"} <= set(generated)
+
+
+def test_the_course_timing_readback_and_the_source_map_of_a_lecture_are_served(client):
+    timing = client.get(f"/api/courses/{COURSE}/timing").json()
+    assert timing["course_id"] == COURSE and isinstance(timing["lectures"], list) and timing["lectures"]
+    source_map = client.get(f"/api/courses/{COURSE}/lectures/lecture-01/source-map").json()
+    assert source_map["state"] in {"ready", "unavailable"} and source_map["lecture_id"] == "lecture-01"
+    assert client.get(f"/api/courses/{COURSE}/lectures/no-such/source-map").status_code == 404
+
+
+def test_catalogs_are_parsed_once_while_their_bytes_stay_the_same_and_reread_when_they_change(runtime, settings):
+    projector = runtime.projector
+    first = projector._catalogs(COURSE)
+    again = projector._catalogs(COURSE)
+    assert again["skills"] is first["skills"] and again["questions"] is first["questions"], "unchanged files are not parsed again on every request"
+    path = settings.course(COURSE).root / "learning" / "skills.yaml"
+    text = path.read_text(encoding="utf-8")
+    some_label = next(skill["performance_target"] for skill in first["skills"]["skills"].values() if skill.get("performance_target"))
+    path.write_text(text.replace(some_label, some_label + " (reworded)", 1), encoding="utf-8")
+    changed = projector._catalogs(COURSE)
+    assert changed["skills"] is not first["skills"]
+    assert any(skill.get("performance_target") == some_label + " (reworded)" for skill in changed["skills"]["skills"].values()), "a changed catalog is read again, never served from memory"
+
+
+def test_one_request_reads_the_inventory_once_and_the_next_request_sees_a_new_file(settings):
+    from lecture_brain.ownerio import inventory
+
+    binding = settings.course(COURSE)
+    with inventory.request_memo():
+        first = inventory.build_inventory(binding)
+        assert inventory.build_inventory(binding) is first, "inside one request the inventory is built once"
+    assert inventory.build_inventory(binding) is not first, "nothing is remembered between requests"
+    lecture = first["lectures"][0]
+    deck = next(d for d in lecture["decks"] if d.get("path"))
+    extra = (binding.root / deck["path"]).with_name("an-extra-handout.pdf")
+    extra.write_bytes((binding.root / deck["path"]).read_bytes())
+    with inventory.request_memo():
+        listed = inventory.build_inventory(binding)
+    names = {i["filename"] for l in listed["lectures"] for i in [*l["decks"], *l["extra_materials"]]} | {i["filename"] for i in listed["other_sources"]}
+    assert "an-extra-handout.pdf" in names

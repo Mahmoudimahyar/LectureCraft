@@ -6,6 +6,8 @@ import { defineConfig, devices } from "@playwright/test";
 const PORT = Number(process.env.LL_E2E_PORT ?? 8791);
 const baseURL = `http://127.0.0.1:${PORT}`;
 const chrome = devices["Desktop Chrome"];
+// A separately owned run (LL_E2E_PORT, LL_E2E_AREA, LL_E2E_DIST, LL_STORIES_PORT) keeps its results apart too.
+const RESULTS = process.env.LL_E2E_RESULTS ?? "../.local/e2e-results";
 
 const viewport = (name: string, width: number, height: number, colorScheme: "light" | "dark", extra: Record<string, unknown> = {}) => ({
   name,
@@ -14,7 +16,7 @@ const viewport = (name: string, width: number, height: number, colorScheme: "lig
 
 export default defineConfig({
   testDir: "./e2e",
-  outputDir: "../.local/e2e-results/artifacts",
+  outputDir: `${RESULTS}/artifacts`,
   fullyParallel: false,
   workers: 1,
   // One retry absorbs OS-level loopback socket exhaustion seen on Windows in long runs (net::ERR_NO_BUFFER_SPACE).
@@ -23,7 +25,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   timeout: 60_000,
   expect: { timeout: 10_000 },
-  reporter: [["list"], ["json", { outputFile: "../.local/e2e-results/report.json" }]],
+  reporter: [["list"], ["json", { outputFile: `${RESULTS}/report.json` }]],
   use: { baseURL, trace: "retain-on-failure", screenshot: "only-on-failure", actionTimeout: 10_000, launchOptions: { args: ["--autoplay-policy=no-user-gesture-required", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] } },
   webServer: [
     { command: "node e2e/serve-brain.mjs", url: `${baseURL}/api/health`, reuseExistingServer: !!process.env.LL_E2E_REUSE, timeout: 120_000, stdout: "pipe", stderr: "pipe" },

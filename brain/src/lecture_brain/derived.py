@@ -5,10 +5,24 @@ an output root: output files first, ``manifest.json`` last. This module never ru
 that process, never installs anything and never executes or follows anything found in an output root. It only:
 
 * checks an explicitly selected output root against the ``ll.derived-manifest/1`` and ``ll.derived-segments/1``
-  contracts, the declared bytes and the app's CURRENT identity of the recording;
+  contracts, the declared bytes and the app's CURRENT identity of the recording (what the course index names AND
+  the bytes on disk now);
+* accepts, through an adapter, a bundle of the offline timing producer (``private-timing-output-manifest-v1``): the
+  bundle is verified and mapped to one generation in the app's own contract, and the producer's files are kept
+  unchanged beside it (``speech/producer_bundle.py``; the producer is never rewritten to fit);
+* admits a generation that this app's own speech runner assembled in memory, through the same checks;
 * copies it into the app-local derived store (``<app area>/derived/<source_id>/<generation>/``), outputs first and
   the manifest last, and never changes a stored generation afterwards;
-* reads the newest stored generation that still matches the recording's current bytes.
+* reads, of the stored generations that still match the recording's current bytes, the one that RESOLVES the most
+  of the recording (the newest among equals).
+
+**Processed is not covered.** The app's own speech runner withholds text that fails its repetition check and states
+the time it stands for as ``unresolved_intervals`` in the generation's ``provenance.json``: that time was processed,
+but neither speech nor silence is known there. The reader therefore reports ``covered_intervals`` (the window minus
+the unresolved intervals), ``unresolved_intervals`` and ``unresolved_seconds``; ``coverage_fraction`` counts resolved
+time only (``processed_fraction`` is the window); and ``covers_whole_recording`` is false while anything is
+unresolved. A generation of the speech runner that does not state a withholding merge policy this consumer serves
+(``SERVED_MERGE_POLICIES``) — one published before text was withheld — is kept on disk and never served.
 
 What comes out is NEW generated text with its own times. It is not the course transcript, it is unreviewed, and it
 establishes nothing about slides. Every import, reuse and rejection is a receipt in the existing journal; there is
@@ -28,9 +42,13 @@ from .fsutil import ExclusiveConflict, publish_exclusive, replace_atomic
 from .journal import Journal
 from .ownerio.inventory import build_inventory
 from .preparation import Preparation
+from .speech import producer_bundle
 
 CONSUMER_VERSION = "derived-consumer-1"
 MANIFEST_NAME = "manifest.json"
+SEGMENTS_NAME = "segments.json"  # in generations this app assembles itself (adapter, runner)
+PROVENANCE_NAME = "provenance.json"  # where such a generation keeps where it came from
+PROVENANCE_DOCUMENT = "derived-provenance/1"
 RECEIPT_KIND = "derived-import"
 STOP_FILE = "derived-import.stop"  # in the app's private state folder: while it exists no import starts or continues
 TIME_TOLERANCE_MS = 500  # the same slack the cue route allows past the end of a recording
@@ -44,6 +62,12 @@ ALLOWED_MEDIA_TYPES = frozenset({"application/json", "text/plain", "text/vtt"})
 _OUTCOME = {"imported": "imported", "reused": "no_change", "rejected": "rejected", "cancelled": "cancelled"}  # status of a result -> outcome in its receipt
 _READABLE = frozenset({"registered_readable", "present_unindexed"})
 _PRODUCER_KEYS = ("tool", "tool_version", "model", "language", "parameters_sha256")
+_PROVENANCE_SUMMARY = ("origin", "adapter", "runner", "producer_contract", "job_key", "producer_manifest_sha256", "producer_statuses", "model", "counts", "covers_whole_recording",
+                       "publication")
+# Merge policies of the app's own speech runner under which text failing the repetition check is withheld and its time
+# stated as unresolved. A runner generation that names none of these was published before withholding: never served.
+SERVED_MERGE_POLICIES = frozenset({"withhold-repetition-1", "withhold-repetition-2"})
+GENERATION_STATES = ("current", "superseded", "unserved_policy", "stale", "invalid", "incomplete")
 
 
 def input_fingerprint(*, recording_sha256: str, recording_bytes: int, window_start_ms: int, window_end_ms: int, clip_offset_ms: int, producer: dict,
@@ -65,6 +89,27 @@ def fingerprint_of(manifest: dict) -> str:
 def to_recording_ms(clip_ms: int, clip_offset_ms: int) -> int:
     """The single place where a clip-relative time becomes a recording-absolute time (offset applied once)."""
     return clip_ms + clip_offset_ms
+
+
+def assemble_generation(*, course_id: str, source_id: str, generation: str, created_at: str, recording_sha256: str, recording_bytes: int, declared_duration_ms: int | None,
+                        producer: dict, window: dict, clip_offset_ms: int, segments: list[dict], provenance: dict | None = None,
+                        extra_files: dict[str, tuple[bytes, str]] | None = None) -> tuple[bytes, dict[str, bytes]]:
+    """One generation in this app's own contract, assembled in memory (the producer-bundle adapter, the speech runner).
+    Returns the manifest bytes and the output bytes; the same inputs give the same bytes. Nothing is stored here: the
+    result goes through the same admission checks as an output root on disk."""
+    document = {"contract": "ll.derived-segments/1", "course_id": course_id, "source_id": source_id, "generation": generation, "time_base": "clip_relative",
+                "clip_offset_ms": clip_offset_ms, "text_origin": "generated_speech_text", "review_state": "generated_unreviewed", "establishes": [], "segments": segments}
+    files: dict[str, tuple[bytes, str]] = {SEGMENTS_NAME: (c.dump_json(document), "application/json"), **(extra_files or {})}
+    if provenance is not None:
+        files[PROVENANCE_NAME] = (c.dump_json({"document": PROVENANCE_DOCUMENT, **provenance}), "application/json")
+    manifest = {"contract": "ll.derived-manifest/1", "status": "complete", "kind": "speech_timing", "course_id": course_id, "generation": generation, "created_at": created_at,
+                "consumer_version": CONSUMER_VERSION, "recording": {"source_id": source_id, "sha256": recording_sha256, "bytes": recording_bytes, "duration_ms": declared_duration_ms},
+                "producer": {key: producer[key] for key in _PRODUCER_KEYS}, "window": {"start_ms": window["start_ms"], "end_ms": window["end_ms"]}, "time_base": "clip_relative",
+                "clip_offset_ms": clip_offset_ms, "input_fingerprint": "0" * 64, "segments_path": SEGMENTS_NAME,
+                "outputs": [c.artifact_for_bytes(data, name, media_type) for name, (data, media_type) in sorted(files.items())],
+                "text_origin": "generated_speech_text", "review_state": "generated_unreviewed", "establishes": []}
+    manifest["input_fingerprint"] = fingerprint_of(manifest)
+    return c.dump_json(manifest), {name: data for name, (data, _) in files.items()}
 
 
 class _Rejected(Exception):
@@ -115,6 +160,51 @@ def _when(manifest: dict) -> tuple[datetime, str]:
     return datetime.fromisoformat(manifest["created_at"].replace("Z", "+00:00")), manifest["generation"]
 
 
+def stated_unresolved(provenance: dict | None, window: dict) -> list[dict[str, Any]]:
+    """The intervals a generation's provenance states as unresolved (processed, text withheld): ``[{start_ms, end_ms,
+    reason}]`` in whole milliseconds of recording time, inside the window, in order and not overlapping. A generation
+    that states none has none. Raises ``ValueError`` when what is stated cannot be read that way: nothing is guessed."""
+    stated = provenance.get("unresolved_intervals") if isinstance(provenance, dict) else None
+    if stated is None:
+        return []
+    if not isinstance(stated, list):
+        raise ValueError("unresolved_intervals is not a list")
+    intervals, floor = [], window["start_ms"]
+    for entry in stated:
+        start, end, reason = (entry.get(key) for key in ("start_ms", "end_ms", "reason")) if isinstance(entry, dict) else (None, None, None)
+        if type(start) is not int or type(end) is not int or not isinstance(reason, str) or not reason:
+            raise ValueError("an unresolved interval needs start_ms and end_ms in whole milliseconds and a reason")
+        if not (floor <= start < end <= window["end_ms"]):
+            raise ValueError(f"the unresolved interval {start}-{end} ms is empty, out of order, overlapping or outside the window")
+        intervals.append({"start_ms": start, "end_ms": end, "reason": reason[:80]})
+        floor = end
+    return intervals
+
+
+def policy_problem(provenance: dict | None) -> str | None:
+    """Why a generation of the app's own speech runner is not served, or None. Other origins state no merge policy and are not judged by one."""
+    if not isinstance(provenance, dict) or provenance.get("origin") != "speech_runner":
+        return None
+    decoding = provenance.get("decoding")
+    policy = decoding.get("merge_policy") if isinstance(decoding, dict) else None
+    if policy not in SERVED_MERGE_POLICIES or provenance.get("unresolved_intervals") is None:
+        return (f"Published by the speech runner under merge policy {policy!r} without stating unresolved intervals as this consumer needs them "
+                f"({', '.join(sorted(SERVED_MERGE_POLICIES))}): text that fails the repetition check may not have been withheld. Kept on disk, never served.")
+    return None
+
+
+def covered_intervals(window: dict, unresolved: list[dict]) -> list[dict[str, int]]:
+    """The window minus the unresolved intervals: what a generation actually covers."""
+    covered, cursor = [], window["start_ms"]
+    for interval in unresolved:
+        if interval["start_ms"] > cursor:
+            covered.append({"start_ms": cursor, "end_ms": interval["start_ms"]})
+        cursor = max(cursor, interval["end_ms"])
+    if cursor < window["end_ms"]:
+        covered.append({"start_ms": cursor, "end_ms": window["end_ms"]})
+    return covered
+
+
 class Derived:
     def __init__(self, settings: Settings, journal: Journal | None = None, *, preparation: Preparation | None = None, now: Callable[[], str] | None = None,
                  cancel: Callable[[], bool] | None = None):
@@ -151,6 +241,15 @@ class Derived:
             raise _Rejected("source_unavailable", f"{item['source_id']!r} is listed but cannot be read now ({item['state']}).")
         if manifest["recording"]["sha256"] != sha256 or manifest["recording"]["bytes"] != item["bytes"]:
             raise _Rejected("changed_input", "The recording's current bytes are not the bytes this result was made from; the result is not imported.")
+        if self._disk_sha256(course_id, item) != sha256:
+            raise _Rejected("changed_input", "The file on disk is not the version the course index names for this recording; timing is bound to the actual bytes, so the result is not imported.")
+
+    def _disk_sha256(self, course_id: str, item: dict) -> str | None:
+        """SHA-256 of the recording's bytes on disk NOW, whatever the course index says about it. Hashed at most once
+        per file version: the preparation's persistent hash cache is keyed by path, size and modification time."""
+        if item["state"] not in _READABLE or not item.get("path"):
+            return None
+        return self._preparation.identity_of(course_id, {**item, "sha256": None, "version_id": None})[1]
 
     # ---- import ---------------------------------------------------------------------------------------------------
     def stop_requested(self) -> bool:
@@ -178,6 +277,33 @@ class Derived:
         except _Cancelled:
             outcome = {"status": "cancelled", "reused": False, "reason": "cancelled",
                        "detail": f"Stopped on request ({STOP_FILE} or the caller's cancel check). No manifest was written; import the same root again to finish."}
+        result = {**facts, **outcome}
+        result["receipt_id"] = self._receipt(result)
+        return result
+
+    def import_prepared(self, *, course_id: str, manifest_bytes: bytes, outputs: dict[str, bytes], origin: str) -> dict[str, Any]:
+        """Admit a generation that this app's own speech runner assembled in memory (:func:`assemble_generation`).
+
+        The same checks as for a root on disk — contract, fingerprint, the recording's current identity and bytes,
+        duration, window, every segment and word, declared sizes and digests — and the same store and receipt. Only
+        the reading of files from a selected folder is absent. ``origin`` is recorded where a root path would be."""
+        facts: dict[str, Any] = {"course_id": course_id, "root": origin, "source_id": None, "generation": None, "manifest_sha256": None, "input_fingerprint": None,
+                                 "files": 0, "bytes": 0}
+        try:
+            if course_id not in self._settings.courses:
+                raise _Rejected("unknown_course", f"Course {course_id!r} is not one of the configured courses.")
+            self._checkpoint()
+            try:
+                manifest = c.parse_json(manifest_bytes, max_bytes=c.MAX_MANIFEST_BYTES)
+            except c.ContractError as exc:
+                raise _Rejected("manifest_unreadable", str(exc)) from None
+            self._check_manifest(manifest, manifest_bytes, facts)
+            outcome = self._admit(course_id, manifest, manifest_bytes, facts, outputs=outputs)
+        except _Rejected as refusal:
+            outcome = {"status": "rejected", "reused": False, "reason": refusal.code, "detail": refusal.detail}
+        except _Cancelled:
+            outcome = {"status": "cancelled", "reused": False, "reason": "cancelled",
+                       "detail": f"Stopped on request ({STOP_FILE} or the caller's cancel check). No manifest was written; publish the same generation again to finish."}
         result = {**facts, **outcome}
         result["receipt_id"] = self._receipt(result)
         return result
@@ -217,7 +343,8 @@ class Derived:
         if resolved.is_relative_to(self._settings.state_dir.resolve()):
             raise _Rejected("root_inside_app", "The output root is inside this app's private state folder.")
 
-    def _read_manifest(self, root: Path, facts: dict[str, Any]) -> tuple[dict, bytes]:
+    def _read_manifest(self, root: Path) -> tuple[Any, bytes]:
+        """``manifest.json`` of a selected root as strict JSON, and its exact bytes. Which contract it is comes next."""
         self._check_root(root)
         path = root / MANIFEST_NAME
         if _is_link(path):
@@ -228,9 +355,12 @@ class Derived:
             raise _Rejected("manifest_too_large", f"{MANIFEST_NAME} is larger than {c.MAX_MANIFEST_BYTES} bytes.")
         data = path.read_bytes()
         try:
-            manifest = c.parse_json(data, max_bytes=c.MAX_MANIFEST_BYTES)
+            return c.parse_json(data, max_bytes=c.MAX_MANIFEST_BYTES), data
         except c.ContractError as exc:
             raise _Rejected("manifest_unreadable", str(exc)) from None
+
+    def _check_manifest(self, manifest: Any, data: bytes, facts: dict[str, Any]) -> dict:
+        """A manifest in this app's own contract: complete, valid, its outputs listed once and its segments among them."""
         if not isinstance(manifest, dict) or manifest.get("status") != "complete":
             raise _Rejected("incomplete", "The manifest does not say status \"complete\"; an unfinished generation is never imported.")
         declared = [entry.get("path") for entry in manifest.get("outputs") or [] if isinstance(entry, dict)] if isinstance(manifest.get("outputs"), list) else []
@@ -246,13 +376,78 @@ class Derived:
         if manifest["segments_path"] not in {entry["path"] for entry in manifest["outputs"]}:
             raise _Rejected("segments_not_listed", "segments_path does not name one of the listed outputs.")
         facts.update(source_id=manifest["recording"]["source_id"], generation=manifest["generation"], manifest_sha256=c.sha256_hex(data), input_fingerprint=manifest["input_fingerprint"])
-        return manifest, data
+        return manifest
 
     def _import(self, root: Path, course_id: str, facts: dict[str, Any]) -> dict[str, Any]:
         if course_id not in self._settings.courses:
             raise _Rejected("unknown_course", f"Course {course_id!r} is not one of the configured courses.")
         self._checkpoint()
-        manifest, manifest_bytes = self._read_manifest(root, facts)
+        offered, data = self._read_manifest(root)
+        if producer_bundle.is_bundle_manifest(offered):
+            manifest_bytes, outputs = self._adapt_bundle(root, course_id, offered, data, facts)
+            manifest = self._check_manifest(c.parse_json(manifest_bytes, max_bytes=c.MAX_MANIFEST_BYTES), manifest_bytes, {})  # held to the app's contract like any other
+            facts.update(generation=manifest["generation"], input_fingerprint=manifest["input_fingerprint"], stored_manifest_sha256=c.sha256_hex(manifest_bytes))
+            return self._admit(course_id, manifest, manifest_bytes, facts, outputs=outputs)
+        manifest = self._check_manifest(offered, data, facts)
+        return self._admit(course_id, manifest, data, facts, root=root)
+
+    def _adapt_bundle(self, root: Path, course_id: str, offered: dict, data: bytes, facts: dict[str, Any]) -> tuple[bytes, dict[str, bytes]]:
+        """A bundle of the offline timing producer as one generation in this app's contract (nothing is stored here).
+
+        Declared paths, sizes and digests are verified with the importer's own reader; the adapter checks job keys,
+        status and timing semantics; and the bundle's source (course, id, version, sha256) must be the recording as
+        this app identifies it now AND the bytes on disk. The producer's files are read, never written."""
+        try:
+            declared = producer_bundle.declared_outputs(offered)
+        except producer_bundle.Refused as refusal:
+            raise _Rejected(refusal.code, refusal.detail) from None
+        source = offered["source"]
+        facts.update(source_id=source["source_id"], manifest_sha256=c.sha256_hex(data), adapter=producer_bundle.ADAPTER_VERSION, producer_contract=producer_bundle.MANIFEST_CONTRACT,
+                     job_key=offered["job_key"])
+        if source["course_id"] != course_id:
+            raise _Rejected("course_mismatch", f"The bundle is for course {source['course_id']!r}, not {course_id!r}.")
+        item = self._recording(course_id, source["source_id"])
+        if item is None:
+            raise _Rejected("unknown_source", f"{source['source_id']!r} is not a source this app currently lists for {course_id}.")
+        if item["rendition"] != "native_media":
+            raise _Rejected("not_a_recording", f"{item['source_id']!r} is not an audio or video recording.")
+        files = self._read_outputs(root, declared, producer_bundle.TIMING_PATH)
+        try:
+            parts = producer_bundle.adapt(offered, facts["manifest_sha256"], files, tolerance_ms=TIME_TOLERANCE_MS, max_document_bytes=MAX_OUTPUT_BYTES)
+        except producer_bundle.Refused as refusal:
+            raise _Rejected(refusal.code, refusal.detail) from None
+        version_id, sha256 = self._identity(course_id, item)
+        if sha256 is None:
+            raise _Rejected("source_unavailable", f"{item['source_id']!r} is listed but cannot be read now ({item['state']}).")
+        if (source["version_id"], source["sha256"]) != (version_id, sha256):
+            raise _Rejected("changed_input", f"The bundle was made from version {source['version_id']!r} of this recording; the app's current version is {version_id!r}. A stale result is not imported.")
+        disk_sha256 = self._disk_sha256(course_id, item)
+        if disk_sha256 != sha256:
+            raise _Rejected("changed_input", "The file on disk is not the version the course index names for this recording; timing is bound to the actual bytes, so the bundle is not imported.")
+        generation, window = parts["generation"], parts["window"]
+        duration = self._duration_ms(course_id, item, {"recording": {"duration_ms": parts["declared_duration_ms"]}})
+        whole = None if duration is None else window["start_ms"] <= TIME_TOLERANCE_MS and window["end_ms"] >= duration - TIME_TOLERANCE_MS
+        provenance = {**parts["provenance"], "bound_to": {"version_id": version_id, "sha256": sha256, "disk_sha256": disk_sha256, "bytes": item["bytes"], "duration_ms": duration},
+                      "covers_whole_recording": whole}
+        kept = {f"{producer_bundle.KEPT_PREFIX}{MANIFEST_NAME}": (data, "application/json"),
+                **{f"{producer_bundle.KEPT_PREFIX}{entry['path']}": (files[entry["path"]], entry["media_type"]) for entry in declared}}
+        # The same bundle offered again must give the same bytes: an already stored generation keeps its creation time.
+        created_at = self.stored_created_at(course_id, source["source_id"], generation) or self._now()
+        return assemble_generation(course_id=course_id, source_id=source["source_id"], generation=generation, created_at=created_at, recording_sha256=sha256, recording_bytes=item["bytes"],
+                                   declared_duration_ms=parts["declared_duration_ms"], producer=parts["producer"], window=window, clip_offset_ms=parts["clip_offset_ms"],
+                                   segments=parts["segments"], provenance=provenance, extra_files=kept)
+
+    def stored_created_at(self, course_id: str, source_id: str, generation: str) -> str | None:
+        """The creation time a stored generation carries, or None when there is no such generation."""
+        try:
+            stored = c.parse_json((_plain_path(self.store_dir(course_id), f"{source_id}/{generation}") / MANIFEST_NAME).read_bytes(), max_bytes=c.MAX_MANIFEST_BYTES)
+        except (OSError, c.ContractError, _Rejected):
+            return None
+        return stored.get("created_at") if isinstance(stored, dict) and isinstance(stored.get("created_at"), str) else None
+
+    def _admit(self, course_id: str, manifest: dict, manifest_bytes: bytes, facts: dict[str, Any], *, root: Path | None = None, outputs: dict[str, bytes] | None = None) -> dict[str, Any]:
+        """Everything a generation must satisfy before it is stored, whether its outputs are files in a selected root
+        or bytes assembled in memory by the adapter or the runner."""
         if manifest["consumer_version"] != CONSUMER_VERSION:
             raise _Rejected("unsupported_consumer_version", f"Written for {manifest['consumer_version']!r}; this consumer is {CONSUMER_VERSION!r}.")
         if manifest["course_id"] != course_id:
@@ -264,15 +459,37 @@ class Derived:
             raise _Rejected("time_out_of_bounds", "The processed window is empty or reversed.")
         if offset > window["start_ms"]:
             raise _Rejected("time_base_mismatch", "clip_offset_ms is after the start of the window the clip is said to cover.")
-        item = self._recording(course_id, facts["source_id"])
+        source_id = manifest["recording"]["source_id"]
+        item = self._recording(course_id, source_id)
         if item is None:
-            raise _Rejected("unknown_source", f"{facts['source_id']!r} is not a source this app currently lists for {course_id}.")
+            raise _Rejected("unknown_source", f"{source_id!r} is not a source this app currently lists for {course_id}.")
         self._check_identity(course_id, item, manifest)
         self._check_duration(course_id, item, manifest)
-        outputs = self._read_outputs(root, manifest)
+        outputs = self._read_outputs(root, manifest["outputs"], manifest["segments_path"], given=outputs)
         self._check_segments(manifest, outputs[manifest["segments_path"]])
+        self._check_provenance(manifest, outputs)
         facts.update(files=len(outputs), bytes=sum(len(data) for data in outputs.values()))
         return self._store(course_id, manifest, manifest_bytes, outputs)
+
+    def _check_provenance(self, manifest: dict, outputs: dict[str, bytes]) -> None:
+        """A generation that carries this app's own provenance document must state what the reader relies on in a
+        form it can read: unresolved intervals inside the window, and — for the speech runner — a served merge policy.
+        A ``provenance.json`` of another producer in another format is that producer's file and is not judged here."""
+        if not any(o["path"] == PROVENANCE_NAME and o["media_type"] == "application/json" for o in manifest["outputs"]):
+            return
+        try:
+            document = c.parse_json(outputs[PROVENANCE_NAME], max_bytes=MAX_OUTPUT_BYTES)
+        except c.ContractError:
+            return
+        if not isinstance(document, dict) or document.get("document") != PROVENANCE_DOCUMENT:
+            return
+        problem = policy_problem(document)
+        if problem:
+            raise _Rejected("unserved_merge_policy", problem)
+        try:
+            stated_unresolved(document, manifest["window"])
+        except ValueError as exc:
+            raise _Rejected("provenance_invalid", f"{PROVENANCE_NAME}: {exc}. Withheld time must be stated exactly or the generation is not stored.") from None
 
     def _store(self, course_id: str, manifest: dict, manifest_bytes: bytes, outputs: dict[str, bytes]) -> dict[str, Any]:
         """Outputs first, read back, manifest last. A generation that has its manifest is never written again."""
@@ -355,28 +572,34 @@ class Derived:
                 check(word, f"a word of segment {segment['index']}", may_be_empty=True)  # speech tools do emit zero-length words
         return document
 
-    def _read_outputs(self, root: Path, manifest: dict) -> dict[str, bytes]:
+    def _read_outputs(self, root: Path | None, declared: list[dict], json_path: str | None, *, given: dict[str, bytes] | None = None) -> dict[str, bytes]:
         """Every declared output, read once and checked against its declared size and digest. The bytes verified here
-        are the bytes that get stored: nothing is read from the root a second time."""
-        if sum(entry["bytes"] for entry in manifest["outputs"]) > MAX_TOTAL_BYTES or any(entry["bytes"] > MAX_OUTPUT_BYTES for entry in manifest["outputs"]):
+        are the bytes that get stored: nothing is read from the root a second time. ``given`` holds the bytes of a
+        generation assembled in memory instead of a root; they are held to the same declarations."""
+        if sum(entry["bytes"] for entry in declared) > MAX_TOTAL_BYTES or any(entry["bytes"] > MAX_OUTPUT_BYTES for entry in declared):
             raise _Rejected("output_too_large", f"Outputs exceed the cap ({MAX_OUTPUT_BYTES} bytes per file, {MAX_TOTAL_BYTES} in total).")
-        for entry in manifest["outputs"]:
-            expected = "application/json" if entry["path"] == manifest["segments_path"] else None
+        for entry in declared:
+            expected = "application/json" if entry["path"] == json_path else None
             if entry["media_type"] not in ALLOWED_MEDIA_TYPES or (expected and entry["media_type"] != expected):
                 raise _Rejected("unsupported_media_type", f"{entry['path']!r} is declared as {entry['media_type']!r}; only timed-text and plain-text outputs are kept.")
+        if given is not None and set(given) != {entry["path"] for entry in declared}:
+            raise _Rejected("output_missing", "The assembled outputs are not exactly the outputs the manifest lists.")
         outputs: dict[str, bytes] = {}
-        for entry in manifest["outputs"]:
-            path = _plain_path(root, entry["path"])
-            try:
-                if not path.is_file():
-                    raise _Rejected("output_missing", f"{entry['path']!r} is listed in the manifest but is not a file in the output root.")
-                if path.stat().st_size != entry["bytes"]:
-                    raise _Rejected("output_size_mismatch", f"{entry['path']!r} is {path.stat().st_size} bytes; the manifest declares {entry['bytes']}.")
-                data = path.read_bytes()
-            except OSError as exc:
-                raise _Rejected("output_missing", f"{entry['path']!r} could not be read: {exc}") from None
+        for entry in declared:
+            if given is not None:
+                data = given[entry["path"]]
+            else:
+                path = _plain_path(root, entry["path"])
+                try:
+                    if not path.is_file():
+                        raise _Rejected("output_missing", f"{entry['path']!r} is listed in the manifest but is not a file in the output root.")
+                    if path.stat().st_size != entry["bytes"]:
+                        raise _Rejected("output_size_mismatch", f"{entry['path']!r} is {path.stat().st_size} bytes; the manifest declares {entry['bytes']}.")
+                    data = path.read_bytes()
+                except OSError as exc:
+                    raise _Rejected("output_missing", f"{entry['path']!r} could not be read: {exc}") from None
             if len(data) != entry["bytes"]:
-                raise _Rejected("output_size_mismatch", f"{entry['path']!r} changed size while it was read.")
+                raise _Rejected("output_size_mismatch", f"{entry['path']!r} is {len(data)} bytes when read; the manifest declares {entry['bytes']}.")
             if c.sha256_hex(data) != entry["sha256"]:
                 raise _Rejected("output_digest_mismatch", f"{entry['path']!r} does not have the declared sha256.")
             outputs[entry["path"]] = data
@@ -398,7 +621,8 @@ class Derived:
         return journal.add_receipt(kind=RECEIPT_KIND, job_id=None, ref=ref, sha256=result["manifest_sha256"],
                                          payload={"outcome": _OUTCOME[result["status"]], "reason": result["reason"], "detail": result["detail"], "course_id": result["course_id"],
                                                   "source_id": result["source_id"], "generation": result["generation"], "input_fingerprint": result["input_fingerprint"],
-                                                  "files": result["files"], "bytes": result["bytes"], "root": result["root"], "at": self._now()})
+                                                  "files": result["files"], "bytes": result["bytes"], "root": result["root"], "at": self._now(),
+                                                  **{key: result[key] for key in ("adapter", "producer_contract", "job_key", "stored_manifest_sha256") if key in result}})
 
     # ---- read -----------------------------------------------------------------------------------------------------
     def _load_stored(self, directory: Path, source_id: str) -> dict[str, Any]:
@@ -417,39 +641,91 @@ class Derived:
             return dict(entry, problem="invalid", detail="The stored manifest is not a manifest of this generation for this consumer version.")
         entry.update(manifest=manifest, manifest_sha256=c.sha256_hex(data))
         problem = _verify_outputs(directory, manifest)
-        return dict(entry, problem="invalid", detail=problem) if problem else entry
+        if problem:
+            return dict(entry, problem="invalid", detail=problem)
+        entry["provenance"] = self._provenance(entry)
+        try:
+            entry["unresolved"] = stated_unresolved(entry["provenance"], manifest["window"])
+        except ValueError as exc:
+            return dict(entry, problem="invalid", detail=f"The stored provenance states unresolved intervals that cannot be read ({exc}); the generation is not served.")
+        entry["resolved_ms"] = manifest["window"]["end_ms"] - manifest["window"]["start_ms"] - sum(i["end_ms"] - i["start_ms"] for i in entry["unresolved"])
+        return entry
+
+    def _provenance(self, entry: dict[str, Any]) -> dict[str, Any] | None:
+        """Where a stored generation came from, when it was assembled by this app (adapter or runner) and says so in
+        its ``provenance.json`` output. The file's bytes were verified against the manifest when the entry was loaded."""
+        manifest = entry["manifest"]
+        if manifest is None or not any(o["path"] == PROVENANCE_NAME and o["media_type"] == "application/json" for o in manifest["outputs"]):
+            return None
+        try:
+            document = c.parse_json((entry["dir"] / PROVENANCE_NAME).read_bytes(), max_bytes=MAX_OUTPUT_BYTES)
+        except (OSError, c.ContractError):
+            return None
+        return document if isinstance(document, dict) and document.get("document") == PROVENANCE_DOCUMENT else None
 
     def _generations(self, course_id: str, source_id: str, sha256: str | None, size: int | None) -> list[dict[str, Any]]:
         """Stored generations of one recording, newest first, each with its state:
-        ``current`` (the newest that verifies and was made from the recording's current bytes), ``superseded`` (as valid,
-        but older), ``stale`` (made from other bytes: kept, never served), ``invalid`` or ``incomplete``."""
+        ``current`` (of those that verify, were made from the recording's current bytes and may be served: the one
+        that resolves the most of the recording, the newest among equals), ``superseded`` (as valid, but resolving
+        less or older), ``unserved_policy`` (a speech-runner generation from before text failing the repetition check
+        was withheld: kept, never served), ``stale`` (made from other bytes: kept, never served), ``invalid`` or
+        ``incomplete``."""
         directory = self.store_dir(course_id) / source_id
         entries = [self._load_stored(p, source_id) for p in sorted(directory.iterdir()) if p.is_dir()] if directory.is_dir() and not _is_link(directory) else []
         usable = sorted((e for e in entries if e["problem"] is None), key=lambda e: _when(e["manifest"]), reverse=True)
-        served = False
+        servable = []
         for entry in usable:
             recording = entry["manifest"]["recording"]
+            unserved = policy_problem(entry["provenance"])
             if sha256 is None or recording["sha256"] != sha256 or recording["bytes"] != size:
                 entry["state"] = "stale"
+            elif unserved:
+                entry.update(state="unserved_policy", detail=unserved)
             else:
-                entry["state"], served = ("superseded" if served else "current"), True
+                entry["state"] = "superseded"
+                servable.append(entry)
+        if servable:
+            max(servable, key=lambda e: (e["resolved_ms"], _when(e["manifest"])))["state"] = "current"
         return usable + [dict(e, state=e["problem"]) for e in entries if e["problem"] is not None]
+
+    def newest_created_at(self, course_id: str, source_id: str) -> str | None:
+        """The latest creation time among the stored generations of one recording that have a readable manifest, or
+        None. A publisher that wants its next generation to be the newest stamps it later than this."""
+        directory = self.store_dir(course_id) / source_id
+        if not directory.is_dir() or _is_link(directory):
+            return None
+        times = [stamp for stamp in (self.stored_created_at(course_id, source_id, p.name) for p in directory.iterdir() if p.is_dir()) if stamp]
+        try:
+            return max(times, key=lambda stamp: datetime.fromisoformat(stamp.replace("Z", "+00:00"))) if times else None
+        except ValueError:
+            return None
 
     def _identity(self, course_id: str, item: dict) -> tuple[str | None, str | None]:
         return self._preparation.identity_of(course_id, item) if item["state"] in _READABLE else (None, None)
 
-    def _coverage(self, manifest: dict, duration: int | None) -> dict[str, Any]:
-        """How much of the recording a generation covers. Unknown length means unknown coverage, never "all of it"."""
+    def _coverage(self, manifest: dict, duration: int | None, unresolved: list[dict] | None = None) -> dict[str, Any]:
+        """How much of the recording a generation covers. Unknown length means unknown coverage, never "all of it".
+
+        ``window`` is what was PROCESSED. What is COVERED is the window minus the intervals whose text was withheld:
+        ``coverage_fraction`` counts that resolved time only (``processed_fraction`` is the window), and a recording
+        is never called whole while any of it is unresolved."""
         window = manifest["window"]
+        unresolved = list(unresolved or [])
+        processed = window["end_ms"] - window["start_ms"]
+        unresolved_ms = sum(interval["end_ms"] - interval["start_ms"] for interval in unresolved)
         whole = None if duration is None else window["start_ms"] <= TIME_TOLERANCE_MS and window["end_ms"] >= duration - TIME_TOLERANCE_MS
-        return {"window": dict(window), "duration_ms": duration, "coverage_fraction": None if not duration else min(1.0, (window["end_ms"] - window["start_ms"]) / duration),
-                "covers_whole_recording": whole}
+        return {"window": dict(window), "duration_ms": duration, "coverage_fraction": None if not duration else min(1.0, (processed - unresolved_ms) / duration),
+                "processed_fraction": None if not duration else min(1.0, processed / duration),
+                "covers_whole_recording": False if unresolved else whole,
+                "covered_intervals": covered_intervals(window, unresolved), "unresolved_intervals": unresolved, "unresolved_seconds": unresolved_ms / 1000}
 
     def current(self, course_id: str, source_id: str) -> dict[str, Any] | None:
-        """The newest stored generation made from the recording's CURRENT bytes, with times in the recording.
+        """The stored generation made from the recording's CURRENT bytes that resolves the most of it (the newest
+        among equals), with times in the recording, what it covers and what it leaves unresolved.
 
         None when there is none to serve: nothing imported, only generations for older bytes (kept on disk, reported
-        by :meth:`status` as ``stale``), or the recording is not listed or readable now."""
+        by :meth:`status` as ``stale``) or from before text was withheld (``unserved_policy``), or the recording is
+        not listed or readable now."""
         item = self._recording(course_id, source_id)
         if item is None or item["rendition"] != "native_media":
             return None
@@ -457,6 +733,8 @@ class Derived:
         chosen = next((g for g in self._generations(course_id, source_id, sha256, item["bytes"]) if g["state"] == "current"), None)
         if chosen is None:
             return None
+        if self._disk_sha256(course_id, item) != sha256:
+            return None  # the file on disk is not the version the course index names: timing made for the named bytes is not served over other audio
         manifest = chosen["manifest"]
         document = c.parse_json((chosen["dir"] / manifest["segments_path"]).read_bytes(), max_bytes=MAX_OUTPUT_BYTES)  # bytes verified against the manifest just above
         offset = manifest["clip_offset_ms"]
@@ -473,9 +751,11 @@ class Derived:
         return {"course_id": course_id, "source_id": source_id, "generation": manifest["generation"], "state": "current", "created_at": manifest["created_at"],
                 "manifest_sha256": chosen["manifest_sha256"], "input_fingerprint": manifest["input_fingerprint"], "consumer_version": manifest["consumer_version"],
                 "producer": dict(manifest["producer"]), "recording": {"source_id": source_id, "version_id": version_id, "sha256": sha256, "bytes": item["bytes"]},
-                "time_base": "recording_absolute", "clip_offset_ms": offset, **self._coverage(manifest, self._duration_ms(course_id, item, manifest)),
+                "time_base": "recording_absolute", "clip_offset_ms": offset, **self._coverage(manifest, self._duration_ms(course_id, item, manifest), chosen["unresolved"]),
                 "text_origin": "generated_speech_text", "review_state": "generated_unreviewed", "establishes": [], "segments": segments,
-                "note": "Generated speech text with generated times. It is not the course transcript, has not been reviewed and says nothing about which slide was shown."}
+                "provenance": chosen["provenance"],
+                "note": "Generated speech text with generated times. It is not the course transcript, has not been reviewed and says nothing about which slide was shown. "
+                        "The window is what was processed; unresolved intervals inside it are time whose text was withheld: neither speech nor silence is known there."}
 
     def _generation_rows(self, course_id: str, source_id: str, sha256: str | None, size: int | None, duration: int | None) -> list[dict[str, Any]]:
         rows = []
@@ -485,7 +765,10 @@ class Derived:
                 manifest = entry["manifest"]
                 row.update(created_at=manifest["created_at"], manifest_sha256=entry["manifest_sha256"], input_fingerprint=manifest["input_fingerprint"],
                            recording_sha256=manifest["recording"]["sha256"], producer=dict(manifest["producer"]), consumer_version=manifest["consumer_version"],
-                           **self._coverage(manifest, duration or manifest["recording"]["duration_ms"]))
+                           **self._coverage(manifest, duration or manifest["recording"]["duration_ms"], entry.get("unresolved")))
+                if entry["problem"] is None:
+                    provenance = entry["provenance"]
+                    row["provenance"] = None if provenance is None else {key: provenance.get(key) for key in _PROVENANCE_SUMMARY}
             rows.append(row)
         return rows
 
@@ -499,10 +782,19 @@ class Derived:
             version_id, sha256 = self._identity(course_id, item)
             duration = media_duration_ms(self._settings.course(course_id).root / item["path"]) if item.get("path") else None
             generations = self._generation_rows(course_id, item["source_id"], sha256, item["bytes"], duration)
+            bytes_on_disk = "not_checked"  # hashed only where a generation would otherwise be served
+            if any(g["state"] in {"current", "superseded"} for g in generations):
+                bytes_on_disk = "match" if self._disk_sha256(course_id, item) == sha256 else "differ"
+                if bytes_on_disk == "differ":  # the index names other bytes than the file holds: nothing made for the named bytes is current
+                    generations = self._generation_rows(course_id, item["source_id"], None, None, duration)
             served = next((g for g in generations if g["state"] == "current"), None)
             recordings.append({"source_id": item["source_id"], "filename": item["filename"], "path": item["path"], "registration": item["registration"], "availability": item["state"],
-                               "version_id": version_id, "sha256": sha256, "bytes": item["bytes"], "duration_ms": duration, "current_generation": served["generation"] if served else None,
-                               "coverage_fraction": served["coverage_fraction"] if served else None, "covers_whole_recording": served["covers_whole_recording"] if served else None,
+                               "version_id": version_id, "sha256": sha256, "bytes": item["bytes"], "bytes_on_disk": bytes_on_disk, "duration_ms": duration,
+                               "current_generation": served["generation"] if served else None,
+                               "coverage_fraction": served["coverage_fraction"] if served else None, "processed_fraction": served["processed_fraction"] if served else None,
+                               "covers_whole_recording": served["covers_whole_recording"] if served else None,
+                               "covered_intervals": served["covered_intervals"] if served else [], "unresolved_intervals": served["unresolved_intervals"] if served else [],
+                               "unresolved_seconds": served["unresolved_seconds"] if served else 0.0,
                                "generations": generations})
         listed = {r["source_id"] for r in recordings}
         store = self.store_dir(course_id)
@@ -512,5 +804,7 @@ class Derived:
         return {"course_id": course_id, "consumer_version": CONSUMER_VERSION, "manifest_contract": "ll.derived-manifest/1", "recordings": recordings, "unlisted": unlisted,
                 "totals": {"recordings": len(recordings), "with_current_generation": sum(1 for r in recordings if r["current_generation"]),
                            "whole_recording_covered": sum(1 for r in recordings if r["covers_whole_recording"]),
-                           "generations": {state: states.count(state) for state in ("current", "superseded", "stale", "invalid", "incomplete")}},
-                "note": "Generated timing only. A generation is unreviewed generated text for the stated window of one recording; it is not reviewed timing and not a slide match."}
+                           "with_unresolved_time": sum(1 for r in recordings if r["unresolved_seconds"] > 0),
+                           "generations": {state: states.count(state) for state in GENERATION_STATES}},
+                "note": "Generated timing only. A generation is unreviewed generated text for the stated window of one recording; it is not reviewed timing and not a slide match. "
+                        "Coverage counts resolved time only: unresolved intervals were processed but their text was withheld, and a recording with any is not covered whole."}

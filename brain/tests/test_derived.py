@@ -876,3 +876,573 @@ def test_imported_generated_timing_reaches_the_lecture_view_labelled_and_changes
                                        "suggested_links": sum(1 for s in after["slides"] for o in s["occurrences"] if o["review_state"] != "confirmed"),
                                        "text_match_suggestions": sum(1 for s in after["slides"] for r in s["transcript_ranges"] if r["review_state"] != "confirmed"),
                                        "generated_text_recordings": 1, "scheduled_preparation": "not_active"}
+
+
+# ---- the offline producer's bundle, through the adapter (experience repair v2, phase 4) -----------------------------------
+BUNDLE_SETTINGS = {"language": "en", "task": "transcribe", "beam_size": 5, "best_of": 1, "temperature": 0.0, "word_timestamps": True, "vad_filter": False,
+                   "condition_on_previous_text": True, "compression_ratio_threshold": 2.4, "log_prob_threshold": -1.0, "no_speech_threshold": 0.6}
+BUNDLE_STATUSES = {"imports": "PASS", "model_load": "PASS", "decode": "PASS", "timing_generated": "GENERATED_UNREVIEWED", "timing_qa": "NOT_RUN_HUMAN_REVIEW_REQUIRED",
+                   "semantic_slide_matching": "NOT_RUN", "app_readback": "NOT_RUN", "scheduling": "NOT_RUN"}
+
+
+def bundle_segments() -> list[dict]:
+    """Three invented sentences with clip-local seconds, shaped like the producer's segments (one zero-length word, as real speech tools emit)."""
+    plan = [(1, 2.0, 6.5, [(" Synthetic", 2.0, 2.6), (" sentence", 2.6, 3.4), (" one.", 3.4, 6.5)]),
+            (2, 8.0, 11.0, [(" Second", 8.0, 8.5), (" uh", 8.5, 8.5), (" line.", 9.0, 11.0)]),
+            (3, 15.0, 19.5, [(" Third", 15.0, 16.0), (" and", 16.0, 16.2), (" last.", 18.0, 19.5)])]
+    rows, number = [], 0
+    for segment_id, start, end, words in plan:
+        row = {"segment_id": segment_id, "start_seconds": start, "end_seconds": end, "text": "".join(w[0] for w in words), "avg_logprob": -0.3, "no_speech_prob": 0.1, "words": []}
+        for text, word_start, word_end in words:
+            number += 1
+            row["words"].append({"word_id": f"w{number:05d}", "text": text, "start_seconds": word_start, "end_seconds": word_end, "probability": 0.9})
+        rows.append(row)
+    return rows
+
+
+def write_bundle(root: Path, settings, *, course="be505", item=None, offset=0.0, duration=20.0, segments=None, edit_timing=None, edit_provenance=None, edit_qa=None,
+                 edit_manifest=None, job="synthetic-job-1") -> Path:
+    """LABELLED SYNTHETIC DOUBLE of the offline timing producer's bundle (``private-timing-output-manifest-v1``): the same
+    five files, key names, indentation and manifest-last order as the real proof bundle. The text is invented here; no
+    audio is decoded and no speech model runs."""
+    def save(name: str, value) -> None:
+        (root / name).write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    from lecture_brain.annotations import media_duration_ms
+
+    item = item or recording(settings, course)
+    version_id, sha256 = Preparation(settings, converter=None).identity_of(course, item)
+    source = {"course_id": course, "source_id": item["source_id"], "version_id": version_id, "sha256": sha256}
+    container_seconds = (media_duration_ms(settings.course(course).root / item["path"]) or 60_000) / 1000  # what a producer reads from the file's own header
+    job_key = hashlib.sha256(json.dumps({"synthetic": job, "source": source, "offset": offset, "duration": duration}, sort_keys=True).encode()).hexdigest()
+    segments = bundle_segments() if segments is None else segments
+    words = [w for s in segments for w in s["words"]]
+    timing = {"contract": "private-derived-acoustic-timing-v1", "job_key": job_key, "status": "GENERATED_UNREVIEWED", "source": dict(source), "clip_offset_seconds": offset,
+              "actual_duration_seconds": duration, "time_coordinate": "clip_local_seconds; original_seconds = clip_offset_seconds + local_seconds", "sample_rate_hz": 16000,
+              "segments": segments, "word_count": len(words), "segment_count": len(segments), "word_interval_union_seconds": 0.0, "uncovered_intervals": [],
+              "unresolved_speech": "Synthetic.", "out_of_bounds_word_ids": [], "original_transcript_alignment": "NOT_RUN; timings belong only to this derived ASR", "semantic_slide_links": []}
+    provenance = {"contract": "private-timing-provenance-v1", "job_key": job_key, "producer_statuses": dict(BUNDLE_STATUSES, asr_invocations=1), "source_refs": [dict(source)],
+                  "model": {"repository": "synthetic/no-model", "snapshot": "0" * 40, "assets": [], "loading": "none: synthetic double"},
+                  "runtime": {"python": "synthetic", "packages": {"faster-whisper": "0.0.0", "ctranslate2": "0.0.0", "av": "0.0.0", "numpy": "0.0.0"}, "device": "cpu", "compute_type": "int8",
+                              "threads": 4, "workers": 1},
+                  "decode": {"media_origin_seconds": 0.0, "container_duration_metadata_seconds": container_seconds, "requested_original_range_seconds": [offset, offset + duration],
+                             "actual_decoded_duration_seconds": duration},
+                  "inference_settings": dict(BUNDLE_SETTINGS), "audio_review": "NOT_RUN", "qa_accuracy": "UNVERIFIED; human reference fields remain null"}
+    qa = {"contract": "private-timing-qa-candidates-v1", "sample_count": 2, "selection": "synthetic",
+          "samples": [{"word_id": w["word_id"], "generated_word": w["text"], "boundary": "word_start", "proposed_clip_seconds": w["start_seconds"],
+                       "proposed_original_seconds": offset + w["start_seconds"], "human_reference_time_seconds": None} for w in (words[0], words[-1])] if words else []}
+    for edit, document in ((edit_timing, timing), (edit_provenance, provenance), (edit_qa, qa)):
+        if edit:
+            edit(document)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "derived.vtt").write_text("WEBVTT\n\n" + "".join(f"{n}\n00:00:0{n}.000 --> 00:00:0{n}.500\n{s['text'].strip()}\n\n" for n, s in enumerate(segments, start=1)), encoding="utf-8")
+    save("provenance.json", provenance)
+    save("QA_SAMPLE.json", qa)
+    save("timing.json", timing)
+    manifest = {"contract": "private-timing-output-manifest-v1", "job_key": job_key, "root_selection": "consumer must explicitly select this bundle directory", "source": dict(source),
+                "producer_statuses": dict(BUNDLE_STATUSES), "asr_invocations": 1,
+                "outputs": [{"path": name, "size_bytes": (root / name).stat().st_size, "sha256": hashlib.sha256((root / name).read_bytes()).hexdigest()}
+                            for name in ("derived.vtt", "provenance.json", "QA_SAMPLE.json", "timing.json")],
+                "commit_semantics": "written last after all declared bundle outputs; reject if any path, size, hash or job key differs", "commands": None}
+    if edit_manifest:
+        edit_manifest(manifest)
+    save("manifest.json", manifest)
+    return root
+
+
+def redeclare(root: Path, name: str) -> None:
+    """Make the bundle's manifest declare the CURRENT bytes of one output (a producer that changed a file and its manifest together)."""
+    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    entry = next(e for e in manifest["outputs"] if e["path"] == name)
+    entry.update(size_bytes=(root / name).stat().st_size, sha256=hashlib.sha256((root / name).read_bytes()).hexdigest())
+    (root / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def test_a_producer_bundle_is_imported_through_the_adapter_with_its_window_status_and_provenance(settings, derived, journal, tmp_path):
+    item = recording(settings)
+    version_id, sha256 = Preparation(settings, converter=None).identity_of("be505", item)
+    materials_before = tree(settings.course("be505").root / "materials")
+    root = write_bundle(tmp_path / "proof" / "bundle", settings, offset=10.0, duration=20.0)  # a 20 s clip that starts 10 s into the 60 s recording
+    root_before = tree(root)
+    job_key = json.loads((root / "manifest.json").read_text(encoding="utf-8"))["job_key"]
+
+    result = derived.import_generation(root, course_id="be505")
+
+    assert result["status"] == "imported" and result["reason"] is None and result["source_id"] == item["source_id"], result
+    assert result["adapter"] == "producer-bundle-adapter-1" and result["producer_contract"] == "private-timing-output-manifest-v1" and result["job_key"] == job_key
+    assert result["manifest_sha256"] == root_before["manifest.json"]  # what was offered
+    assert tree(root) == root_before and tree(settings.course("be505").root / "materials") == materials_before  # the producer's root and the course are only read
+
+    current = derived.current("be505", item["source_id"])
+    assert current["generation"] == result["generation"] and current["state"] == "current"
+    # The producer's status is the app's unreviewed state, and nothing about slides is established.
+    assert current["review_state"] == "generated_unreviewed" and current["text_origin"] == "generated_speech_text" and current["establishes"] == []
+    # The window is [offset, offset + actual duration]: 20 s of a 60 s recording, never the lecture.
+    assert current["window"] == {"start_ms": 10_000, "end_ms": 30_000} and current["clip_offset_ms"] == 10_000 and current["duration_ms"] == 60_000
+    assert current["covers_whole_recording"] is False and current["coverage_fraction"] == pytest.approx(1 / 3)
+    # Clip-local seconds become recording milliseconds with the offset applied once.
+    assert [(s["start_ms"], s["end_ms"], s["text"]) for s in current["segments"]] == [(12_000, 16_500, "Synthetic sentence one."), (18_000, 21_000, "Second uh line."),
+                                                                                    (25_000, 29_500, "Third and last.")]
+    assert [(w["start_ms"], w["end_ms"], w["text"]) for w in current["segments"][1]["words"]] == [(18_000, 18_500, "Second"), (18_500, 18_500, "uh"), (19_000, 21_000, "line.")]
+    assert current["segments"][0]["words"][0]["probability"] == 0.9
+    assert current["recording"] == {"source_id": item["source_id"], "version_id": version_id, "sha256": sha256, "bytes": item["bytes"]}
+    # Producer provenance is stored with the generation and read back with it.
+    provenance = current["provenance"]
+    assert provenance["origin"] == "producer_bundle" and provenance["adapter"] == "producer-bundle-adapter-1"
+    assert provenance["producer_contract"] == "private-timing-output-manifest-v1" and provenance["job_key"] == job_key
+    assert provenance["producer_manifest_sha256"] == root_before["manifest.json"]
+    assert provenance["producer_statuses"]["timing_generated"] == "GENERATED_UNREVIEWED" and provenance["producer_statuses"]["timing_qa"] == "NOT_RUN_HUMAN_REVIEW_REQUIRED"
+    assert provenance["model"] == {"repository": "synthetic/no-model", "snapshot": "0" * 40} and provenance["runtime"]["threads"] == 4 and provenance["runtime"]["workers"] == 1
+    assert provenance["runtime"]["packages"]["faster-whisper"] == "0.0.0" and provenance["inference_settings"] == BUNDLE_SETTINGS
+    assert provenance["source"] == {"course_id": "be505", "source_id": item["source_id"], "version_id": version_id, "sha256": sha256}
+    assert provenance["bound_to"]["disk_sha256"] == sha256 and provenance["bound_to"]["bytes"] == item["bytes"]
+    assert provenance["window"] == {"start_ms": 10_000, "end_ms": 30_000} and provenance["covers_whole_recording"] is False
+    assert provenance["counts"] == {"segments": 3, "words": 9, "zero_length_words": 1}
+    # The stored generation is an ordinary ll.derived-manifest/1 generation that also keeps the producer's own files byte for byte.
+    stored = derived.store_dir("be505") / item["source_id"] / result["generation"]
+    manifest = json.loads((stored / "manifest.json").read_text(encoding="utf-8"))
+    assert c.validate("derived-manifest", manifest) == [] and c.validate("derived-segments", json.loads((stored / "segments.json").read_text(encoding="utf-8"))) == []
+    assert manifest["input_fingerprint"] == d.fingerprint_of(manifest) and manifest["producer"]["model"] == "synthetic/no-model@" + "0" * 40
+    assert {name[len("producer/"):]: digest for name, digest in tree(stored).items() if name.startswith("producer/")} == root_before
+    row = next(r for r in derived.status("be505")["recordings"] if r["source_id"] == item["source_id"])
+    assert row["current_generation"] == result["generation"] and row["covers_whole_recording"] is False
+    assert row["generations"][0]["provenance"]["job_key"] == job_key and row["generations"][0]["window"] == {"start_ms": 10_000, "end_ms": 30_000}
+    receipt = journal.receipts(kind="derived-import")[0]
+    assert receipt["payload"]["outcome"] == "imported" and receipt["payload"]["job_key"] == job_key and receipt["sha256"] == root_before["manifest.json"]
+
+
+def test_importing_the_same_bundle_again_is_a_no_op_and_changed_bundle_bytes_are_refused(settings, derived, journal, tmp_path):
+    import shutil
+
+    item = recording(settings)
+    root = write_bundle(tmp_path / "bundle", settings)
+    first = derived.import_generation(root, course_id="be505")
+    assert first["status"] == "imported"
+    store = derived.store_dir("be505")
+    stored_before, private_before = tree(store), private_files(settings)
+    written_at = {p: p.stat().st_mtime_ns for p in store.rglob("*") if p.is_file()}
+    receipts_before = {r["receipt_id"] for r in journal.receipts()}
+
+    later = Derived(settings, journal, now=lambda: "2026-10-06T09:30:00Z")  # another day, another process: the stored generation decides, not the clock
+    second = later.import_generation(root, course_id="be505")
+
+    assert second["status"] == "reused" and second["reused"] is True and second["generation"] == first["generation"]
+    assert tree(store) == stored_before and private_files(settings) == private_before
+    assert {p: p.stat().st_mtime_ns for p in store.rglob("*") if p.is_file()} == written_at
+    new = [r for r in journal.receipts() if r["receipt_id"] not in receipts_before]
+    assert [(r["kind"], r["payload"]["outcome"]) for r in new] == [("derived-import", "no_change")]
+    shutil.copytree(root, tmp_path / "bundle-copy")  # the same bytes offered from another folder are the same generation
+    assert later.import_generation(tmp_path / "bundle-copy", course_id="be505")["status"] == "reused"
+
+    # The same job key with other bytes: one output changed and the manifest updated to match. Never replaces what is stored.
+    changed = tmp_path / "bundle-changed"
+    shutil.copytree(root, changed)
+    (changed / "derived.vtt").write_text((changed / "derived.vtt").read_text(encoding="utf-8") + "NOTE changed\n", encoding="utf-8")
+    redeclare(changed, "derived.vtt")
+    assert_rejected(later, journal, changed, "generation_conflict")
+    assert tree(store) == stored_before and later.current("be505", item["source_id"])["generation"] == first["generation"]
+
+
+def test_a_bundle_whose_declared_bytes_paths_or_job_keys_do_not_hold_is_refused(settings, derived, journal, tmp_path):
+    def bundle(name, **kwargs):
+        return write_bundle(tmp_path / name, settings, **kwargs)
+
+    # Wrong hash, wrong size, missing file: the declared outputs are verified before anything is used.
+    tampered = bundle("hash")
+    (tampered / "timing.json").write_bytes((tampered / "timing.json").read_bytes().replace(b"Synthetic", b"Tampered!"))
+    assert_rejected(derived, journal, tampered, "output_digest_mismatch")
+    longer = bundle("size")
+    (longer / "derived.vtt").write_bytes((longer / "derived.vtt").read_bytes() + b"\n")
+    assert_rejected(derived, journal, longer, "output_size_mismatch")
+    missing = bundle("missing")
+    (missing / "QA_SAMPLE.json").unlink()
+    assert_rejected(derived, journal, missing, "output_missing")
+    # Paths: relative, inside the selected root, no links.
+    secret = tmp_path / "outside" / "secret.json"
+    secret.parent.mkdir()
+    secret.write_bytes(b'{"private": "OUTSIDE-BYTES"}')
+    outside = {"size_bytes": secret.stat().st_size, "sha256": hashlib.sha256(secret.read_bytes()).hexdigest()}
+    for number, bad in enumerate(["../outside/secret.json", "/outside/secret.json", secret.as_posix(), "C:/outside/secret.json", "sub\\secret.json", "sub/../../outside/secret.json"]):
+        assert_rejected(derived, journal, bundle(f"path-{number}", edit_manifest=lambda m, bad=bad: m["outputs"].append(dict(outside, path=bad))), "unsafe_path")
+    linked = bundle("linked", edit_manifest=lambda m: m["outputs"].append(dict(outside, path="more/secret.json")))
+    assert _link_directory(linked / "more", secret.parent), "could not create a directory link on this machine"
+    assert_rejected(derived, journal, linked, "unsafe_path")
+    assert _link_directory(tmp_path / "bundle-link", bundle("real"))
+    assert_rejected(derived, journal, tmp_path / "bundle-link", "root_is_link")
+    assert "OUTSIDE-BYTES" not in json.dumps(journal.receipts(kind="derived-import"))
+    # One job, one key: the manifest, the timing file and the provenance file must name the same job.
+    assert_rejected(derived, journal, bundle("key-timing", edit_timing=lambda t: t.update(job_key="a" * 64)), "job_key_mismatch")
+    assert_rejected(derived, journal, bundle("key-provenance", edit_provenance=lambda p: p.update(job_key="b" * 64)), "job_key_mismatch")
+    assert_rejected(derived, journal, bundle("key-manifest", edit_manifest=lambda m: m.update(job_key="c" * 64)), "job_key_mismatch")
+    # The required files must be declared; a bundle is never completed from undeclared files lying in the folder.
+    assert_rejected(derived, journal, bundle("undeclared", edit_manifest=lambda m: m.update(outputs=[e for e in m["outputs"] if e["path"] != "timing.json"])), "bundle_incomplete")
+    assert_rejected(derived, journal, bundle("no-outputs", edit_manifest=lambda m: m.pop("outputs")), "manifest_invalid")
+    assert_rejected(derived, journal, bundle("twice", edit_manifest=lambda m: m["outputs"].append(dict(m["outputs"][0], path="DERIVED.vtt"))), "duplicate_output")
+    assert_rejected(derived, journal, bundle("program", edit_manifest=lambda m: m["outputs"].append(dict(outside, path="tool.exe"))), "unsupported_media_type")
+    assert_rejected(derived, journal, bundle("not-unreviewed", edit_timing=lambda t: t.update(status="REVIEWED")), "unsupported_status")
+    assert_rejected(derived, journal, bundle("claims-slides", edit_timing=lambda t: t.update(semantic_slide_links=[{"page": 3}])), "unsupported_status")
+    assert stored_files(derived) == []
+
+
+def test_a_bundle_is_bound_to_the_recording_as_the_app_identifies_it_now_and_to_the_bytes_on_disk(settings, derived, journal, tmp_path):
+    from lecture_brain.fixtures.builder import write_wav
+
+    def bundle(name, **kwargs):
+        return write_bundle(tmp_path / name, settings, **kwargs)
+
+    def both(edit):
+        """The producer names its source in the manifest, the timing file and the provenance; a consistent bundle changes all three."""
+        return {"edit_manifest": lambda m: edit(m["source"]), "edit_timing": lambda t: edit(t["source"]), "edit_provenance": lambda p: edit(p["source_refs"][0])}
+
+    assert_rejected(derived, journal, bundle("course", **both(lambda s: s.update(course_id="be562"))), "course_mismatch")
+    assert_rejected(derived, journal, bundle("unknown", **both(lambda s: s.update(source_id="src-never-listed"))), "unknown_source")
+    assert_rejected(derived, journal, bundle("version", **both(lambda s: s.update(version_id="v0-000000000000"))), "changed_input")  # a stale version of the same source
+    assert_rejected(derived, journal, bundle("sha", **both(lambda s: s.update(sha256="e" * 64))), "changed_input")
+    assert_rejected(derived, journal, bundle("disagree", edit_timing=lambda t: t["source"].update(version_id="v0-000000000000")), "source_mismatch")  # the files name different sources
+    assert_rejected(derived, journal, bundle("unlisted", edit_provenance=lambda p: p["source_refs"][0].update(sha256="e" * 64)), "source_mismatch")
+    slides = next(i for l in build_inventory(settings.course("be505"))["lectures"] for i in l["decks"])
+    assert_rejected(derived, journal, bundle("slides", item=slides), "not_a_recording")
+    # The clip must lie inside the recording: 50 s + 20 s is past the end of a 60 s file.
+    assert_rejected(derived, journal, bundle("past-end", offset=50.0), "window_exceeds_duration")
+    assert_rejected(derived, journal, bundle("other-length", edit_provenance=lambda p: p["decode"].update(container_duration_metadata_seconds=600.0)), "duration_mismatch")
+    assert stored_files(derived) == []
+
+    # The bytes on disk decide, not only what the course index says: a registered recording whose file was replaced
+    # without a new published version is refused even though the bundle names the index's version and hash.
+    registered = recording(settings)
+    ready = bundle("made-before-the-file-changed", item=registered)
+    write_wav(settings.course("be505").root / registered["path"], [(0, 60)])  # same length and size, other audio, index untouched
+    assert recording(settings)["sha256"] == registered["sha256"]  # the index still names the old bytes
+    fresh = Derived(settings, journal, now=lambda: NOW)
+    assert_rejected(fresh, journal, ready, "changed_input")
+    # A new published version makes the old bundle stale for good.
+    republish_recording(settings.course("be505").root, registered["source_id"], seconds=30)
+    assert_rejected(Derived(settings, journal, now=lambda: NOW), journal, ready, "changed_input")
+    assert stored_files(derived) == []
+
+
+def test_bundle_times_must_be_clip_local_inside_the_clip_counted_and_shifted_exactly_once(settings, derived, journal, tmp_path):
+    def bundle(name, **kwargs):
+        return write_bundle(tmp_path / name, settings, **kwargs)
+
+    def word(n, edit):
+        return lambda t: edit(t["segments"][n]["words"][-1])
+
+    # Bounds, in clip-local time, with the importer's stated tolerance (500 ms past the end of the clip).
+    assert_rejected(derived, journal, bundle("word-after", edit_timing=word(2, lambda w: w.update(start_seconds=20.2, end_seconds=20.9))), "time_out_of_bounds")
+    assert_rejected(derived, journal, bundle("word-before", edit_timing=lambda t: t["segments"][0]["words"][0].update(start_seconds=-1.0)), "time_out_of_bounds")
+    assert_rejected(derived, journal, bundle("word-reversed", edit_timing=word(0, lambda w: w.update(start_seconds=5.0, end_seconds=4.0))), "time_out_of_bounds")
+    assert_rejected(derived, journal, bundle("segment-empty", edit_timing=lambda t: t["segments"][0].update(end_seconds=2.0)), "time_out_of_bounds")
+    assert_rejected(derived, journal, bundle("segment-after", edit_timing=lambda t: t["segments"][2].update(end_seconds=31.0)), "time_out_of_bounds")
+    assert_rejected(derived, journal, bundle("not-a-number", edit_timing=word(0, lambda w: w.update(end_seconds="6.5"))), "timing_invalid")
+    assert_rejected(derived, journal, bundle("no-duration", edit_timing=lambda t: t.update(actual_duration_seconds=0)), "timing_invalid")
+    # Counts.
+    assert_rejected(derived, journal, bundle("words", edit_timing=lambda t: t.update(word_count=10)), "count_mismatch")
+    assert_rejected(derived, journal, bundle("segments", edit_timing=lambda t: t.update(segment_count=2)), "count_mismatch")
+
+    # The offset is applied once, by the consumer. A file that already holds recording times (the offset applied by the
+    # producer too) lands outside the clip, or contradicts the producer's own statement of where a word is in the recording.
+    def already_shifted(by):
+        def edit(timing):
+            for segment in timing["segments"]:
+                for node in (segment, *segment["words"]):
+                    node.update(start_seconds=node["start_seconds"] + by, end_seconds=node["end_seconds"] + by)
+        return edit
+
+    assert_rejected(derived, journal, bundle("twice-far", offset=30.0, edit_timing=already_shifted(30.0)), "time_out_of_bounds")
+    near = bundle("twice-near", offset=0.4, edit_timing=already_shifted(0.4), edit_qa=lambda q: [s.update(proposed_clip_seconds=s["proposed_clip_seconds"] + 0.4) for s in q["samples"]])
+    assert_rejected(derived, journal, near, "absolute_time_mismatch")  # the QA sample says original = the shifted value, which is not offset + clip
+    assert_rejected(derived, journal, bundle("qa-other-word", edit_qa=lambda q: q["samples"][0].update(proposed_clip_seconds=3.3)), "absolute_time_mismatch")
+    assert_rejected(derived, journal, bundle("coordinate", edit_timing=lambda t: t.update(time_coordinate="original_seconds")), "time_base_mismatch")
+    assert_rejected(derived, journal, bundle("decoded-elsewhere", offset=10.0, edit_provenance=lambda p: p["decode"].update(requested_original_range_seconds=[0, 20])), "time_base_mismatch")
+    # Times the producer already shifted can still lie inside the clip (recording times 7..17 s of a clip that starts at 5 s and is 20 s long).
+    # Then only the producer's own statement of a word's recording time can tell. Without one, a clip that does not start at zero is not imported.
+    def without_qa(manifest):
+        manifest["outputs"] = [entry for entry in manifest["outputs"] if entry["path"] != "QA_SAMPLE.json"]
+
+    inner = [{"segment_id": 1, "start_seconds": 2.0, "end_seconds": 12.0, "text": " Synthetic words.", "avg_logprob": -0.3, "no_speech_prob": 0.1,
+              "words": [{"word_id": "w00001", "text": " Synthetic", "start_seconds": 2.0, "end_seconds": 3.0, "probability": 0.9},
+                        {"word_id": "w00002", "text": " words.", "start_seconds": 11.0, "end_seconds": 12.0, "probability": 0.9}]}]
+    assert_rejected(derived, journal, bundle("twice-unseen", offset=5.0, segments=copy.deepcopy(inner), edit_timing=already_shifted(5.0), edit_manifest=without_qa), "offset_unverified")
+    assert_rejected(derived, journal, bundle("offset-no-sample", offset=5.0, segments=copy.deepcopy(inner), edit_qa=lambda q: q.update(samples=[], sample_count=0)), "offset_unverified")
+    assert stored_files(derived) == []
+    # With the producer's statement the same kind of clip is imported and shifted once (here: 4 s of the 6 s recording of another course, from 1 s on).
+    short = [{"segment_id": 1, "start_seconds": 0.5, "end_seconds": 3.0, "text": " Synthetic words.", "avg_logprob": -0.3, "no_speech_prob": 0.1,
+              "words": [{"word_id": "w00001", "text": " Synthetic", "start_seconds": 0.5, "end_seconds": 1.0, "probability": 0.9},
+                        {"word_id": "w00002", "text": " words.", "start_seconds": 2.0, "end_seconds": 3.0, "probability": 0.9}]}]
+    assert_rejected(derived, journal, bundle("short-unseen", course="be562", offset=1.0, duration=4.0, segments=copy.deepcopy(short), edit_manifest=without_qa), "offset_unverified", course="be562")
+    stated = bundle("short-stated", course="be562", offset=1.0, duration=4.0, segments=copy.deepcopy(short))
+    assert derived.import_generation(stated, course_id="be562")["status"] == "imported"
+    placed = derived.current("be562", recording(settings, "be562")["source_id"])
+    assert [(w["start_ms"], w["end_ms"]) for w in placed["segments"][0]["words"]] == [(1_500, 2_000), (3_000, 4_000)] and placed["window"] == {"start_ms": 1_000, "end_ms": 5_000}
+    assert stored_files(derived) == []
+
+    # Accepted: an end within the tolerance of the clip's end, and a silent clip (no words at all) with its window.
+    ok = bundle("ok", edit_timing=word(2, lambda w: w.update(end_seconds=20.3)))
+    assert derived.import_generation(ok, course_id="be505")["status"] == "imported"
+    silent = bundle("silent", item=recording(settings, registered=False), segments=[])
+    assert derived.import_generation(silent, course_id="be505")["status"] == "imported"
+    quiet = derived.current("be505", recording(settings, registered=False)["source_id"])
+    assert quiet["segments"] == [] and quiet["window"] == {"start_ms": 0, "end_ms": 20_000} and quiet["provenance"]["counts"]["words"] == 0
+
+
+def test_the_import_command_accepts_a_producer_bundle_and_the_status_names_its_window(workspace, settings, tmp_path, monkeypatch, capsys):
+    from lecture_brain import cli
+
+    monkeypatch.setenv("LL_FIXTURE_ROOT", str(workspace))
+    base = ["--profile", "fixture", "--state-dir", str(settings.state_dir)]
+    item = recording(settings)
+    root = write_bundle(tmp_path / "proof" / "bundle", settings, duration=20.0)
+    before = tree(root)
+
+    def run(*args):
+        code = cli.main([*base, *args])
+        return code, json.loads(capsys.readouterr().out)
+
+    code, report = run("import-derived", "--course", "be505", "--root", str(root))
+    assert code == 0 and report["counts"] == {"imported": 1, "reused": 0, "rejected": 0, "cancelled": 0}
+    code, again = run("import-derived", "--course", "be505", "--root", str(root))
+    assert code == 0 and again["counts"]["reused"] == 1
+    code, status = run("derived-status", "--course", "be505", "--source", item["source_id"])
+    assert code == 0 and status["current"]["window"] == {"start_ms": 0, "end_ms": 20_000} and status["current"]["covers_whole_recording"] is False
+    assert status["current"]["review_state"] == "generated_unreviewed" and status["current"]["segment_count"] == 3
+    assert status["current"]["provenance"]["producer_contract"] == "private-timing-output-manifest-v1"
+    assert status["totals"]["whole_recording_covered"] == 0 and tree(root) == before
+
+
+def test_a_bundle_import_with_real_course_folders_leaves_them_and_the_bundle_byte_identical(workspace, tmp_path):
+    from lecture_brain.config import load_settings
+
+    settings = load_settings("local", env={}, planner_config=workspace / "University" / "Fixture Brain" / "planner-config.yaml", state_dir=tmp_path / "private-state")
+    item = recording(settings)
+    courses_before = {cid: tree(binding.root) for cid, binding in settings.courses.items()}
+    root = write_bundle(tmp_path / "proof" / "bundle", settings)
+    bundle_before = {name: (digest, (root / name).stat().st_mtime_ns) for name, digest in tree(root).items()}
+
+    consumer = Derived(settings)
+    result = consumer.import_generation(root, course_id="be505")
+
+    assert result["status"] == "imported" and result["receipt_id"], result
+    assert {cid: tree(binding.root) for cid, binding in settings.courses.items()} == courses_before
+    assert {name: (digest, (root / name).stat().st_mtime_ns) for name, digest in tree(root).items()} == bundle_before  # not rewritten, not even touched
+    assert consumer.store_dir("be505").is_relative_to(tmp_path / "private-state") and consumer.current("be505", item["source_id"])["generation"] == result["generation"]
+
+
+# ---- generations assembled in memory by the app's own runner take the same path ---------------------------------------
+def assembled(settings, *, item=None, generation="sp-test-p0001", window=(0, 20_000), segments=None, provenance=None, created_at=NOW, **override) -> tuple[bytes, dict[str, bytes]]:
+    from lecture_brain.annotations import media_duration_ms
+
+    item = item or recording(settings)
+    sha256 = Preparation(settings, converter=None).identity_of("be505", item)[1]
+    rows = [{"index": 0, "clip_start_ms": 1_000, "clip_end_ms": 4_000, "start_ms": 1_000, "end_ms": 4_000, "text": "Synthetic assembled sentence.",
+             "words": [{"clip_start_ms": 1_000, "clip_end_ms": 1_400, "start_ms": 1_000, "end_ms": 1_400, "text": "Synthetic", "probability": 0.5}]}] if segments is None else segments
+    arguments = {"course_id": "be505", "source_id": item["source_id"], "generation": generation, "created_at": created_at, "recording_sha256": sha256, "recording_bytes": item["bytes"],
+                 "declared_duration_ms": media_duration_ms(settings.course("be505").root / item["path"]), "producer": dict(PRODUCER), "window": {"start_ms": window[0], "end_ms": window[1]},
+                 "clip_offset_ms": 0, "segments": rows, "provenance": provenance, **override}
+    return d.assemble_generation(**arguments)
+
+
+def test_an_assembled_generation_is_admitted_through_the_same_checks_store_and_receipt_as_a_root_on_disk(settings, derived, journal):
+    item = recording(settings)
+    manifest_bytes, outputs = assembled(settings, provenance=runner_provenance())  # a runner generation states its withholding policy and what it withheld (here: nothing)
+    assert assembled(settings, provenance=runner_provenance()) == (manifest_bytes, outputs)  # the same inputs give the same bytes
+    manifest = json.loads(manifest_bytes)
+    assert c.validate("derived-manifest", manifest) == [] and manifest["input_fingerprint"] == d.fingerprint_of(manifest) and manifest["segments_path"] == "segments.json"
+    assert sorted(outputs) == ["provenance.json", "segments.json"] and c.validate("derived-segments", json.loads(outputs["segments.json"])) == []
+
+    result = derived.import_prepared(course_id="be505", manifest_bytes=manifest_bytes, outputs=outputs, origin="speech-runner:test")
+
+    assert result["status"] == "imported" and result["root"] == "speech-runner:test" and result["manifest_sha256"] == hashlib.sha256(manifest_bytes).hexdigest()
+    stored = derived.store_dir("be505") / item["source_id"] / "sp-test-p0001"
+    assert tree(stored) == {"manifest.json": hashlib.sha256(manifest_bytes).hexdigest(), **{name: hashlib.sha256(data).hexdigest() for name, data in outputs.items()}}
+    current = derived.current("be505", item["source_id"])
+    assert current["generation"] == "sp-test-p0001" and current["provenance"]["origin"] == "speech_runner" and current["review_state"] == "generated_unreviewed"
+    assert current["segments"][0]["words"] == [{"start_ms": 1_000, "end_ms": 1_400, "text": "Synthetic", "probability": 0.5}]
+    assert [r["payload"]["outcome"] for r in journal.receipts(kind="derived-import")] == ["imported"]
+    # Again: a no-op. Other bytes under the same id: a conflict. A stored generation is never replaced.
+    assert derived.import_prepared(course_id="be505", manifest_bytes=manifest_bytes, outputs=outputs, origin="speech-runner:test")["status"] == "reused"
+    other_bytes, other_outputs = assembled(settings, created_at="2026-10-05T13:00:00Z")
+    conflict = derived.import_prepared(course_id="be505", manifest_bytes=other_bytes, outputs=other_outputs, origin="speech-runner:test")
+    assert (conflict["status"], conflict["reason"]) == ("rejected", "generation_conflict")
+
+    def refused(reason, manifest_bytes, outputs, course="be505"):
+        before = stored_files(derived)
+        result = derived.import_prepared(course_id=course, manifest_bytes=manifest_bytes, outputs=outputs, origin="speech-runner:test")
+        assert (result["status"], result["reason"]) == ("rejected", reason), result
+        assert stored_files(derived) == before and journal.receipts(kind="derived-import")[-1]["payload"]["reason"] == reason
+
+    # Nothing is taken on trust because it was assembled here: outputs must be exactly the declared bytes ...
+    good_bytes, good_outputs = assembled(settings, generation="sp-test-p0002")
+    refused("output_digest_mismatch", good_bytes, {**good_outputs, "segments.json": good_outputs["segments.json"].replace(b"assembled", b"tampered!")})
+    refused("output_size_mismatch", good_bytes, {**good_outputs, "segments.json": good_outputs["segments.json"] + b" "})
+    refused("output_missing", good_bytes, {})
+    refused("output_missing", good_bytes, {**good_outputs, "extra.txt": b"not declared"})
+    refused("manifest_unreadable", good_bytes[:-1], good_outputs)
+    refused("unknown_course", good_bytes, good_outputs, course="not-a-course")
+    # ... the recording must be the one on disk now, the window must lie inside it, and every time inside the window.
+    refused("changed_input", *assembled(settings, generation="sp-test-p0003", recording_sha256="e" * 64))
+    refused("unknown_source", *assembled(settings, generation="sp-test-p0004", source_id="src-never-listed"))
+    refused("window_exceeds_duration", *assembled(settings, generation="sp-test-p0005", window=(0, 61_000)))
+    refused("time_out_of_bounds", *assembled(settings, generation="sp-test-p0006", window=(0, 3_000)))  # the segment ends at 4 s
+    refused("absolute_time_mismatch", *assembled(settings, generation="sp-test-p0007", segments=[{"index": 0, "clip_start_ms": 1_000, "clip_end_ms": 4_000, "start_ms": 2_000, "end_ms": 5_000,
+                                                                                               "text": "Shifted twice."}]))
+    refused("segments_out_of_order", *assembled(settings, generation="sp-test-p0008", segments=[{"index": 0, "clip_start_ms": 5_000, "clip_end_ms": 6_000, "text": "Later."},
+                                                                                              {"index": 1, "clip_start_ms": 1_000, "clip_end_ms": 2_000, "text": "Earlier."}]))
+    (settings.state_dir / d.STOP_FILE).write_text("stop", encoding="utf-8")
+    stopped = derived.import_prepared(course_id="be505", manifest_bytes=good_bytes, outputs=good_outputs, origin="speech-runner:test")
+    assert stopped["status"] == "cancelled" and derived.current("be505", item["source_id"])["generation"] == "sp-test-p0001"
+
+
+def test_timing_is_not_served_for_a_registered_recording_whose_file_no_longer_is_the_indexed_version(settings, derived, journal, tmp_path):
+    """The course index can lag behind the file. Timing made for the indexed bytes must not be read over other audio."""
+    from lecture_brain.fixtures.builder import write_wav
+
+    item = recording(settings)  # registered: its identity comes from the course index
+    assert derived.import_generation(write_root(tmp_path / "out", settings, item=item), course_id="be505")["status"] == "imported"
+    row = next(r for r in derived.status("be505")["recordings"] if r["source_id"] == item["source_id"])
+    assert derived.current("be505", item["source_id"])["generation"] == "gen-0001" and row["bytes_on_disk"] == "match" and row["current_generation"] == "gen-0001"
+    other = next(r for r in derived.status("be505")["recordings"] if r["source_id"] != item["source_id"])
+    assert other["bytes_on_disk"] == "not_checked" and other["generations"] == []  # nothing stored for it: nothing to hash for
+
+    write_wav(settings.course("be505").root / item["path"], [(0, 60)])  # the same length and size, other audio; the index is not updated
+    fresh = Derived(settings, journal, now=lambda: NOW)
+    assert recording(settings)["sha256"] == item["sha256"] and fresh.current("be505", item["source_id"]) is None
+    row = next(r for r in fresh.status("be505")["recordings"] if r["source_id"] == item["source_id"])
+    assert row["bytes_on_disk"] == "differ" and row["current_generation"] is None and [(g["generation"], g["state"]) for g in row["generations"]] == [("gen-0001", "stale")]
+    assert_rejected(fresh, journal, write_root(tmp_path / "again", settings, item=recording(settings), generation="gen-0002"), "changed_input")  # and nothing new is accepted for the index's claim
+
+
+# ---- withheld time is not covered time, and what is served is the most resolved coverage ------------------------------
+def runner_provenance(unresolved=(), *, merge_policy=None, **more) -> dict:
+    """What the app's own speech runner states with a generation: the merge policy that withholds text failing the
+    repetition check, and the intervals where it did."""
+    return {"origin": "speech_runner", "job_key": "k" * 8, "decoding": {"merge_policy": merge_policy or sorted(d.SERVED_MERGE_POLICIES)[-1]},
+            "unresolved_intervals": [{"start_ms": low, "end_ms": high, "reason": "repetition_check_failed"} for low, high in unresolved], **more}
+
+
+def store_directly(derived, manifest_bytes: bytes, outputs: dict[str, bytes], course="be505") -> Path:
+    """A generation as an OLDER version of this app left it in the store (outputs, then the manifest), without today's admission checks."""
+    manifest = json.loads(manifest_bytes)
+    directory = derived.store_dir(course) / manifest["recording"]["source_id"] / manifest["generation"]
+    directory.mkdir(parents=True)
+    for name, data in outputs.items():
+        (directory / name).write_bytes(data)
+    (directory / "manifest.json").write_bytes(manifest_bytes)
+    return directory
+
+
+def admit(derived, settings, generation, *, window, created_at, provenance=None, segments=None, item=None) -> dict:
+    rows = [{"index": 0, "clip_start_ms": 1_000, "clip_end_ms": 4_000, "start_ms": 1_000, "end_ms": 4_000, "text": "Synthetic assembled sentence."}] if segments is None else segments
+    manifest_bytes, outputs = assembled(settings, item=item, generation=generation, window=window, created_at=created_at, provenance=provenance, segments=rows)
+    result = derived.import_prepared(course_id="be505", manifest_bytes=manifest_bytes, outputs=outputs, origin="speech-runner:test")
+    assert result["status"] == "imported", result
+    return result
+
+
+def test_withheld_time_is_never_reported_as_covered_speech(settings, derived, journal, tmp_path):
+    """A recogniser's repetition loop is withheld by the runner and its time is stated as unresolved. That time was
+    processed, but nothing is known about it: the reader must not count it as covered, and must not call a recording
+    whole while any of it is unresolved."""
+    item = recording(settings)  # 60 s
+    admit(derived, settings, "sp-test-p0003", window=(0, 60_000), created_at=NOW, provenance=runner_provenance([(10_000, 30_000), (50_000, 52_000)]))
+
+    current = derived.current("be505", item["source_id"])
+
+    assert current["window"] == {"start_ms": 0, "end_ms": 60_000} and current["duration_ms"] == 60_000
+    assert current["unresolved_intervals"] == [{"start_ms": 10_000, "end_ms": 30_000, "reason": "repetition_check_failed"}, {"start_ms": 50_000, "end_ms": 52_000, "reason": "repetition_check_failed"}]
+    assert current["covered_intervals"] == [{"start_ms": 0, "end_ms": 10_000}, {"start_ms": 30_000, "end_ms": 50_000}, {"start_ms": 52_000, "end_ms": 60_000}]
+    assert current["unresolved_seconds"] == 22.0 and current["coverage_fraction"] == pytest.approx(38 / 60) and current["processed_fraction"] == pytest.approx(1.0)
+    assert current["covers_whole_recording"] is False  # every second was processed; 22 of them are unresolved
+    status = derived.status("be505")
+    row = next(r for r in status["recordings"] if r["source_id"] == item["source_id"])
+    assert row["covers_whole_recording"] is False and row["coverage_fraction"] == pytest.approx(38 / 60) and row["unresolved_seconds"] == 22.0
+    assert row["covered_intervals"] == current["covered_intervals"] and row["unresolved_intervals"] == current["unresolved_intervals"]
+    assert row["generations"][0]["unresolved_seconds"] == 22.0 and row["generations"][0]["covers_whole_recording"] is False
+    assert status["totals"]["whole_recording_covered"] == 0 and status["totals"]["with_unresolved_time"] == 1 and status["totals"]["with_current_generation"] == 1
+
+    # Nothing withheld: covered is the window itself. A part of the recording stays a part.
+    other = recording(settings, registered=False)  # 45 s
+    admit(derived, settings, "sp-test-p0001", item=other, window=(0, 20_000), created_at=NOW, provenance=runner_provenance())
+    part = derived.current("be505", other["source_id"])
+    assert part["covered_intervals"] == [{"start_ms": 0, "end_ms": 20_000}] and part["unresolved_intervals"] == [] and part["unresolved_seconds"] == 0.0
+    assert part["coverage_fraction"] == pytest.approx(20 / 45) and part["covers_whole_recording"] is False
+    # A whole recording with nothing withheld is whole.
+    admit(derived, settings, "sp-test-p0002", item=other, window=(0, 45_000), created_at="2026-10-05T13:00:00Z", provenance=runner_provenance())
+    whole = derived.current("be505", other["source_id"])
+    assert whole["generation"] == "sp-test-p0002" and whole["covers_whole_recording"] is True and whole["coverage_fraction"] == pytest.approx(1.0) and whole["unresolved_seconds"] == 0.0
+    assert derived.status("be505")["totals"]["whole_recording_covered"] == 1
+    # A generation from an output root states nothing withheld: its window is what it covers, as before.
+    assert derived.import_generation(write_root(tmp_path / "out-be562", settings, course="be562", window=(0, 3_000)), course_id="be562")["status"] == "imported"
+    plain = derived.current("be562", recording(settings, "be562")["source_id"])
+    assert plain["covered_intervals"] == [{"start_ms": 0, "end_ms": 3_000}] and plain["unresolved_intervals"] == [] and plain["coverage_fraction"] == pytest.approx(0.5)
+
+
+def test_the_generation_with_the_most_resolved_coverage_is_served_then_the_newest(settings, derived, journal, tmp_path):
+    """Newest-wins let a later, shorter generation (a short proof imported afterwards, a prefix of a re-chunked
+    recording) hide a longer valid one. What is served is the generation that resolves the most of the recording;
+    among equals, the newest."""
+    item = recording(settings)
+    source_id = item["source_id"]
+
+    def served() -> str:
+        return derived.current("be505", source_id)["generation"]
+
+    admit(derived, settings, "gen-long", window=(0, 40_000), created_at="2026-10-05T12:00:00Z")
+    assert served() == "gen-long"
+    admit(derived, settings, "gen-short-later", window=(0, 20_000), created_at="2026-10-05T13:00:00Z")
+    assert served() == "gen-long" and states(derived, source_id) == {"gen-long": "current", "gen-short-later": "superseded"}
+    # All 60 s processed but 30 s withheld: 30 s resolved is less than 40 s resolved.
+    admit(derived, settings, "sp-withheld", window=(0, 60_000), created_at="2026-10-05T14:00:00Z", provenance=runner_provenance([(20_000, 50_000)]))
+    assert served() == "gen-long"
+    # An OLDER generation that resolves more is served: resolved coverage first, time second.
+    admit(derived, settings, "gen-whole-older", window=(0, 60_000), created_at="2026-10-05T11:00:00Z")
+    assert served() == "gen-whole-older"
+    admit(derived, settings, "gen-whole-newer", window=(0, 60_000), created_at="2026-10-05T15:00:00Z")
+    assert served() == "gen-whole-newer"  # the same resolved coverage: the newest
+    assert states(derived, source_id) == {"gen-whole-newer": "current", "sp-withheld": "superseded", "gen-short-later": "superseded", "gen-long": "superseded", "gen-whole-older": "superseded"}
+    row = next(r for r in derived.status("be505")["recordings"] if r["source_id"] == source_id)
+    assert [g["generation"] for g in row["generations"]] == ["gen-whole-newer", "sp-withheld", "gen-short-later", "gen-long", "gen-whole-older"]  # listed newest first, as before
+    assert row["current_generation"] == "gen-whole-newer" and row["covers_whole_recording"] is True
+
+
+def test_a_runner_generation_from_before_text_was_withheld_is_kept_and_never_served(settings, derived, journal):
+    """Such a generation can hold the output of a repetition loop as if it were speech. It stays on disk; it is not
+    served, also not when the generation that replaced it is damaged or gone."""
+    item = recording(settings)
+    source_id = item["source_id"]
+    loop_text = [{"index": 0, "clip_start_ms": 1_000, "clip_end_ms": 50_000, "start_ms": 1_000, "end_ms": 50_000, "text": "okay, okay, okay, okay, okay, okay, okay, okay,"}]
+    old = store_directly(derived, *assembled(settings, generation="sp-old-p0003-aaaaaaaa", window=(0, 60_000), created_at="2026-10-05T12:00:00Z", segments=loop_text,
+                                             provenance={"origin": "speech_runner", "runner": "speech-runner-1", "job_key": "k" * 8}))  # no merge policy, no unresolved intervals
+    assert derived.current("be505", source_id) is None and states(derived, source_id) == {"sp-old-p0003-aaaaaaaa": "unserved_policy"}
+    row = next(r for r in derived.status("be505")["recordings"] if r["source_id"] == source_id)
+    assert row["current_generation"] is None and "withheld" in row["generations"][0]["detail"] and derived.status("be505")["totals"]["generations"]["unserved_policy"] == 1
+    # The same for a policy this consumer does not know, whatever it claims to cover.
+    store_directly(derived, *assembled(settings, generation="sp-odd-p0003-bbbbbbbb", window=(0, 60_000), created_at="2026-10-05T16:00:00Z",
+                                       provenance=runner_provenance(merge_policy="some-other-policy")))
+    assert derived.current("be505", source_id) is None
+
+    admit(derived, settings, "sp-new-p0003-cccccccc", window=(0, 60_000), created_at="2026-10-05T12:00:01Z", provenance=runner_provenance([(1_000, 50_000)]),
+          segments=[{"index": 0, "clip_start_ms": 50_500, "clip_end_ms": 52_000, "start_ms": 50_500, "end_ms": 52_000, "text": "Synthetic speech after the loop."}])
+    current = derived.current("be505", source_id)
+    assert current["generation"] == "sp-new-p0003-cccccccc" and "okay" not in json.dumps(current["segments"]) and current["unresolved_seconds"] == 49.0
+    assert states(derived, source_id) == {"sp-odd-p0003-bbbbbbbb": "unserved_policy", "sp-new-p0003-cccccccc": "current", "sp-old-p0003-aaaaaaaa": "unserved_policy"}
+    # The replacing generation is damaged: the loop text does not come back.
+    (derived.store_dir("be505") / source_id / "sp-new-p0003-cccccccc" / "segments.json").write_bytes(b"{}")
+    assert derived.current("be505", source_id) is None
+    assert states(derived, source_id) == {"sp-odd-p0003-bbbbbbbb": "unserved_policy", "sp-old-p0003-aaaaaaaa": "unserved_policy", "sp-new-p0003-cccccccc": "invalid"}
+    assert (old / "segments.json").is_file()  # kept, byte for byte, as every stored generation is
+
+    # Nothing of the kind is admitted any more, and intervals that cannot be read are refused rather than guessed at.
+    def refused(reason, provenance, generation):
+        manifest_bytes, outputs = assembled(settings, generation=generation, window=(0, 60_000), provenance=provenance)
+        result = derived.import_prepared(course_id="be505", manifest_bytes=manifest_bytes, outputs=outputs, origin="speech-runner:test")
+        assert (result["status"], result["reason"]) == ("rejected", reason), result
+
+    refused("unserved_merge_policy", {"origin": "speech_runner", "job_key": "k" * 8}, "sp-x1")
+    refused("unserved_merge_policy", runner_provenance(merge_policy="some-other-policy"), "sp-x2")
+    refused("unserved_merge_policy", {key: value for key, value in runner_provenance().items() if key != "unresolved_intervals"}, "sp-x3")
+    for position, bad in enumerate(("not a list", [{"start_ms": 5_000, "end_ms": 5_000, "reason": "r"}], [{"start_ms": 9_000, "end_ms": 5_000, "reason": "r"}], [{"start_ms": 5_000, "end_ms": 61_000, "reason": "r"}],
+                                    [{"start_ms": -1, "end_ms": 5_000, "reason": "r"}], [{"start_ms": 5_000.5, "end_ms": 6_000, "reason": "r"}], [{"start_ms": 5_000, "end_ms": 6_000}],
+                                    [{"start_ms": 5_000, "end_ms": 9_000, "reason": "r"}, {"start_ms": 8_000, "end_ms": 10_000, "reason": "r"}], ["odd"])):
+        refused("provenance_invalid", {**runner_provenance(), "unresolved_intervals": bad}, f"sp-y{position}")
+    assert d.SERVED_MERGE_POLICIES >= {"withhold-repetition-1"}

@@ -47,12 +47,23 @@ def main(argv: list[str] | None = None) -> int:
     approve.add_argument("fingerprint")
     import_derived = sub.add_parser("import-derived", help="Check finished speech-timing output roots and copy them into the app's private derived store (runs no speech tool)")
     import_derived.add_argument("--course", required=True)
-    import_derived.add_argument("--root", type=Path, action="append", required=True, help="An output root holding manifest.json (ll.derived-manifest/1); repeat for several")
+    import_derived.add_argument("--root", type=Path, action="append", required=True,
+                                help="An output root holding manifest.json: ll.derived-manifest/1, or a bundle of the offline timing producer (private-timing-output-manifest-v1, through the adapter); repeat for several")
     import_derived.add_argument("--max-imports", type=int, default=8, help="Generations copied at most in this call; already stored and refused roots do not count")
     derived_status = sub.add_parser("derived-status", help="Readback: recordings, their current identity and the stored speech-timing generations")
     derived_status.add_argument("--course", required=True)
     derived_status.add_argument("--source", help="Limit to one recording and add its current generation")
     derived_status.add_argument("--segments", action="store_true", help="With --source: include the generated segments themselves")
+    speech_run = sub.add_parser("speech-run", help="One bounded run of the resumable offline transcription runner (external speech interpreter from the private binding; charges the allowance ledger; schedules nothing)")
+    speech_run.add_argument("--course", action="append", help="Limit this run to a course; repeat for several (the frozen queue always holds every configured course)")
+    speech_run.add_argument("--priority", action="append", metavar="COURSE/SOURCE", help="A recording to process first; repeat for several")
+    speech_run.add_argument("--max-seconds", type=float, help="Wall-time bound of this run: no new chunk starts after it (a chunk that is running may finish)")
+    speech_run.add_argument("--chunk-seconds", type=float, help="Chunk length in seconds of original media (default 600); applies only when this run creates the frozen queue")
+    speech_run.add_argument("--max-chunks", type=int, help="Hand at most this many chunks to the worker in this run")
+    speech_run.add_argument("--retry-failed", action="store_true",
+                            help="Try again recordings that were set aside (a chunk failed repeatedly, a publication was refused) and continue a queue that a resource failure paused")
+    sub.add_parser("speech-status", help="Readback: per course and recording the state, what was processed, what is covered and what is unresolved, the allowance used and remaining, "
+                                         "a pause after a resource failure, the resume command")
     args = parser.parse_args(argv)
 
     try:
@@ -144,6 +155,22 @@ def main(argv: list[str] | None = None) -> int:
                     current["segment_count"] = len(current.pop("segments"))
                 report["current"] = current
             _print(report)
+        elif args.command in {"speech-run", "speech-status"}:
+            from .speech import runner as speech_runner
+
+            speech = speech_runner.SpeechRunner(settings, runtime.journal, preparation=runtime.preparation, now=runtime.now)
+            if args.command == "speech-status":
+                _print(speech.status())
+                return 0
+            try:
+                report = speech.run(courses=args.course, priority=args.priority, max_seconds=args.max_seconds, chunk_seconds=args.chunk_seconds, max_chunks=args.max_chunks,
+                                    retry_failed=args.retry_failed)
+            except KeyboardInterrupt:  # the run has stopped its worker, settled its reservation and written its receipt before raising this again
+                print("Interrupted. The worker was stopped, the time that passed is charged and a receipt was written; finished chunks are kept. speech-status shows where the queue stands.",
+                      file=sys.stderr)
+                return 130
+            _print(report)
+            return 0 if report["state"] in speech_runner.CLEAN_STATES else 1
         return 0
     finally:
         if args.command != "serve":

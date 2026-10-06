@@ -64,6 +64,9 @@ def main(argv: list[str] | None = None) -> int:
                             help="Try again recordings that were set aside (a chunk failed repeatedly, a publication was refused) and continue a queue that a resource failure paused")
     sub.add_parser("speech-status", help="Readback: per course and recording the state, what was processed, what is covered and what is unresolved, the allowance used and remaining, "
                                          "a pause after a resource failure, the resume command")
+    from . import timing_links
+
+    timing_links.cli_register(sub)  # timing-build, timing-status: derived slide-to-recording links in the app's own area
     args = parser.parse_args(argv)
 
     try:
@@ -171,6 +174,8 @@ def main(argv: list[str] | None = None) -> int:
                 return 130
             _print(report)
             return 0 if report["state"] in speech_runner.CLEAN_STATES else 1
+        elif args.command in {"timing-build", "timing-status"}:
+            return timing_links.cli_run(args, settings, journal=runtime.journal, preparation=runtime.preparation, now=runtime.now)
         return 0
     finally:
         if args.command != "serve":

@@ -456,6 +456,42 @@ class Ticking:
         return self.t
 
 
+SHOWCASE = "be505/src-lecture-05-recording"  # the recording of the fixture's showcase unit (be505 lecture-05)
+OVER_THE_FIXTURE_AS_BUILT = frozenset({"test_the_runner_takes_in_every_recording_of_the_fixture_as_it_is_built"})
+
+
+def take_out_the_showcase_recording(workspace: Path) -> None:
+    """Remove the showcase unit's recording from one test's private copy of the synthetic workspace: the file, its
+    entry in the synthetic course index, and — because the index is only trusted while its bytes match the
+    publication marker — the marker's pin of the index. Everything else of the unit stays."""
+    from lecture_brain.fixtures.builder import SHOWCASE_RECORDING_ID
+
+    root = workspace / "University" / "BE 505"
+    index_path, marker_path = root / ".agent" / "source-index.json", root / ".agent" / "course-tracking" / "publication.json"
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    entry = next(source for source in index["sources"] if source["source_id"] == SHOWCASE_RECORDING_ID)
+    (root / entry["current_path"]).unlink()
+    index["sources"] = [{**source, "related_source_ids": [other for other in source["related_source_ids"] if other != SHOWCASE_RECORDING_ID]}
+                        for source in index["sources"] if source["source_id"] != SHOWCASE_RECORDING_ID]
+    index["coverage"]["included_paths"] = [path for path in index["coverage"]["included_paths"] if path != entry["current_path"]]
+    data = json.dumps(index, ensure_ascii=False, indent=2).encode("utf-8")
+    index_path.write_bytes(data)
+    marker = json.loads(marker_path.read_text(encoding="utf-8"))
+    marker["files"][".agent/source-index.json"] = hashlib.sha256(data).hexdigest()
+    marker_path.write_text(json.dumps(marker, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+@pytest.fixture()
+def workspace(workspace, request) -> Path:
+    """The scenarios of this module were written for FOUR synthetic recordings (60 s and 45 s in BE 505, 6 s each in
+    BE 562 and DS 551: seven chunks of 25 s): their counts, orders and flows are exact. The fixture's showcase unit
+    brings a fifth, longer recording; it is taken out of the test's own copy of the workspace, so each scenario
+    stays the one it describes. The tests named in ``OVER_THE_FIXTURE_AS_BUILT`` run over the workspace as it is built."""
+    if request.node.name not in OVER_THE_FIXTURE_AS_BUILT:
+        take_out_the_showcase_recording(workspace)
+    return workspace
+
+
 @pytest.fixture()
 def journal(settings):
     j = Journal.open(settings.journal_path, clock=Ticking(), synced_roots=[])
@@ -604,6 +640,38 @@ def test_one_run_freezes_the_queue_transcribes_every_recording_in_chunks_and_pub
     assert row["covered_intervals"] == [{"start_ms": 0, "end_ms": 60_000}] and row["unresolved_intervals"] == [] and row["unresolved_seconds"] == 0.0 and status["pause"] is None
     assert status["totals"]["states"] == {"queued": 0, "partial": 0, "complete": 4, "complete_with_unresolved": 0, "source_conflict": 0, "failed": 0, "not_in_frozen_queue": 0}
     assert "speech-run" in status["resume_command"] and "--profile fixture" in status["resume_command"] and "estimate" not in json.dumps(status).lower()
+
+
+def test_the_runner_takes_in_every_recording_of_the_fixture_as_it_is_built(settings, journal, tmp_path, control):
+    """The other scenarios of this module run over the four recordings they were written for (see the ``workspace``
+    fixture above). The fixture as it is built has one more — the recording of its showcase unit — and the same
+    runner freezes, transcribes and publishes it like any other: nothing here knows the fixture's recordings by
+    number. What the showcase recording must yield is computed from the file itself, not written down."""
+    import wave
+
+    listed = recordings(settings)
+    assert SHOWCASE in listed and len(listed) == 5 and listed[SHOWCASE]["registration"] == listed[L1]["registration"]  # registered in the course index, like lecture 01
+    with wave.open(str(listed[SHOWCASE]["root"] / listed[SHOWCASE]["path"]), "rb") as audio:
+        duration_ms = int(round(audio.getnframes() * 1000 / audio.getframerate()))
+    plan = ch.plan_chunks(duration_ms, 25_000, 2_000)
+    assert duration_ms > 60_000 and len(plan) > 3  # longer than any recording of the other scenarios
+
+    done = make_runner(settings, journal, tmp_path).run(chunk_seconds=25)
+
+    assert (done["state"], done["outcome"], done["chunks_completed"]) == ("completed", "ran", 7 + len(plan)), done
+    items = queue_items(settings)
+    assert set(items) == set(listed) and list(items).index(L1) < list(items).index(SHOWCASE) < list(items).index("be562/src-lecture-01-audio")  # course order, then session order
+    assert {item["state"] for item in items.values()} == {"complete"} and done["remaining"] == {"recordings": 0, "chunks": 0, "source_conflict": 0, "failed": 0}
+    item = items[SHOWCASE]
+    assert (item["duration_ms"], item["chunks_total"], item["chunks_done"], item["published_chunks"]) == (duration_ms, len(plan), len(plan), len(plan))
+    assert item["lecture_ids"] == listed[SHOWCASE]["lecture_ids"] and item["sha256"] == hashlib.sha256((listed[SHOWCASE]["root"] / listed[SHOWCASE]["path"]).read_bytes()).hexdigest()
+    current = Derived(settings, journal).current("be505", "src-lecture-05-recording")
+    assert current["generation"] == item["published_generation"] and current["window"] == {"start_ms": 0, "end_ms": duration_ms} and current["covers_whole_recording"] is True
+    assert words_of(current) == [(f"w{j}", j * 2_000 + 300, j * 2_000 + 700) for j in range((duration_ms - 700) // 2_000 + 1)]  # each fabricated word once, across every boundary
+    assert current["provenance"]["labelled_double"] is True and current["provenance"]["merge"]["overlap_boundaries_spliced"] == len(plan) - 1
+    status = make_runner(settings, journal, tmp_path).status()
+    assert status["totals"]["recordings"] == 5 and status["totals"]["states"]["complete"] == 5 and status["courses"]["be505"]["totals"]["complete"] == 3
+    assert make_runner(settings, journal, tmp_path).run(chunk_seconds=25)["state"] == "no_change"
 
 
 def test_a_run_with_nothing_to_do_writes_one_no_change_receipt_and_nothing_else(settings, journal, tmp_path, control):
@@ -1243,12 +1311,14 @@ class RealWorker:
                  "start_ms": entry["start_ms"], "end_ms": entry["end_ms"], "last": entry["index"] == len(plan) - 1, "out_path": str(folder / work_id / f"chunk-{entry['index']:04d}.json")}
                 for entry in plan]
 
-    def run(self, name: str, *, jobs=None, control=None, lease_in=60.0, stop=False, deadline_in=600.0, hard_stop_in=None, edits=None) -> dict:
+    def run(self, name: str, *, jobs=None, control=None, lease_in=60.0, stop=False, deadline_in=600.0, hard_stop_in=None, edits=None, heartbeat_refused=False) -> dict:
         folder = self.base / name
         folder.mkdir()
         record = folder / "stub-record.jsonl"
         self.control_path.write_text(json.dumps({"record": str(record), **(control or {})}), encoding="utf-8")
         paths = {key: folder / f"{key}.json" for key in ("heartbeat", "lease", "result")}
+        if heartbeat_refused:
+            paths["heartbeat"].mkdir()  # a folder where the heartbeat file belongs: every attempt to put the file there is refused by the system
         if stop:
             (folder / "STOP").write_text("stop", encoding="utf-8")
         paths["lease"].write_text(json.dumps({"until": time.time() + lease_in}), encoding="utf-8")
@@ -1263,7 +1333,7 @@ class RealWorker:
         calls = [json.loads(line) for line in record.read_text(encoding="utf-8").splitlines()] if record.exists() else []
         return {"code": done.returncode, "result": json.loads(paths["result"].read_text(encoding="utf-8")) if paths["result"].exists() else None, "calls": calls, "folder": folder,
                 "chunks": {path.parent.name + "/" + path.name: json.loads(path.read_text(encoding="utf-8")) for path in sorted(folder.rglob("chunk-*.json"))},
-                "heartbeat": json.loads(paths["heartbeat"].read_text(encoding="utf-8")) if paths["heartbeat"].exists() else None, "output": done.stdout + done.stderr}
+                "heartbeat": json.loads(paths["heartbeat"].read_text(encoding="utf-8")) if paths["heartbeat"].is_file() else None, "output": done.stdout + done.stderr}
 
 
 @pytest.fixture()
@@ -1366,6 +1436,26 @@ def test_the_real_worker_script_stops_refuses_and_reports_as_the_supervisor_expe
     (real_worker.model / "tokenizer.json").unlink()
     incomplete = real_worker.run("model-incomplete")
     assert incomplete["result"]["phase"] == "startup" and "nothing is downloaded" in incomplete["result"]["error"] and incomplete["calls"] == []
+
+
+def test_a_heartbeat_the_real_worker_cannot_write_is_skipped_and_is_nobodys_failure(real_worker):
+    """Seen on this machine under load with the labelled fake worker: for most of a second the heartbeat file could
+    not be replaced (something else had it open), the write raised and the worker was gone. In the real worker the
+    same refusal was an error of the runtime at startup or inside a chunk (the queue pauses), and at the step that
+    verifies the recording it was caught as a "source conflict" of that recording. A heartbeat is only a sign of
+    life: one that cannot be written is skipped and the next one is tried as usual. The supervisor ends a worker
+    whose heartbeat stays silent; the worker does not end itself, pause the queue or blame a recording over it."""
+    began = time.monotonic()
+    done = real_worker.run("heartbeat-refused", heartbeat_refused=True)
+
+    assert done["result"] is not None and (done["code"], done["result"]["ended"], done["result"]["jobs_done"]) == (0, "completed", 3), done["output"]
+    assert done["result"]["conflicts"] == [] and done["result"]["chunk_errors"] == [] and sorted(done["chunks"]) == [f"work00000001/chunk-{n:04d}.json" for n in range(3)]
+    assert done["heartbeat"] is None and (done["folder"] / "heartbeat.json").is_dir() and not list(done["folder"].glob(".tmp-*"))  # nothing written, nothing left lying around
+    assert done["output"].count("heartbeat not written") == 1, done["output"]  # said once in the worker's log, not at every beat
+    assert time.monotonic() - began < 30  # the work is not held up by the sign of life it could not give
+    merged = ch.merge_prefix(real_worker.plan, [done["chunks"][f"work00000001/chunk-{n:04d}.json"] for n in range(3)], duration_ms=60_000, tolerance_ms=500,
+                             repetition_threshold=rn.REPETITION_THRESHOLD)
+    assert merged_words(merged) == [(f"w{j}", j * 2_000 + 300, j * 2_000 + 700) for j in range(30)] and merged["complete"]
 
 
 def test_the_real_worker_keeps_the_pass_with_more_accepted_words_and_records_which_and_why(real_worker, repo):

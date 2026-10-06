@@ -14,7 +14,9 @@ that process, never installs anything and never executes or follows anything fou
 * copies it into the app-local derived store (``<app area>/derived/<source_id>/<generation>/``), outputs first and
   the manifest last, and never changes a stored generation afterwards;
 * reads, of the stored generations that still match the recording's current bytes, the one that RESOLVES the most
-  of the recording (the newest among equals).
+  of the recording (the newest among equals) — except that a speech-runner generation under an older merge policy
+  gives way to one under a newer policy that processed at least the same window (``MERGE_POLICY_ORDER``): the
+  newer policy states more of what is unknown, so "resolves more" under the older one is not a reason to serve it.
 
 **Processed is not covered.** The app's own speech runner withholds text that fails its repetition check and states
 the time it stands for as ``unresolved_intervals`` in the generation's ``provenance.json``: that time was processed,

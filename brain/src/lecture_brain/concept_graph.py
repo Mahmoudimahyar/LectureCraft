@@ -29,6 +29,7 @@ from typing import Any, Callable, Iterable
 from urllib.parse import quote
 
 from fastapi import HTTPException, Query
+from fastapi.responses import JSONResponse
 
 from .evidence import EvidenceReader, skills_under
 from .outline import OutlineModel
@@ -652,7 +653,13 @@ def view(projector: Any, course_id: str, *, scope: str = "course", focus: str | 
 
 
 def register(app: Any, runtime: Any, locked: Callable[[Callable[[], Any]], Any]) -> None:
-    """``GET /api/courses/{course_id}/concept-graph`` — a read; it changes no state."""
+    """``GET /api/courses/{course_id}/concept-graph`` — a read; it changes no state.
+
+    An unknown scope or focus is answered with status 404 and the error document itself,
+    ``{course_id, graph_version, error: {code: "unknown_scope" | "unknown_focus", detail}}`` (r2-read-api.md 1.4): the
+    reader tells the two apart by ``error.code``. An unknown course is the general ``{detail}`` 404 of every course route,
+    and a malformed request is 422.
+    """
     @app.get("/api/courses/{course_id}/concept-graph")
     def concept_graph(course_id: str, scope: str = Query("course", max_length=120, pattern=SCOPE_PATTERN), focus: str | None = Query(None, min_length=1, max_length=300),
                       depth: int = Query(1, ge=1, le=MAX_DEPTH), limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT)):
@@ -663,5 +670,5 @@ def register(app: Any, runtime: Any, locked: Callable[[Callable[[], Any]], Any])
             raise HTTPException(409, binding.problem or "Course binding is not usable")
         document = locked(lambda: view(runtime.projector, course_id, scope=scope, focus=focus, depth=depth, limit=limit))
         if "error" in document:
-            raise HTTPException(404, "Unknown focus" if document["error"]["code"] == "unknown_focus" else "Unknown scope")
+            return JSONResponse(document, status_code=404)
         return document

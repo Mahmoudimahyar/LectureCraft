@@ -12,13 +12,17 @@ b. **text alignment** — when the unit has exactly ONE original plain-text tran
    times from generated words to its lines. Accepted or refused as a whole; a line that is not aligned has no time
    anywhere in the document. The transcript is read only; its sha256 before and after the build is recorded.
 c. **windows** — the timed transcript lines when the mapping was accepted, otherwise windows of generated segments.
+   With line windows, recognised speech that lies in no window is measured and kept (``speech_outside``,
+   ``SPEECH_OUTSIDE_RULE``): it was not compared with any slide, so it is never read as "nothing was said". A stretch
+   that lies in no range at all is listed as unassigned (``speech_without_timed_line``).
 d. **slides** — the logical slides of the deck's source map (one page, one slide when there is no map).
 e. **hints** — what the course itself states (study-map rows; a catalog locator naming pages AND transcript lines of
    one question), de-duplicated. They reach the engine only when the windows carry transcript line numbers.
 f. **association** — ``alignment.align_windows_to_slides`` and ``cross_check_with_baseline``. Every occurrence becomes
    ONE candidate link; disjoint occurrences are never merged, and nothing is divided among slides or builds.
 g. **course-stated links** — for each stated pairing, one link per stretch of its lines that received times
-   (``origin: reviewed_source_map``, ``support.scope: section``). The ends are measured ends of timed lines.
+   (``origin: reviewed_source_map``, ``support.scope: section``). The ends are measured ends of timed lines; a spoken
+   line without a time between two timed lines at most ``max_gap_ms`` apart lies inside the stretch and gets no time.
 h. **selection** — a fixed, versioned rule (``SELECTION``) decides which candidates are shown as a page's ranges and
    which stay candidates of an ``ambiguous`` state.
 
@@ -28,12 +32,13 @@ on screen — every link says ``discussed_during``. The three quality objects of
 figure exists. The thresholds below were fixed before any real lecture was built and are not tuned on real output.
 
 Reading: :func:`read` returns the stored document as ``current``, ``stale`` (naming the input that differs; a stale
-document yields no range) or ``missing``. :func:`enrich` is a pure function over the lecture view: it sets
+document yields no range) or ``missing`` (also when its content no longer matches its own ``links_revision``). :func:`enrich` is a pure function over the lecture view: it sets
 ``slides[].ranges``, ``slides[].no_range`` (exactly one of six states) and ``timing`` as ``docs/engineering/r2-read-api.md``
 spells them.
 """
 from __future__ import annotations
 
+from bisect import bisect_right
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -56,7 +61,7 @@ from .ownerio.question_links import build_question_bank
 from .preparation import Preparation, extract_slide_texts, file_sha256, tokens
 
 LINKS_CONTRACT = "timing-links/1"
-BUILDER_VERSION = "timing-links-builder/1"
+BUILDER_VERSION = "timing-links-builder/2"  # /2: speech outside every window is listed; a document checks its own revision
 RECEIPT_KIND = "timing-build"
 COURSE_STATED_METHOD = "course-stated-lines/1"
 NO_FORCED_ROLES = frozenset({"structural_title_or_section", "administrative", "blank"})  # interface-contracts.md, "Content role"
@@ -78,9 +83,19 @@ SELECTION: dict[str, Any] = {
 SECTION_RULE: dict[str, Any] = {
     "version": COURSE_STATED_METHOD,
     "max_gap_ms": 30_000,  # the engine's own bound: timed windows further apart never share an interval
-    "rule": ("For each line range the course pairs with pages: the lines that received a time, in order; a new stretch starts where two consecutive timed lines are more than "
-             "max_gap_ms apart. A stretch runs from the start of its first timed line to the end of its last. No line without a time is given one, no end is moved over one, "
-             "and the time is not divided among the pages."),
+    "rule": ("For each run of lines the course pairs with pages (line ranges of one statement that touch or overlap are one run): the lines that received a time, in order; a new "
+             "stretch starts where two consecutive timed lines are more than max_gap_ms apart. A stretch runs from the start of its first timed line to the end of its last. "
+             "No line without a time is given one, no end is moved over one (an untimed line between two timed lines of a stretch lies inside it), and the time is not divided "
+             "among the pages."),
+}
+SPEECH_OUTSIDE_RULE: dict[str, Any] = {
+    "version": "speech-outside-windows/1",
+    "max_gap_ms": 30_000,  # the same bound as above
+    "reason": "speech_without_timed_line",
+    "rule": ("When the windows are transcript lines: the recognised words whose middle lies in no window, in runs. A run ends at a word that lies in a window or at a silence longer "
+             "than max_gap_ms, and is kept when it holds at least one content word. It goes from the start of its first word to the end of its last and never into a window. "
+             "This speech was not compared with any slide, so it is never read as silence: every run is kept in speech_outside, saying whether it lies inside a "
+             "suggested range or inside an unassigned interval, and a run that lies in neither is listed as unassigned itself."),
 }
 _READABLE = frozenset({"registered_readable", "present_unindexed"})
 _LECTURE_ID = re.compile(r"^lecture-\d{2}$")
@@ -113,6 +128,12 @@ def _ms(seconds: float) -> int:
     return int(round(float(seconds) * 1000))
 
 
+def _clock(ms: int) -> str:
+    """A measured length for a sentence: ``1:36:39`` or ``4:05``. Whole seconds, rounded down."""
+    hours, rest = divmod(int(ms) // 1000, 3600)
+    return f"{hours}:{rest // 60:02d}:{rest % 60:02d}" if hours else f"{rest // 60}:{rest % 60:02d}"
+
+
 def _pairs(intervals: Any) -> list[list[int]]:
     out = []
     for interval in intervals or []:
@@ -136,6 +157,8 @@ def _identity(record: dict | None) -> dict[str, Any] | None:
 
 
 def _path(settings: Settings, course_id: str, lecture_id: str) -> Path:
+    if course_id not in settings.courses:  # this module's own refusal, not the configuration's error
+        raise TimingLinksError("unknown_course", f"Course {course_id!r} is not one of the configured courses.")
     if not _LECTURE_ID.fullmatch(lecture_id or ""):
         raise TimingLinksError("unknown_lecture", f"{lecture_id!r} is not a lecture unit id.")
     return settings.app_area(course_id) / "timing-links" / f"{lecture_id}.json"
@@ -218,8 +241,16 @@ def slides_from_map(source_map: dict | None) -> dict[str, Any]:
 
     groups = [{"slide_id": slide_id, "pages": list(slide.get("pages") or []), "grouping": grouping_of(slide), "role": slide.get("role") if isinstance(slide.get("role"), str) else None,
                "title": slide.get("title")} for slide_id, slide in stored.items()]
+    listed = source_map.get("pages") or []
+    if all(isinstance(page, dict) for page in listed) and [page.get("page") for page in listed] == list(range(1, int(count) + 1)) \
+            and all(isinstance(slide.get("logical_slide_id"), str) and isinstance(slide.get("kind"), str) and isinstance(slide.get("role"), str) for slide in source_map["logical_slides"]):
+        from . import slide_identity  # the stored map: the engine's slides are the ones slide_identity makes of it (imported here: it needs the web framework)
+
+        scored = slide_identity.alignment_slides(source_map)
+    else:  # the served block, or a partial map: what can be read of it
+        scored = alignment.logical_slides_from_pages(texts, groups=groups)
     rows = []
-    for row in alignment.logical_slides_from_pages(texts, groups=groups):
+    for row in scored:
         slide = stored.get(row["slide_id"]) or {"pages": row["pages"]}
         rows.append(dict(row, kind=slide.get("kind") or "single", group_mapping=_group_mapping(dict(slide, pages=row["pages"]), history)))
     return {"basis": "source_map", "map_revision": source_map.get("map_revision"), "page_count": int(count), "logical_slides": rows}
@@ -389,6 +420,48 @@ def _section_links(pairings: list[dict], line_rows: list[dict], recording: dict,
     return links, {"pairings": len(pairings), "pairings_timed": with_time, "links": len(links), "pairings_without_timed_lines": len(pairings) - with_time}
 
 
+def _speech_outside(segments: list[dict], windows: list[dict], source_id: str, duration: int | None) -> list[dict]:
+    """Recognised speech that lies in no window (``SPEECH_OUTSIDE_RULE``): intervals with measured word times."""
+    spans: list[list[int]] = []
+    for start, end in sorted((_ms(w["start"]), _ms(w["end"])) for w in windows if w.get("start") is not None and w.get("end") is not None):
+        if spans and start <= spans[-1][1]:
+            spans[-1][1] = max(spans[-1][1], end)
+        else:
+            spans.append([start, end])
+    starts = [start for start, _ in spans]
+    words = sorted((word for segment in segments for word in segment.get("words") or [] if word.get("start_ms") is not None and word.get("end_ms") is not None),
+                   key=lambda word: (word["start_ms"], word["end_ms"]))
+    runs: list[list[dict]] = []
+    run: list[dict] = []
+    for word in words:
+        middle = (word["start_ms"] + word["end_ms"]) / 2
+        at = bisect_right(starts, middle) - 1
+        inside = at >= 0 and middle <= spans[at][1]
+        if run and (inside or word["start_ms"] - run[-1]["end_ms"] > SPEECH_OUTSIDE_RULE["max_gap_ms"]):
+            runs.append(run)
+            run = []
+        if not inside:
+            run.append(word)
+    if run:
+        runs.append(run)
+    found = []
+    for run in runs:
+        if not tokens(" ".join(str(word.get("text") or "") for word in run)):
+            continue  # fillers and function words only: nothing in it could be about a slide
+        start_ms, end_ms = max(0, run[0]["start_ms"]), max(word["end_ms"] for word in run)
+        before = bisect_right(starts, start_ms) - 1  # never into a window: word times may overlap a neighbouring line by a few milliseconds
+        if before >= 0:
+            start_ms = max(start_ms, spans[before][1])
+        after = bisect_right(starts, start_ms)
+        if after < len(spans):
+            end_ms = min(end_ms, spans[after][0])
+        if duration:
+            end_ms = min(end_ms, int(duration))
+        if end_ms > start_ms:
+            found.append({"recording_source_id": source_id, "start_ms": start_ms, "end_ms": end_ms, "words": len(run), "within": None})
+    return found
+
+
 def _recording_record(recording: dict, material: dict, slides_block: dict, pairings: list[dict], stated: int) -> tuple[dict, dict[str, list]]:
     """All stages for one recording: its stage record and what it produced."""
     generated = recording.get("generated")
@@ -397,7 +470,7 @@ def _recording_record(recording: dict, material: dict, slides_block: dict, pairi
     slides = slides_block["logical_slides"]
     by_id = {slide["slide_id"]: slide for slide in slides}
     engine_slides = [{key: slide.get(key) for key in ("slide_id", "pages", "title", "text", "role", "grouping")} for slide in slides]
-    produced: dict[str, list] = {"links": [], "candidates": [], "unassigned": [], "line_times": []}
+    produced: dict[str, list] = {"links": [], "candidates": [], "unassigned": [], "line_times": [], "speech_outside": []}
     sequence = _method(alignment.SEQUENCE_METHOD)
     stages: dict[str, Any] = {
         "generated": {"state": "none", "generation": None},
@@ -446,7 +519,11 @@ def _recording_record(recording: dict, material: dict, slides_block: dict, pairi
         windows = alignment.windows_from_segments([{"start": s["start_ms"] / 1000, "end": s["end_ms"] / 1000, "text": s.get("text") or ""} for s in segments])
         fallback = {"refused": "The text alignment was refused", "no_transcript": "There is no original transcript", "not_run": "The text alignment did not run"}[stages["text_alignment"]["state"]]
         basis, why = "generated_segments", f"{fallback} ({stages['text_alignment']['reason_code']}): the windows are generated segments, which carry no transcript line numbers."
-    stages["windows"] = {"basis": basis, "count": len(windows), "why": why}
+    # c'. what was recognised outside every window: possible only with line windows (generated segments are all windows)
+    stray = _speech_outside(segments, windows, recording["source_id"], duration) if mapping is not None else []
+    produced["speech_outside"] = stray
+    stages["windows"] = {"basis": basis, "count": len(windows), "why": why,
+                         "speech_outside": {"intervals": len(stray), "ms": sum(u["end_ms"] - u["start_ms"] for u in stray), "words": sum(u["words"] for u in stray)}}
 
     # g. what the course states, timed through the lines (needs no association)
     if mapping is not None:
@@ -523,12 +600,22 @@ def _recording_record(recording: dict, material: dict, slides_block: dict, pairi
         if end_ms > start_ms:
             produced["unassigned"].append({"recording_source_id": recording["source_id"], "start_ms": start_ms, "end_ms": end_ms, "reason": interval["reason"],
                                            "between": list(interval.get("between") or []), "best": (interval.get("best") or {}).get("slide_id"),
-                                           "transcript_lines": [list(interval["lines"])] if interval.get("lines") else [], "windows": list(interval["windows"])})
+                                           "transcript_lines": [list(interval["lines"])] if interval.get("lines") else [], "windows": list(interval["windows"]), "words": None})
+    # Speech outside every window, placed: inside a suggested range (it bridges an untimed line), inside an unassigned interval, or in neither.
+    # Only the last kind is listed as unassigned itself, so that ranges and unassigned intervals never overlap.
+    pieces = [(link["start_ms"], link["end_ms"], "range", link["range_id"]) for link in [*produced["links"], *produced["candidates"]] if link["support"]["scope"] != "section"]
+    pieces += [(u["start_ms"], u["end_ms"], "unassigned", None) for u in produced["unassigned"]]
+    for interval in stray:
+        holder = next(((kind, range_id) for a, b, kind, range_id in sorted(pieces, key=lambda piece: piece[:2]) if a <= interval["start_ms"] and interval["end_ms"] <= b), None)
+        interval["within"] = {"kind": holder[0], "range_id": holder[1]} if holder else None
+    produced["unassigned"].extend({"recording_source_id": u["recording_source_id"], "start_ms": u["start_ms"], "end_ms": u["end_ms"], "reason": SPEECH_OUTSIDE_RULE["reason"], "between": [],
+                                   "best": None, "transcript_lines": [], "windows": None, "words": u["words"]} for u in stray if u["within"] is None)
     counts = stages["text_alignment"]["counts"] or {}
     stages["association"] = {"state": "run", "cause": None, "method": sequence, "occurrences": len(result["occurrences"]), "unassigned": len(produced["unassigned"]),
                              "unassigned_ms": sum(u["end_ms"] - u["start_ms"] for u in produced["unassigned"]), "initial": result["initial"]["mode"],
-                             # Whether every recognised stretch of speech was a window: generated segments are; transcript lines only when none stayed without a time.
-                             "all_speech_windowed": mapping is None or not counts.get("too_few_matches")}
+                             # Whether every recognised stretch of speech was a window: generated segments are; transcript lines only when none stayed without
+                             # a time and no recognised speech lies outside all of them (speech the transcript lacks is not silence).
+                             "all_speech_windowed": mapping is None or (not counts.get("too_few_matches") and not stray)}
     stages["selection"] = {"rule": SELECTION["version"], "shown": shown, "candidates": kept}
     assigned = [slide_id for slide_id in baseline["assignments"] if slide_id is not None]
     cross = result["baseline_cross_check"]
@@ -551,7 +638,7 @@ def compose(material: dict, *, now: str) -> dict[str, Any]:
     for pairing in pairings:
         pairing["slide_ids"] = list(dict.fromkeys(page_to_slide[page] for page in pairing["pages"] if page in page_to_slide))
     records = []
-    produced: dict[str, list] = {"links": [], "candidates": [], "unassigned": [], "line_times": []}
+    produced: dict[str, list] = {"links": [], "candidates": [], "unassigned": [], "line_times": [], "speech_outside": []}
     for recording in material.get("recordings") or []:
         record, made = _recording_record(recording, material, slides_block, pairings, stated)
         records.append(record)
@@ -564,16 +651,25 @@ def compose(material: dict, *, now: str) -> dict[str, Any]:
 
     document: dict[str, Any] = {
         "contract": LINKS_CONTRACT, "builder_version": BUILDER_VERSION, "course_id": material.get("course_id"), "lecture_id": material.get("lecture_id"), "title": material.get("title"),
-        "built_at": now, "inputs": inputs_of(material), "selection": dict(SELECTION), "section_rule": dict(SECTION_RULE),
+        "built_at": now, "inputs": inputs_of(material), "selection": dict(SELECTION), "section_rule": dict(SECTION_RULE), "speech_outside_rule": dict(SPEECH_OUTSIDE_RULE),
         "slides": {"basis": slides_block["basis"], "count": len(slides_block["logical_slides"]), "page_count": slides_block.get("page_count"), "map_revision": slides_block.get("map_revision")},
         "recordings": records, "line_times": produced["line_times"],
         "links": sorted(produced["links"], key=by_time), "candidates": sorted(produced["candidates"], key=by_time), "unassigned": sorted(produced["unassigned"], key=by_time),
+        "speech_outside": sorted(produced["speech_outside"], key=by_time),
         "pairings": pairings, "pairing_notes": list(material.get("pairing_notes") or []),
         "note": "Suggestions from generated speech text, wording and order. Generated is not reviewed and not confirmed; no link says a slide was shown.",
     }
     document = json.loads(c.dump_json(document))  # plain JSON data, exactly what is read back from disk
-    document["links_revision"] = _digest({key: value for key, value in document.items() if key != "built_at"})
+    document["links_revision"] = _revision_of(document)
     return document
+
+
+_NOT_IN_REVISION = frozenset({"built_at", "links_revision", "transcript_check"})  # the clock, the revision itself, and the check a build adds after composing
+
+
+def _revision_of(document: dict) -> str:
+    """The revision of a document: a digest of everything it says except when it was built."""
+    return _digest({key: value for key, value in document.items() if key not in _NOT_IN_REVISION})
 
 
 # ---- currentness -----------------------------------------------------------------------------------------------------------
@@ -582,7 +678,7 @@ def evaluate(document: dict | None, current_inputs: dict | None, *, reason: str 
     links, candidates and line times of every stale recording are withheld) or ``missing``."""
     if not isinstance(document, dict):
         return {"state": "missing", "reason": reason, "differs": [], "stale_recordings": [], "withheld": {"links": 0, "candidates": 0}, "inputs": None, "current_inputs": current_inputs,
-                "built_at": None, "links_revision": None, "recordings": [], "links": [], "candidates": [], "unassigned": [], "line_times": []}
+                "built_at": None, "links_revision": None, "recordings": [], "links": [], "candidates": [], "unassigned": [], "line_times": [], "speech_outside": []}
     built, now = document.get("inputs") or {}, current_inputs or {}
     differs = [key for key in _INPUT_ORDER if built.get(key) != now.get(key)]
     was = {row["source_id"]: row for row in built.get("recordings") or []}
@@ -603,7 +699,7 @@ def evaluate(document: dict | None, current_inputs: dict | None, *, reason: str 
         return [row for row in rows if (row.get("recording") or {}).get("source_id", row.get("recording_source_id")) not in stale_recordings]
 
     result = dict(document)
-    for key in ("links", "candidates", "unassigned", "line_times"):
+    for key in ("links", "candidates", "unassigned", "line_times", "speech_outside"):
         result[key] = keep(document.get(key) or []) if differs else list(document.get(key) or [])
     result.update(state="stale" if differs else "current", reason=None, differs=differs, stale_recordings=stale_recordings, current_inputs=current_inputs,
                   withheld={"links": len(document.get("links") or []) - len(result["links"]), "candidates": len(document.get("candidates") or []) - len(result["candidates"])})
@@ -820,6 +916,11 @@ def _load(settings: Settings, course_id: str, lecture_id: str) -> tuple[dict | N
     if not isinstance(document, dict) or document.get("contract") != LINKS_CONTRACT or document.get("course_id") != course_id or document.get("lecture_id") != lecture_id \
             or not isinstance(document.get("inputs"), dict) or not isinstance(document.get("recordings"), list):
         return None, "unreadable"
+    try:
+        if _revision_of(document) != document.get("links_revision"):  # altered after it was built: its links are not the ones its inputs produced
+            return None, "revision_mismatch"
+    except (TypeError, ValueError):
+        return None, "unreadable"
     return document, "ok"
 
 
@@ -832,8 +933,8 @@ def _rejected_annotations(settings: Settings, course_id: str) -> list[dict]:
 
 
 def read(settings: Settings, course_id: str, lecture_id: str, *, current_inputs: dict | None, annotations: list[dict] | None = None) -> dict[str, Any]:
-    """The stored document with ``state`` ``current`` | ``stale`` (``differs``) | ``missing`` (``reason``). A stale
-    document yields no ranges. ``rejected_annotations`` are the learner's rejections (``ll.annotation/1`` records, read
+    """The stored document with ``state`` ``current`` | ``stale`` (``differs``) | ``missing`` (``reason``: ``not_built``,
+    ``unreadable`` or ``revision_mismatch``). A stale document yields no ranges. ``rejected_annotations`` are the learner's rejections (``ll.annotation/1`` records, read
     from the annotation store unless given): on read they suppress the suggestion they match."""
     document, reason = _load(settings, course_id, lecture_id)
     result = evaluate(document, current_inputs, reason=reason)
@@ -880,11 +981,10 @@ def _page_index(view: dict, source_map: dict | None) -> dict[int, dict[str, Any]
 
 
 def _overlaps(link: dict, start_ms: int, end_ms: int) -> bool:
-    """The same occurrence: the two intervals overlap — for a section link, by at least half of the link."""
+    """The same occurrence: the interval covers at least half of the suggestion. A touch at one end, or a short link
+    of the learner's own inside a long suggestion, is other audio and leaves the suggestion where it is."""
     shared = min(end_ms, link["end_ms"]) - max(start_ms, link["start_ms"])
-    if shared <= 0:
-        return False
-    return shared * 2 >= link["end_ms"] - link["start_ms"] if link["support"]["scope"] == "section" else True
+    return shared > 0 and shared * 2 >= link["end_ms"] - link["start_ms"]
 
 
 def _as_range(link: dict, index: int, total: int) -> dict[str, Any]:
@@ -952,8 +1052,11 @@ def _associations(view: dict, links: dict, generated: dict) -> dict[str, dict[st
         else:
             state, cause = "not_run", "not_run"
         usable = record is not None and source_id not in links.get("stale_recordings", []) and links["state"] != "missing"
+        why = None if ran or record is None else record["stages"]["association"]["cause"]
+        if usable and state == "not_run" and why == "no_slide_text":
+            cause = "no_adequate_method"  # the document is current and says why nothing ran: the only method compares wording, and this deck has none to compare
         out[source_id] = {"state": state, "cause": cause, "record": record if usable else None, "any_record": record, "inputs": built.get(source_id),
-                          "why_not_run": None if ran or record is None else record["stages"]["association"]["cause"], "generated": generated.get(source_id)}
+                          "why_not_run": why, "generated": generated.get(source_id)}
     return out
 
 
@@ -998,8 +1101,16 @@ def enrich(view: dict, *, source_map: dict | None, links: dict | None, generated
     replaces the rejections that came with ``links``. Pure: reads only what it is handed, and changes only the view.
 
     Order of a page's ranges: links a person entered or confirmed first; then the current suggestions for the page's
-    logical slide and what the course states for it, earliest first. A suggestion that overlaps a person's link for
-    the same page is not shown beside it, and one that a rejected annotation matches is not shown at all.
+    logical slide and what the course states for it, earliest first. A suggestion of which a person's link for the
+    same page covers at least half is not shown beside it, and one that a rejected annotation covers by at least half
+    is not shown: on every page of its logical slide for a page or build-group suggestion, on the page of the rejection
+    only for a course-stated section. A stretch is listed once on a page. A person's link to a recording that cannot
+    be played is kept as a record and named in ``no_range.detail.links_without_recording``; it is not a range.
+
+    Also set, on every entry of ``transcripts``: ``generated_line_times`` (the lines of the course transcript that the
+    accepted text alignment of the current document timed: ``{line, start_ms, end_ms, recording_source_id,
+    review_state: "generated", method}``; ``line_times`` — links a person made — is left as it is) and
+    ``text_alignment`` (one row per recording that was aligned with this transcript).
     """
     generated = generated or {}
     links = links if isinstance(links, dict) and links.get("state") in {"current", "stale", "missing"} else evaluate(None, None)
@@ -1010,6 +1121,7 @@ def enrich(view: dict, *, source_map: dict | None, links: dict | None, generated
     index = _page_index(view, source_map)
     recordings = view.get("recordings") or []
     readable = [r for r in recordings if r.get("state") in _READABLE]
+    unreadable = {r["source_id"] for r in recordings if r.get("state") not in _READABLE}
     associations = _associations(view, links, generated)
     rejected = [{"page": r["from"]["locator"].get("page"), "recording": r["to"]["source_id"], "start_ms": r["to"]["locator"]["start_ms"], "end_ms": r["to"]["locator"]["end_ms"],
                  "annotation_id": r.get("annotation_id")}
@@ -1019,8 +1131,13 @@ def enrich(view: dict, *, source_map: dict | None, links: dict | None, generated
     shown, candidates = list(links.get("links") or []), list(links.get("candidates") or [])
     ambiguous = [u for u in links.get("unassigned") or [] if u.get("reason") == "ambiguous" and u.get("between")]
 
-    def rejected_for(link: dict) -> bool:
-        return any(r["recording"] == link["recording"]["source_id"] and r["page"] in link["support"]["pages"] and _overlaps(link, r["start_ms"], r["end_ms"]) for r in rejected)
+    def rejected_for(link: dict, page: int) -> bool:
+        """Whether the learner rejected this suggestion for ``page``. A build group is one logical slide, so a rejection
+        recorded on any of its builds holds on all of them. A section is the course's statement about several pages:
+        a rejection recorded on one of them is a judgment of that page and removes the range from that page only."""
+        whole_link = link["support"]["scope"] != "section"
+        return any(r["recording"] == link["recording"]["source_id"] and (r["page"] in link["support"]["pages"] if whole_link else r["page"] == page)
+                   and _overlaps(link, r["start_ms"], r["end_ms"]) for r in rejected)
 
     unavailable_reason = None
     if not readable:
@@ -1030,18 +1147,40 @@ def enrich(view: dict, *, source_map: dict | None, links: dict | None, generated
     whole = bool(readable) and all((generated.get(r["source_id"]) or {}).get("covers_whole_recording") for r in readable)
     all_windowed = all(((associations[r["source_id"]]["record"] or {}).get("stages", {}).get("association", {}).get("all_speech_windowed", False)) for r in with_timing)
     processed = [[r["source_id"], a, b] for r in with_timing for a, b in _pairs(generated[r["source_id"]].get("covered_intervals"))]
+    # Recognised speech that was in no window was not compared with any slide: never "nothing was said". Listed here: the stretches that lie in no range at all.
+    not_matched = [[u["recording_source_id"], u["start_ms"], u["end_ms"]] for u in links.get("unassigned") or [] if u.get("reason") == SPEECH_OUTSIDE_RULE["reason"]]
     coverage = []
     for r in with_timing:
-        current, mapping = generated[r["source_id"]], ((associations[r["source_id"]]["record"] or {}).get("stages") or {}).get("text_alignment") or {}
+        current, stages = generated[r["source_id"]], (associations[r["source_id"]]["record"] or {}).get("stages") or {}
+        mapping = stages.get("text_alignment") or {}
         coverage.append({"recording_source_id": r["source_id"], "coverage_fraction": current.get("coverage_fraction"), "covers_whole_recording": bool(current.get("covers_whole_recording")),
-                         "unresolved_ms": sum(b - a for a, b in _pairs(current.get("unresolved_intervals"))), "lines_aligned": mapping.get("lines_aligned"), "lines_total": mapping.get("lines_total")})
+                         "unresolved_ms": sum(b - a for a, b in _pairs(current.get("unresolved_intervals"))), "lines_aligned": mapping.get("lines_aligned"), "lines_total": mapping.get("lines_total"),
+                         "lines_without_time": (mapping.get("counts") or {}).get("too_few_matches") or 0,
+                         "speech_without_timed_line_ms": ((stages.get("windows") or {}).get("speech_outside") or {}).get("ms") or 0})
+    lines_without_time, stray_ms = sum(row["lines_without_time"] for row in coverage), sum(row["speech_without_timed_line_ms"] for row in coverage)
+    durations = [generated[r["source_id"]].get("duration_ms") or r.get("duration_ms") for r in with_timing]
+    covered_ms = sum(b - a for _, a, b in processed)
+    part_text = (f"Timing covers {_clock(covered_ms)} of the recording's {_clock(sum(durations))}; nothing was found for this page in that part." if durations and all(durations) else
+                 "Only part of the recording has timing so far; nothing was found for this page in that part.")
+    gaps = ([f"{lines_without_time} transcript line{'' if lines_without_time == 1 else 's'} could not be given a time"] if lines_without_time else []) + \
+           ([f"{_clock(stray_ms)} of what was said has no timed line in the transcript and was not matched to slides"] if stray_ms else [])
+    whole_text = (f"The recording is transcribed, but {' and '.join(gaps)}; nothing was found for this page in the rest." if gaps else
+                  "The recording is transcribed, but not all of it could be matched to slides; nothing was found for this page in the part that was.")
 
     distinct: dict[str, str] = {}
     for row in view.get("slides") or []:
         page = row.get("page")
         info = index[page]
-        mine = [_annotation_range(occurrence, page) for occurrence in row.get("occurrences") or [] if occurrence.get("start_ms") is not None and occurrence.get("end_ms") is not None
-                and occurrence["end_ms"] > occurrence["start_ms"]]
+        mine, kept_without_recording = [], []
+        for occurrence in row.get("occurrences") or []:
+            if occurrence.get("start_ms") is None or occurrence.get("end_ms") is None or occurrence["end_ms"] <= occurrence["start_ms"]:
+                continue
+            item = _annotation_range(occurrence, page)
+            if not readable or item["recording"].get("source_id") in unreadable:  # nothing can be sought in it: the record stays, the page says so, no range is offered
+                kept_without_recording.append({"annotation_id": item["annotation_id"], "recording_source_id": item["recording"].get("source_id"), "start_ms": item["start_ms"],
+                                               "end_ms": item["end_ms"], "review_state": item["review_state"]})
+            else:
+                mine.append(item)
         people = [item for item in mine if item["review_state"] == "human_confirmed" or item["origin"] == "manual"]
         earlier = [item for item in mine if item not in people]
         suppressed = 0
@@ -1049,14 +1188,22 @@ def enrich(view: dict, *, source_map: dict | None, links: dict | None, generated
         for link in shown:
             if page not in link["support"]["pages"]:
                 continue
-            if rejected_for(link):
+            if rejected_for(link, page):
                 suppressed += 1
             elif not any(item["recording"]["source_id"] == link["recording"]["source_id"] and _overlaps(link, item["start_ms"], item["end_ms"]) for item in people):
                 derived.append(link)
         page_level = _numbered([_as_range(link, 0, 0) for link in derived if link["support"]["scope"] != "section"])
-        same_stretch: dict[tuple, dict] = {}  # two statements with one stretch are shown once on a page: the one naming the fewest pages
+        # A stretch is listed once on a page. A suggestion for the page itself stands for a section with the same ends (its basis already names the course's
+        # pairing); of two statements with one stretch, the one naming the fewest pages.
+        own_stretches = {(item["recording"]["source_id"], item["start_ms"], item["end_ms"]): item for item in page_level}
+        same_stretch: dict[tuple, dict] = {}
         for link in sorted((link for link in derived if link["support"]["scope"] == "section"), key=lambda link: (len(link["support"]["pages"]), link["range_id"])):
-            same_stretch.setdefault((link["recording"]["source_id"], link["start_ms"], link["end_ms"]), link)
+            stretch = (link["recording"]["source_id"], link["start_ms"], link["end_ms"])
+            if stretch in own_stretches:
+                if "course's own record" not in own_stretches[stretch]["why"]:
+                    own_stretches[stretch]["why"] += " The course's own record places these transcript lines with this page as well."
+            else:
+                same_stretch.setdefault(stretch, link)
         sections = _numbered([_as_range(link, 0, 0) for link in same_stretch.values()])
         ranges = _numbered(people) + sorted(page_level + sections + _numbered(earlier), key=lambda r: (r["start_ms"], r["end_ms"], str(r["range_id"])))
         row["ranges"] = ranges
@@ -1068,7 +1215,7 @@ def enrich(view: dict, *, source_map: dict | None, links: dict | None, generated
         listed = []
         for link in candidates:
             if page in link["support"]["pages"]:
-                if rejected_for(link):
+                if rejected_for(link, page):
                     suppressed += 1
                 else:
                     listed.append({"kind": "occurrence", "range_id": link["range_id"], "recording_source_id": link["recording"]["source_id"], "start_ms": link["start_ms"], "end_ms": link["end_ms"],
@@ -1076,6 +1223,8 @@ def enrich(view: dict, *, source_map: dict | None, links: dict | None, generated
         listed += [{"kind": "ambiguous_interval", "range_id": None, "recording_source_id": u["recording_source_id"], "start_ms": u["start_ms"], "end_ms": u["end_ms"],
                     "why_not_shown": "the wording fits several slides about equally", "between": list(u["between"])} for u in ambiguous if info["slide_id"] in u["between"]]
         extra = {"rejected_suggestions": suppressed} if suppressed else {}
+        if kept_without_recording:
+            extra["links_without_recording"] = kept_without_recording
         if unavailable_reason:
             state, detail = "recording_unavailable", {"reason": unavailable_reason}
         elif not info["forced"] and not listed:
@@ -1092,14 +1241,33 @@ def enrich(view: dict, *, source_map: dict | None, links: dict | None, generated
         elif whole and all_windowed:
             state, detail = "not_discussed", {}
         else:
-            state, detail = "audio_unprocessed", {"processed": processed, "reason": "partly_processed" if not whole else "transcript_lines_without_time", "coverage": coverage}
+            reason = "partly_processed" if not whole else "transcript_lines_without_time" if lines_without_time else SPEECH_OUTSIDE_RULE["reason"]
+            state, detail = "audio_unprocessed", {"processed": processed, "reason": reason, "coverage": coverage, "not_matched": not_matched}
         text = _NO_RANGE_TEXT[state]
         if state == "audio_unprocessed" and with_timing:
-            text = ("Only part of the recording has timing so far; nothing was found for this page in that part." if not whole else
-                    "The recording is transcribed, but some transcript lines could not be given a time; nothing was found for this page among the lines that have one.")
+            text = part_text if detail["reason"] == "partly_processed" else whole_text
         if state == "recording_unavailable" and unavailable_reason == "recording_unreadable":
             text = "The recording of this lecture cannot be read."
+        if state == "association_not_run" and detail["cause"] == "no_adequate_method":
+            text = "The recording has timing, but this deck has no readable text on its slides, so wording cannot be matched to them; no other matching method is available."
+        if kept_without_recording:
+            text += " The link recorded for this page is kept." if len(kept_without_recording) == 1 else f" The {len(kept_without_recording)} links recorded for this page are kept."
+        if suppressed and state != "recording_unavailable":  # something was found for this page and the learner said no: that is not "nothing was found"
+            said = "The one suggestion for this page was rejected" if suppressed == 1 else f"The {suppressed} suggestions for this page were rejected"
+            text = f"{said}; nothing else was found for it in the recording." if state == "not_discussed" else f"{text} {said}."
         row["no_range"] = {"state": state, "text": text, "detail": {**detail, **extra}}
+
+    # The transcript tab (R2-T4): a line of the course transcript has a time only through the accepted text alignment of the current document.
+    timed_transcript = ((links.get("inputs") or {}).get("transcript") or {}).get("source_id") if links["state"] != "missing" else None
+    for transcript in view.get("transcripts") or []:
+        mine_too = timed_transcript is not None and transcript.get("source_id") == timed_transcript
+        transcript["generated_line_times"] = [{"line": row["line"], "start_ms": row["start_ms"], "end_ms": row["end_ms"], "recording_source_id": row["recording_source_id"],
+                                               "review_state": "generated", "method": _method(alignment.TEXT_METHOD)}
+                                              for row in (links.get("line_times") or [] if mine_too else []) if row.get("transcript_source_id") == timed_transcript]
+        transcript["text_alignment"] = [{"recording_source_id": source_id, "state": mapping["state"], "reason": mapping["reason"], "lines_aligned": mapping["lines_aligned"],
+                                         "lines_total": mapping["lines_total"], "method": dict(mapping["method"])}
+                                        for source_id, info in associations.items() for mapping in [((info["record"] or {}).get("stages") or {}).get("text_alignment")]
+                                        if mine_too and mapping and (mapping.get("transcript") or {}).get("source_id") == timed_transcript]
 
     timing = _timing_block(view, links, generated, associations)
     slides = view.get("slides") or []
@@ -1144,12 +1312,9 @@ def _speech(settings: Settings, course_id: str) -> tuple[dict | None, str | None
     allowance = report.get("allowance") or {}
     numbers = {key: allowance.get(key) for key in ("ceiling_seconds", "used_seconds", "remaining_seconds")}
     rows = ((report.get("courses") or {}).get(course_id) or {}).get("recordings") or []
-    queue, position = {}, 0
-    for row in rows:
-        listed = row.get("state") != "not_in_frozen_queue"
-        position += 1 if listed else 0
-        queue[row["source_id"]] = {"state": row.get("state"), "chunks_done": row.get("chunks_done"), "chunks_total": row.get("chunks_total"), "seconds_covered": row.get("seconds_covered"),
-                                   "position": position if listed else None}
+    # The runner reports no place in its queue (which spans all courses), so none is stated here: an ordinal of this list would not be one.
+    queue = {row["source_id"]: {"state": row.get("state"), "chunks_done": row.get("chunks_done"), "chunks_total": row.get("chunks_total"), "seconds_covered": row.get("seconds_covered")}
+             for row in rows}
     return (numbers if numbers["ceiling_seconds"] is not None and allowance.get("ledger") != "unreadable" else None), report.get("resume_command"), queue
 
 
@@ -1182,7 +1347,7 @@ def status(settings: Settings, course_id: str, *, preparation: Preparation | Non
         view = {"recordings": recordings, "sessions": lecture["sessions"], "slides": []}
         timing = _timing_block(view, links, generated, _associations(view, links, generated))
         for row in timing["recordings"]:
-            row["queue"] = queue.get(row["source_id"]) or {"state": "not_listed", "chunks_done": None, "chunks_total": None, "seconds_covered": None, "position": None}
+            row["queue"] = queue.get(row["source_id"]) or {"state": "not_listed", "chunks_done": None, "chunks_total": None, "seconds_covered": None}
             block = row["generated"]
             totals["recordings"] += 1
             totals["recordings_with_generated"] += 1 if block else 0

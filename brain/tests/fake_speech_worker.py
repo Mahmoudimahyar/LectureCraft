@@ -42,17 +42,21 @@ TOOL = "labelled-fake-speech-worker"
 EXIT_OK, EXIT_RESOURCE, EXIT_LEASE = 0, 2, 4
 
 
-def write_atomic(path: Path, value: dict) -> None:
+def write_atomic(path: Path, value: dict, *, attempts: int = 40) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".tmp-{os.getpid()}-{path.name}")
     tmp.write_text(json.dumps(value, ensure_ascii=False, sort_keys=True), encoding="utf-8")
-    for attempt in range(40):
-        try:
-            os.replace(tmp, path)
-            return
-        except PermissionError:  # a reader has the target open for an instant (Windows)
-            time.sleep(0.02)
-    os.replace(tmp, path)
+    try:
+        for attempt in range(attempts):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:  # a reader has the target open for an instant (Windows)
+                time.sleep(0.02)
+        os.replace(tmp, path)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def read_json(path: Path) -> dict | None:
@@ -126,7 +130,11 @@ def main() -> int:
                 handle.write(line + "\n")
 
     def beat(position: int, phase: str) -> None:
-        write_atomic(heartbeat, {"at": time.time(), "job": position, "phase": phase, "pid": os.getpid(), "tool": TOOL})
+        """As in the real worker: a sign of life that cannot be written is skipped, and the next one is tried as usual."""
+        try:
+            write_atomic(heartbeat, {"at": time.time(), "job": position, "phase": phase, "pid": os.getpid(), "tool": TOOL}, attempts=5)
+        except OSError:
+            pass
 
     def finish(ended: str, code: int, **more) -> int:
         write_atomic(result_path, {"document": "speech-worker-result/1", "ended": ended, "jobs_done": done, "conflicts": conflicts, "chunk_errors": chunk_errors, "tool": TOOL,

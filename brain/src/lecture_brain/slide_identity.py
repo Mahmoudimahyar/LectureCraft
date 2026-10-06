@@ -10,7 +10,8 @@
   :func:`label_for`, :func:`pages_of` — the same identity for the other consumers (timing, questions, concepts), so
   that none computes its own;
 * :func:`prebuild` — maps built ahead of time by the preparation queue or a command;
-* :func:`register` — the two routes: the stored map, and a learner's correction.
+* :func:`register` — the two routes: the stored map, and a learner's correction;
+* :func:`cli_register`, :func:`cli_run` — the command ``source-map-build``, which runs :func:`prebuild`.
 
 What stays true whatever the map says: ``slides[]`` keeps one row per physical page in page order, so ``?page=N`` always
 means physical page N of the displayed deck. A label words only what the map establishes (``sourcemap.describe_page``);
@@ -25,7 +26,7 @@ declares with a kind keeps that kind, with ``grouping.basis = "override"``.
 ``grouping.state`` says who established that the pages are one slide (:func:`grouping_state`): ``generated`` for
 everything the detector read, also for a group that a correction beside it left behind; ``agent_reviewed`` or
 ``human_confirmed`` only for a grouping a correction made, by the authors of the corrections that join the pages (for
-a page that was cut off: of the cuts).
+a page that was cut off: of the cuts), and never more than the weakest of them establishes.
 
 The denominators count physical pages: ``raw`` is every page, ``instructional`` the pages whose role is instructional,
 worked example or question, or mixed, ``excluded`` the pages whose role forces nothing (structural, administrative,
@@ -43,8 +44,10 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from pathlib import Path
+import json
 import os
 import re
+import sys
 import threading
 import time
 from typing import Any
@@ -59,7 +62,7 @@ from .ownerio.inventory import build_inventory, primary_deck
 
 __all__ = ["REASONS", "KIND_NAMES", "POSITION_WORDS", "OPS", "REQUEST_BUILD_MAX_BYTES", "REQUEST_BUILD_MAX_PAGES", "map_for", "prebuild", "forget", "displayed_deck",
            "block", "unavailable_block", "enrich", "page_rows", "grouping_state", "alignment_groups", "alignment_slides", "logical_slide_of", "label_for", "pages_of",
-           "correction_from", "register"]
+           "correction_from", "register", "cli_register", "cli_run"]
 
 REASONS = ("no_deck", "not_a_pdf", "unreadable", "not_built")
 # The request-time bound. A deck that has no stored map yet is inspected during a request only when its file is at most
@@ -295,16 +298,19 @@ def _history(source_map: dict) -> dict[int, dict]:
 
 
 def _review_state(history: dict[int, dict], revisions: list[Any]) -> str:
-    """``human_confirmed`` when a correction in play is the learner's (or made on the learner's say), ``agent_reviewed``
-    when corrections are an agent's alone, ``generated`` when nothing but the detector spoke."""
+    """What the corrections in play establish together, which is no more than the weakest of them: ``human_confirmed``
+    when every one is the learner's (or made on the learner's say), ``agent_reviewed`` when an agent made one of them,
+    ``generated`` when there is none or the author of one is not recorded."""
     kinds = set()
     for revision in revisions:
         author = (history.get(revision) or {}).get("author")
         if isinstance(author, dict):
             kinds.add("learner" if author.get("kind") == "learner" or author.get("learner_authority") else author.get("kind"))
-        elif isinstance(author, str):
+        else:
             kinds.add(author)
-    return "human_confirmed" if "learner" in kinds else "agent_reviewed" if "agent" in kinds else "generated"
+    if not kinds or not all(isinstance(kind, str) and kind in {"learner", "agent"} for kind in kinds):
+        return "generated"
+    return "agent_reviewed" if "agent" in kinds else "human_confirmed"
 
 
 def _joins(entry: dict | None, first: int, last: int) -> bool:
@@ -322,8 +328,10 @@ def grouping_state(source_map: dict, slide: dict) -> str:
     detector inferred stays ``generated`` when a correction cuts beside it: a split before page 5 says where page 5
     starts, not that pages 3 and 4 are one slide. For a group a correction joined, the state is that of the corrections
     that join its pages; a cut at its edge by someone else does not confirm the join. For a page a correction cut off,
-    it is that of the cuts. The source map lists on a slide every correction at its boundaries (``slide.overrides``),
-    which is why this is decided here and not read off that list. Every consumer that words a grouping uses this.
+    it is that of the cuts, and of the weaker one when two authors cut it free: the learner who cut before page 4 and
+    left it with page 5 did not say that page 4 stands alone when an agent later cut before page 5. The source map
+    lists on a slide every correction at its boundaries (``slide.overrides``), which is why this is decided here and
+    not read off that list. Every consumer that words a grouping uses this.
     """
     if slide.get("grouping") != "override":
         return "generated"
@@ -575,7 +583,10 @@ def alignment_slides(source_map: dict | None, page_texts: list[str] | None = Non
 # ---- routes ---------------------------------------------------------------------------------------------------------------
 OPS = ("group", "split", "split_before", "role", "printed_number", "regions", "revert")
 _GROUP_VALUES = {"build_group": "incremental_build", "step_group": "animation_steps", "duplicate_group": "duplicate"}  # the read API's names for the module's kinds
-_STATUS = {"invalid_override": 422, "learner_correction_in_force": 409, "override_conflict": 409, "override_chain_broken": 409, "source_unavailable": 409, "identity_mismatch": 409}
+_STATUS = {"invalid_override": 422, "learner_correction_in_force": 409, "override_conflict": 409, "override_chain_broken": 409, "source_unavailable": 409, "identity_mismatch": 409,
+           "store_unavailable": 503}
+_STORE_UNAVAILABLE = ("The store of source-map corrections could not be read or written just now, so it is not known whether this correction was recorded. "
+                      "Read the source map again to see what is recorded before sending it again.")
 
 
 def correction_from(body: Any) -> tuple[dict, Any]:
@@ -626,7 +637,10 @@ def register(app: Any, runtime: Any, locked: Any) -> None:
     immutable revision and returns the new ``source_map`` object. It changes only app-private state and is listed in
     ``brain/tests/test_boundaries.py::STATE_CHANGING_ROUTES`` by whoever calls this from ``create_app``. A refusal is
     ``{"detail": <what is wrong>, "code": <the source map's code, or the reason there is no map>}`` with 422 for a
-    correction that is not valid and 409 for one that cannot be recorded now. Both take ``?deck=`` like the lecture view.
+    correction that is not valid and 409 for one that cannot be recorded now; a refusal changes nothing. When the store
+    itself cannot be read or written at that moment the answer is 503 with the code ``store_unavailable``: that is not
+    a refusal, and it does not say whether the revision was recorded — the next read does. Both take ``?deck=`` like
+    the lecture view.
     """
     settings: Settings = runtime.settings
 
@@ -676,6 +690,37 @@ def register(app: Any, runtime: Any, locked: Any) -> None:
                 corrected = sm.apply_override(settings, course_id, shown, op, author="learner", author_ref="lecture-view", reason=why, lecture=lecture)
             except sm.SourceMapError as exc:
                 return refusal(exc.code, exc.message)
+            except OSError:  # another writer's revision file is landing, or the disk refuses: not a refusal, and not known to have changed nothing
+                return refusal("store_unavailable", _STORE_UNAVAILABLE)
             return block(corrected)
 
         return locked(apply)
+
+
+# ---- the command ----------------------------------------------------------------------------------------------------------
+def cli_register(subparsers: Any) -> None:
+    """``source-map-build --course C [--lecture L] [--every-deck] [--refresh]``."""
+    parser = subparsers.add_parser("source-map-build", help="Build ahead of time the source maps of a course's displayed decks, also of the ones too large to be mapped inside a request "
+                                                            "(reads the course folder; writes only the app's own source-map store; a stored map is kept unless --refresh)")
+    parser.add_argument("--course", required=True)
+    parser.add_argument("--lecture", help="One lecture unit, for example lecture-04; every unit of the course when omitted")
+    parser.add_argument("--every-deck", action="store_true", help="Also the unit's other PDF files, which a request can choose to display")
+    parser.add_argument("--refresh", action="store_true", help="Inspect again what is already stored")
+
+
+def cli_run(args: Any, settings: Settings) -> int:
+    """Run ``source-map-build``: :func:`prebuild`, printed as one JSON document. 0: every deck that can have a map has
+    one (a unit without a deck, or shown with a presentation, has nothing to map); 1: a deck could not be read or is
+    still not built (``items`` names it; ``detail`` is ``byte_limit`` for a file no run will map); 2: unknown course or
+    lecture unit, with nothing printed but the reason on stderr."""
+    binding = settings.courses.get(args.course)
+    if binding is None or not binding.usable:
+        print(f"Course {args.course!r} is not one of the usable configured courses.", file=sys.stderr)
+        return 2
+    try:
+        counts = prebuild(settings, args.course, lecture_id=args.lecture, every_deck=args.every_deck, refresh=args.refresh)
+    except ValueError as exc:  # no such unit
+        print(str(exc), file=sys.stderr)
+        return 2
+    sys.stdout.write(json.dumps(counts, indent=2, ensure_ascii=False, default=str) + "\n")
+    return 1 if counts["unreadable"] or counts["not_built"] else 0

@@ -895,10 +895,31 @@ def test_the_route_validates_its_parameters_and_answers_unknown_things_with_an_e
     focused = client.get("/api/courses/be505/concept-graph", params={"scope": "lecture:lecture-01", "focus": "BE505-L01-Q03", "depth": 2, "limit": 40})
     assert focused.status_code == 200 and focused.json()["focus"] == "BE505-L01-Q03" and focused.json()["scope"]["lecture_id"] == "lecture-01"
     assert {"strict_containment", "question_has_criterion", "criterion_assesses_concept"} <= {e["relation"] for e in focused.json()["edges"]}
-    assert client.get("/api/courses/nope/concept-graph").status_code == 404
-    for params in ({"scope": "lecture:nope"}, {"scope": "slide:nope:1"}, {"focus": "no-such-node"}):
-        answer = client.get("/api/courses/be505/concept-graph", params=params)
-        assert answer.status_code == 404 and answer.json()["detail"] in {"Unknown scope", "Unknown focus"}
+    unknown_course = client.get("/api/courses/nope/concept-graph")
+    assert unknown_course.status_code == 404 and unknown_course.json() == {"detail": "Unknown course"}   # no graph of that course exists to answer with a graph document
     for params in ({"scope": "banana"}, {"scope": "slide:lecture-01:x"}, {"scope": "lecture:"}, {"depth": 0}, {"depth": 4}, {"limit": 0}, {"limit": cg.MAX_LIMIT + 1}, {"focus": ""}, {"focus": "x" * 301}):
         assert client.get("/api/courses/be505/concept-graph", params=params).status_code == 422, params
     assert [r.methods for r in app.routes if getattr(r, "path", "") == "/api/courses/{course_id}/concept-graph"] == [{"GET"}]   # a read: nothing to pin among state-changing routes
+
+
+@pytest.mark.parametrize("params,code,named", [
+    ({"scope": "lecture:nope"}, "unknown_scope", "lecture:nope"),
+    ({"scope": "slide:nope:1"}, "unknown_scope", "slide:nope:1"),
+    ({"scope": "slide:lecture-04:4"}, "unknown_scope", "4"),                       # the deck of the fixture lecture has three pages
+    ({"focus": "no-such-node"}, "unknown_focus", "no-such-node"),
+    ({"scope": "lecture:lecture-01", "focus": "no-such-node", "depth": 3, "limit": 5}, "unknown_focus", "no-such-node"),
+    ({"scope": "lecture:nope", "focus": "no-such-node"}, "unknown_scope", "lecture:nope"),   # the scope is resolved first: one code per answer
+])
+def test_the_route_answers_an_unknown_scope_or_focus_with_404_and_the_documented_error_document(projector, settings, params, code, named):
+    """r2-read-api.md 1.4: ``{course_id, graph_version, error: {code, detail}}`` with status 404 — the reader tells the two apart by ``error.code``."""
+    runtime = _Runtime(settings, projector)
+    app = FastAPI()
+    cg.register(app, runtime, runtime.with_lock)
+    answer = TestClient(app).get("/api/courses/be505/concept-graph", params=params)
+    body = answer.json()
+    assert answer.status_code == 404 and answer.headers["content-type"].startswith("application/json") and runtime.locked == 1
+    assert set(body) == {"course_id", "graph_version", "error"} and body["course_id"] == "be505" and body["graph_version"] == cg.GRAPH_VERSION == "concept-graph/1"
+    assert set(body["error"]) == {"code", "detail"} and body["error"]["code"] == code
+    assert isinstance(body["error"]["detail"], str) and named in body["error"]["detail"]
+    assert body == cg.view(projector, "be505", **params)   # the route adds nothing to and removes nothing from the document the reader returns
+    assert not {"nodes", "edges", "totals", "detail"} & set(body)   # never an empty graph, and not the bare ``{detail}`` of a general 404

@@ -19,7 +19,8 @@ environment. The worker
   failed text wins, the first pass on a full tie. The result records both passes, which one was kept and why, and the
   digest of the second-pass settings and selection rule that were used (``second_pass_sha256``), so a later edit of
   either is visible in every chunk made before it. What still fails is withheld later, at the merge;
-* writes a heartbeat while it works; stops between or inside chunks when the stop file appears, when the
+* writes a heartbeat while it works (one that cannot be written is skipped and the next one tried as usual: it is a
+  sign of life, not a result); stops between or inside chunks when the stop file appears, when the
   supervisor's lease is no longer refreshed (the supervisor is gone), at the job's hard stop (the allowance ceiling,
   honoured even when no supervisor is left to enforce it) or — between chunks only — at the job's deadline; an
   interrupted chunk leaves no result. A watchdog thread ends the process when the lease stays lost (or the hard stop
@@ -49,6 +50,7 @@ import traceback
 from pathlib import Path
 
 TOOL = "faster-whisper"
+HEARTBEAT_ATTEMPTS = 5  # a heartbeat whose file cannot be replaced is given a tenth of a second, then skipped: the next one comes within a second
 WATCHDOG_GRACE_SECONDS = 5.0  # how long a lost lease (or a passed hard stop) may last before the watchdog ends the process inside a step without a checkpoint
 STUB_TOOL = "labelled-stub-speech-runtime"  # named in every result when the speech library is a test's declared stand-in
 EXIT_OK, EXIT_RESOURCE, EXIT_LEASE = 0, 2, 4
@@ -129,20 +131,29 @@ class Interrupted(Exception):
         self.why = why
 
 
-def write_atomic(path: Path, value: dict) -> None:
+def write_atomic(path: Path, value: dict, *, attempts: int = 60) -> None:
+    """Write the file whole or not at all. A refused replace is tried again ``attempts`` times, 20 ms apart; when it
+    stays refused the error is raised and nothing is left lying beside the target."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".tmp-{os.getpid()}-{path.name}")
     with open(tmp, "w", encoding="utf-8") as handle:
         json.dump(value, handle, ensure_ascii=False, sort_keys=True)
         handle.flush()
         os.fsync(handle.fileno())
-    for attempt in range(60):
+    try:
+        for attempt in range(attempts):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:  # a reader has the target open for an instant (Windows)
+                time.sleep(0.02)
+        os.replace(tmp, path)
+    except OSError:
         try:
-            os.replace(tmp, path)
-            return
-        except PermissionError:  # a reader has the target open for an instant (Windows)
-            time.sleep(0.02)
-    os.replace(tmp, path)
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
 
 
 def read_json(path: Path) -> dict | None:
@@ -246,13 +257,23 @@ def main() -> int:
     heartbeat, lease, stop, result_path = (Path(job_file[key]) for key in ("heartbeat_path", "lease_path", "stop_path", "result_path"))
     hard_stop = job_file.get("hard_stop_epoch")  # the allowance ceiling as a clock time: this worker stops there by itself, supervisor or not
     hard_stop = float(hard_stop) if isinstance(hard_stop, (int, float)) and not isinstance(hard_stop, bool) else None
-    state = {"done": 0, "conflicts": [], "chunk_errors": [], "position": -1, "last_beat": 0.0, "last_lease": 0.0, "tool": TOOL, "double": False}
+    state = {"done": 0, "conflicts": [], "chunk_errors": [], "position": -1, "last_beat": 0.0, "last_lease": 0.0, "tool": TOOL, "double": False, "beats_skipped": 0}
 
     def beat(phase: str, force: bool = False, **more) -> None:
+        """A sign of life for the supervisor, at most once a second unless forced. One that cannot be written (on
+        Windows: something else has the file open) is skipped, said once in the log, and the next one is tried as
+        usual: the supervisor ends a worker whose heartbeat stays silent — the worker does not end itself, report a
+        failure of the runtime or blame the recording it is at over a sign of life it could not give."""
         now = time.time()
         if force or now - state["last_beat"] >= 1.0:
-            write_atomic(heartbeat, {"at": now, "job": state["position"], "phase": phase, "pid": os.getpid(), "tool": state["tool"], **more})
-            state["last_beat"] = now
+            state["last_beat"] = now  # also when it is skipped: the work is not held up by one attempt after another
+            try:
+                write_atomic(heartbeat, {"at": now, "job": state["position"], "phase": phase, "pid": os.getpid(), "tool": state["tool"], **more}, attempts=HEARTBEAT_ATTEMPTS)
+                state["beats_skipped"] = 0
+            except OSError as exc:
+                state["beats_skipped"] += 1
+                if state["beats_skipped"] == 1:
+                    print(f"heartbeat not written ({type(exc).__name__}: {exc}); the work goes on and the next one is tried as usual"[:400], flush=True)
 
     def finish(ended: str, code: int, **more) -> int:
         write_atomic(result_path, {"document": "speech-worker-result/1", "ended": ended, "jobs_done": state["done"], "conflicts": state["conflicts"],

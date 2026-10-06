@@ -335,11 +335,12 @@ def test_two_statements_that_time_the_same_stretch_for_the_same_pages_are_one_li
     assert len(of_pages(doc, [5, 6], origin="reviewed_source_map")) == 1
     assert doc["recordings"][0]["stages"]["course_stated"] == {"pairings": 3, "pairings_timed": 3, "links": 2, "pairings_without_timed_lines": 0}
     assert len({link["range_id"] for link in doc["links"]}) == len(doc["links"])
-    # On a page, two sections with the same stretch are shown once: the statement that names the fewest pages.
-    result = enriched(material(pairings=[row, locator, wider]))
-    sections = [r for r in slide(result, 5)["ranges"] if r["support"]["scope"] == "section"]
-    assert len(sections) == 1 and sections[0]["support"]["pages"] == [5] and (sections[0]["occurrence_index"], sections[0]["occurrences_total"]) == (1, 1)
-    assert [r["support"]["pages"] for r in slide(result, 6)["ranges"] if r["support"]["scope"] == "section"] == [[5, 6]]
+    # On a page, two sections with the same stretch are shown once: the statement that names the fewest pages. (Page 8 is
+    # never spoken about, so it has no suggestion of its own; on page 5 the suggestion with these very ends stands for both.)
+    result = enriched(material(pairings=[pairing([8], [LINE_OF["gluten"]], label="row three"), pairing([6, 8], [LINE_OF["gluten"]], label="row four")]))
+    sections = [r for r in slide(result, 8)["ranges"] if r["support"]["scope"] == "section"]
+    assert len(sections) == 1 and sections[0]["support"]["pages"] == [8] and (sections[0]["occurrence_index"], sections[0]["occurrences_total"]) == (1, 1)
+    assert [r["support"]["pages"] for r in slide(result, 6)["ranges"] if r["support"]["scope"] == "section"] == [[6, 8]]
     assert result["timing"]["summary"]["ranges"] == len({r["range_id"] for row_ in result["slides"] for r in row_["ranges"]})
 
 
@@ -670,12 +671,12 @@ def test_a_recorded_display_claim_made_from_text_alone_is_shown_as_discussion():
 
 
 def test_a_section_link_appears_on_every_page_the_course_names_with_section_scope():
-    result = enriched(material(pairings=[pairing([6, 7, 8], [LINE_OF["oven"]])]))
-    for page in (6, 7, 8):
+    result = enriched(material(pairings=[pairing([5, 7, 8], [LINE_OF["oven"]])]))
+    for page in (5, 7, 8):
         sections = [r for r in slide(result, page)["ranges"] if r["support"]["scope"] == "section"]
-        assert len(sections) == 1 and sections[0]["support"]["pages"] == [6, 7, 8] and sections[0]["origin"] == "reviewed_source_map"
+        assert len(sections) == 1 and sections[0]["support"]["pages"] == [5, 7, 8] and sections[0]["origin"] == "reviewed_source_map"
         assert sections[0]["method"] == {"name": "course-stated-lines", "version": "1"} and (sections[0]["occurrence_index"], sections[0]["occurrences_total"]) == (1, 1)
-    assert len({tuple((r["start_ms"], r["end_ms"]) for r in slide(result, page)["ranges"] if r["support"]["scope"] == "section") for page in (6, 7, 8)}) == 1  # the same stretch, not a share each
+    assert len({tuple((r["start_ms"], r["end_ms"]) for r in slide(result, page)["ranges"] if r["support"]["scope"] == "section") for page in (5, 7, 8)}) == 1  # the same stretch, not a share each
     assert slide(result, 8)["no_range"] is None  # the course's own statement is a range for the page nobody matched by wording
     assert_exactly_one_of_ranges_or_state(result)
 
@@ -700,7 +701,8 @@ def test_the_timing_block_is_spelled_as_the_read_api_states():
     assert summary["pages"] == 9 and summary["pages_with_range"] == with_range and summary["pages_no_range_expected"] == 2
     assert summary["pages_with_range"] + summary["pages_no_range_expected"] + summary["pages_without_range"] == 9
     distinct = {r["range_id"] for row_ in result["slides"] for r in row_["ranges"]}
-    assert summary["ranges"] == len(distinct) == association["ranges"] and summary["generated"] == len(distinct) and summary["human_confirmed"] == 0
+    # association.ranges counts the stored links; page 5 lists the gluten stretch once although a suggestion and the course's section both have it
+    assert summary["ranges"] == len(distinct) == association["ranges"] - 1 and summary["generated"] == len(distinct) and summary["human_confirmed"] == 0
     assert result["revisions"]["timing_links"] == [{"recording_source_id": RECORDING["source_id"], "links_revision": tl.compose(
         material(pairings=[pairing([5], [LINE_OF["gluten"]])]), now=NOW)["links_revision"]}]
 
@@ -971,7 +973,7 @@ def test_status_lists_every_lecture_and_recording_with_its_stage_and_extrapolate
     assert set(recording) == {"source_id", "filename", "duration_ms", "generated", "text_alignment", "association", "queue"}
     assert recording["generated"]["generation"] == "gen-0001" and recording["generated"]["covered_intervals"] == [[0, 57_600]] and recording["generated"]["unresolved_ms"] == 0
     assert recording["association"]["state"] == "current" and recording["association"]["ranges"] > 0 and recording["text_alignment"]["state"] == "accepted"
-    assert set(recording["queue"]) == {"state", "chunks_done", "chunks_total", "seconds_covered", "position"}
+    assert set(recording["queue"]) == {"state", "chunks_done", "chunks_total", "seconds_covered"}  # as r2-read-api.md spells it; the runner reports no queue position
     second = by_id["lecture-02"]
     assert second["stage"] == "audio_unprocessed" and second["recordings"][0]["generated"] is None and second["recordings"][0]["association"]["state"] == "not_run"
     assert by_id["lecture-03"]["stage"] == "no_recording" and by_id["lecture-03"]["recordings"] == []
@@ -1027,7 +1029,9 @@ def test_the_commands_build_one_or_all_lectures_and_print_the_status(local, jour
     assert links_path(local).is_file() and not links_path(local, "lecture-02").exists()
     assert tl.cli_run(parser.parse_args(["timing-build", "--course", "be505", "--all"]), local) == 0
     everything_built = json.loads(capsys.readouterr().out)
-    assert [row["lecture_id"] for row in everything_built["built"]] == ["lecture-01", "lecture-02", "lecture-03", "lecture-04"] and links_path(local, "lecture-02").is_file()
+    every_lecture = [lecture["lecture_id"] for lecture in build_inventory(local.course("be505"))["lectures"]]  # the fixture course grows; "all" means all of them
+    assert [row["lecture_id"] for row in everything_built["built"]] == every_lecture and every_lecture[:4] == ["lecture-01", "lecture-02", "lecture-03", "lecture-04"]
+    assert links_path(local, "lecture-02").is_file() and all(links_path(local, lecture_id).is_file() for lecture_id in every_lecture)
     assert tl.cli_run(parser.parse_args(["timing-status", "--course", "be505"]), local) == 0
     assert json.loads(capsys.readouterr().out)["summary"]["stages"]["associated"] == 1
     assert tl.cli_run(parser.parse_args(["timing-build", "--course", "be505", "--lecture", "lecture-99"]), local) == 1
@@ -1117,3 +1121,247 @@ def test_after_a_grouping_correction_of_the_real_source_map_everything_still_bui
     assert client.get("/api/courses/be505/timing").status_code == 200
     assert client.post(f"/api/courses/be505/lectures/{lecture_id}/timing/build").status_code == 200
     assert tree(local.course("be505").root) == course_before  # the correction and the links live in the app's private area
+
+
+# ---- closing round, major 1: speech the transcript has no timed line for -------------------------------------------------
+def outside(doc) -> list[dict]:
+    return [u for u in doc["unassigned"] if u["reason"] == "speech_without_timed_line"]
+
+
+@pytest.mark.parametrize("kept,page,missing", [(LINES[:12], 7, (13, 17)),                                              # the transcript stops early: lines 13-17 are not in it
+                                               (LINES[:LINE_OF["oven"][0] - 1] + LINES[LINE_OF["oven"][1]:], 6, LINE_OF["oven"])])  # the transcript skips a stretch
+def test_speech_the_transcript_has_no_line_for_is_listed_as_unassigned_and_is_never_nothing_was_said(kept, page, missing):
+    """The windows of an accepted text alignment are the timed transcript lines. What the recording says outside every
+    one of them was not compared with any slide, so a page spoken only there must not read "not discussed" (R2-T9)."""
+    mat = material(lines=kept, spoken=LINES)
+    doc = tl.compose(mat, now=NOW)
+    record = doc["recordings"][0]
+    assert record["stages"]["text_alignment"]["state"] == "accepted" and record["stages"]["text_alignment"]["lines_aligned"] == len(kept)
+    first, last = (missing[0] - 1) * STEP, missing[1] * STEP  # where the sentences the transcript lacks were said
+    (stretch,) = outside(doc)
+    words = [w for segment in mat["recordings"][0]["generated"]["segments"] for w in segment["words"] if first <= w["start_ms"] < last]
+    assert (stretch["start_ms"], stretch["end_ms"], stretch["words"]) == (words[0]["start_ms"], words[-1]["end_ms"], len(words))  # measured word times, nothing rounded outwards
+    assert stretch["between"] == [] and stretch["best"] is None and stretch["transcript_lines"] == [] and stretch["recording_source_id"] == RECORDING["source_id"]
+    assert doc["speech_outside"] == [{"recording_source_id": RECORDING["source_id"], "start_ms": stretch["start_ms"], "end_ms": stretch["end_ms"], "words": len(words), "within": None}]
+    assert doc["speech_outside_rule"] == tl.SPEECH_OUTSIDE_RULE
+    assert not any(link["start_ms"] < stretch["end_ms"] and stretch["start_ms"] < link["end_ms"] for link in everything(doc))
+    association = record["stages"]["association"]
+    assert association["all_speech_windowed"] is False
+    assert record["stages"]["windows"]["speech_outside"] == {"intervals": 1, "ms": stretch["end_ms"] - stretch["start_ms"], "words": len(words)}
+    assert association["unassigned_ms"] == sum(u["end_ms"] - u["start_ms"] for u in doc["unassigned"]) and association["unassigned"] == len(doc["unassigned"])
+    result = enriched(mat)
+    assert_exactly_one_of_ranges_or_state(result)
+    state = slide(result, page)["no_range"]
+    assert state["state"] == "audio_unprocessed" and state["detail"]["reason"] == "speech_without_timed_line", "never not_discussed: the talk about this page is in the stretch nobody matched"
+    assert "nothing was said" not in state["text"] and "whole recording was processed and matched" not in state["text"]
+    assert state["detail"]["not_matched"] == [[RECORDING["source_id"], stretch["start_ms"], stretch["end_ms"]]]
+    assert not any(row["no_range"] and row["no_range"]["state"] == "not_discussed" for row in result["slides"])
+
+
+def test_a_transcript_that_accounts_for_all_recognised_speech_leaves_nothing_outside_and_keeps_not_discussed():
+    doc = tl.compose(material(), now=NOW)
+    assert outside(doc) == [] and doc["recordings"][0]["stages"]["association"]["all_speech_windowed"] is True
+    assert doc["recordings"][0]["stages"]["windows"]["speech_outside"] == {"intervals": 0, "ms": 0, "words": 0}
+    # Fillers between two lines are not speech about anything: a stretch without one content word is not listed.
+    spoken = list(LINES)
+    spoken.insert(6, "um so and the")
+    quiet = tl.compose(material(spoken=spoken, steps=[STEP] * 6 + [2_000] + [STEP] * (len(LINES) - 6)), now=NOW)
+    assert outside(quiet) == [] and quiet["recordings"][0]["stages"]["association"]["all_speech_windowed"] is True
+    # A line said in other words has no time. Its speech lies inside the suggestion that bridges it: it is kept with measured word
+    # times and the range it lies in, is not listed a second time as unassigned, and still nothing reads not_discussed.
+    other = list(LINES)
+    other[10] = "Then someone asked whether the exam would cover the history of the bakery guilds."
+    mat = material(spoken=other)
+    said = tl.compose(mat, now=NOW)
+    (stretch,) = said["speech_outside"]
+    (oven,) = of_pages(said, [6])
+    assert 100_000 <= stretch["start_ms"] < stretch["end_ms"] <= 110_000 and stretch["within"] == {"kind": "range", "range_id": oven["range_id"]}
+    assert outside(said) == [] and said["recordings"][0]["stages"]["association"]["all_speech_windowed"] is False
+    pieces = sorted((piece["start_ms"], piece["end_ms"]) for piece in [*everything(said), *said["unassigned"]] if piece.get("origin", "pipeline") == "pipeline")
+    assert all(first[1] <= second[0] for first, second in zip(pieces, pieces[1:])), "suggested ranges and unassigned intervals never overlap"
+    state = slide(enriched(mat), 8)["no_range"]
+    assert state["state"] == "audio_unprocessed" and state["detail"]["reason"] == "transcript_lines_without_time" and state["detail"]["not_matched"] == []
+    assert state["text"].startswith("The recording is transcribed, but 1 transcript line could not be given a time and 0:0") and state["detail"]["coverage"][0]["lines_without_time"] == 1
+    assert state["detail"]["coverage"][0]["speech_without_timed_line_ms"] == stretch["end_ms"] - stretch["start_ms"]
+    # Stale links withhold these intervals with everything else.
+    changed = copy.deepcopy(said["inputs"])
+    changed["map_revision"] = "maprev0000000002"
+    assert tl.evaluate(said, changed)["speech_outside"] == [] and tl.evaluate(said, copy.deepcopy(said["inputs"]))["speech_outside"] == said["speech_outside"]
+    # With windows of generated segments (no usable transcript) every recognised word is in a window already.
+    segments = tl.compose(material(transcript="none"), now=NOW)
+    assert outside(segments) == [] and segments["recordings"][0]["stages"]["association"]["all_speech_windowed"] is True
+
+
+# ---- closing round, major 2 and the rejection findings -------------------------------------------------------------------
+def sections_of(result, page) -> list[dict]:
+    return [r for r in slide(result, page)["ranges"] if r["support"]["scope"] == "section"]
+
+
+def test_a_rejection_on_one_page_leaves_the_courses_section_range_on_the_other_pages_it_names():
+    """A section link is the course's own statement about several pages. The learner who rejects it on the page they
+    are looking at has judged that page, not the others."""
+    mat = material(pairings=[pairing([5, 7, 8], [LINE_OF["oven"]])])
+    (section,) = of_pages(tl.compose(mat, now=NOW), [5, 7, 8], origin="reviewed_source_map")
+    rejected = annotation("ann-syn-rejected-section", 8, section["start_ms"], section["end_ms"], review_state="rejected")
+    result = enriched(mat, annotations=[rejected])
+    assert sections_of(result, 8) == [] and len(sections_of(result, 5)) == 1 and len(sections_of(result, 7)) == 1
+    assert sections_of(result, 5)[0]["range_id"] == section["range_id"]
+    state = slide(result, 8)["no_range"]
+    assert state["detail"]["rejected_suggestions"] == 1 and state["state"] != "ambiguous"
+    assert "rejected" in state["text"] and "nothing was found for this page" not in state["text"], "something was found for this page and the learner said no"
+    assert_exactly_one_of_ranges_or_state(result)
+    # A build group is one logical slide: a rejection on one of its builds is about the slide, so it holds on all three.
+    yeast = of_pages(tl.compose(material(), now=NOW), [2, 3, 4])[0]
+    on_build = annotation("ann-syn-rejected-build", 3, yeast["start_ms"], yeast["end_ms"], review_state="rejected")
+    builds = enriched(annotations=[on_build])
+    assert [len(slide(builds, page)["ranges"]) for page in (2, 3, 4)] == [1, 1, 1] and len(slide(enriched(), 2)["ranges"]) == 2
+
+
+def test_the_same_occurrence_means_most_of_the_suggestion_not_any_touch():
+    gluten_start = (LINE_OF["gluten"][0] - 1) * STEP
+    (suggestion,) = slide(enriched(), 5)["ranges"]
+    assert suggestion["end_ms"] - suggestion["start_ms"] > 20_000
+    # A two-second rejection that touches the suggestion by under a second is about other audio.
+    touching = annotation("ann-syn-touch", 5, suggestion["start_ms"] - 1_500, suggestion["start_ms"] + 500, review_state="rejected")
+    assert [r["range_id"] for r in slide(enriched(annotations=[touching]), 5)["ranges"]] == [suggestion["range_id"]]
+    # A one-second link of the learner's own does not make a thirty-second suggestion disappear from the page.
+    the_view = view()
+    the_view["slides"][4]["occurrences"] = [listed(annotation("ann-syn-one-second", 5, gluten_start + 1_000, gluten_start + 2_000))]
+    ranges = slide(enriched(the_view=the_view), 5)["ranges"]
+    assert [r["annotation_id"] for r in ranges] == ["ann-syn-one-second", None] and ranges[1]["range_id"] == suggestion["range_id"]
+    # A rejection of exactly the suggested stretch removes it, and the page says what happened instead of "nothing was found".
+    exact = annotation("ann-syn-exact", 5, suggestion["start_ms"], suggestion["end_ms"], review_state="rejected")
+    state = slide(enriched(annotations=[exact]), 5)["no_range"]
+    assert state["state"] == "not_discussed" and state["detail"] == {"rejected_suggestions": 1}
+    assert state["text"] == "The one suggestion for this page was rejected; nothing else was found for it in the recording."
+
+
+# ---- closing round, the smaller findings ---------------------------------------------------------------------------------
+def test_an_unconfigured_course_is_refused_with_the_modules_own_error(local):
+    for call in (lambda: tl.build(local, "nope", "lecture-01", now=lambda: NOW), lambda: tl.read(local, "nope", "lecture-01", current_inputs=None),
+                 lambda: tl.current_inputs(local, "nope", "lecture-01"), lambda: tl.status(local, "nope")):
+        with pytest.raises(tl.TimingLinksError) as refused:
+            call()
+        assert refused.value.code == "unknown_course"
+
+
+def test_a_stored_document_that_no_longer_matches_its_own_revision_is_not_served(local, journal, tmp_path):
+    import_generation(local, journal, tmp_path / "out" / "gen-0001", transcript_lines(local))
+    built = tl.build(local, "be505", "lecture-01", now=lambda: NOW)
+    inputs = tl.current_inputs(local, "be505", "lecture-01")
+    assert tl.read(local, "be505", "lecture-01", current_inputs=inputs)["state"] == "current"
+    stored = json.loads(links_path(local).read_text(encoding="utf-8"))
+    stored["links"][0]["start_ms"] += 5_000  # the inputs block still matches; the links are no longer the ones that were built
+    links_path(local).write_bytes(c.dump_json(stored))
+    altered = tl.read(local, "be505", "lecture-01", current_inputs=inputs)
+    assert altered["state"] == "missing" and altered["reason"] == "revision_mismatch" and altered["links"] == [] and altered["line_times"] == []
+    assert tl.build(local, "be505", "lecture-01", now=lambda: NOW)["links_revision"] == built["links_revision"]
+    assert tl.read(local, "be505", "lecture-01", current_inputs=inputs)["state"] == "current"
+
+
+def test_a_persons_link_to_a_recording_that_is_gone_is_kept_and_said_but_not_offered_to_play():
+    mine = annotation("ann-syn-p5", 5, 34_000, 51_000)
+    gone = view(recordings="unreadable")
+    gone["slides"][4]["occurrences"] = [listed(mine)]
+    result = tl.enrich(gone, source_map=source_map(), links=None, generated={})
+    row = slide(result, 5)
+    assert row["ranges"] == [] and row["no_range"]["state"] == "recording_unavailable"
+    assert row["no_range"]["detail"]["links_without_recording"] == [{"annotation_id": "ann-syn-p5", "recording_source_id": RECORDING["source_id"], "start_ms": 34_000, "end_ms": 51_000,
+                                                                     "review_state": "human_confirmed"}]
+    assert "kept" in row["no_range"]["text"] and gone["slides"][4]["occurrences"] == [listed(mine)], "the record itself is untouched"
+    assert "links_without_recording" not in slide(result, 6)["no_range"]["detail"]
+    assert_exactly_one_of_ranges_or_state(result)
+    # No recording listed at all (its file was removed from the session): the same.
+    none = view(recordings="none")
+    none["slides"][4]["occurrences"] = [listed(mine)]
+    assert slide(tl.enrich(none, source_map=source_map(), links=None, generated={}), 5)["ranges"] == []
+    # With the recording there, it is the first range as before.
+    there = view()
+    there["slides"][4]["occurrences"] = [listed(mine)]
+    assert slide(enriched(the_view=there), 5)["ranges"][0]["annotation_id"] == "ann-syn-p5"
+
+
+def test_a_deck_without_any_slide_text_says_no_adequate_method_not_that_matching_has_yet_to_run():
+    blank = source_map()
+    for page in blank["pages"]:
+        page["text"] = ""  # a scanned deck: pages, titles from elsewhere, no text layer
+    mat = material(smap=blank)
+    doc = tl.compose(mat, now=NOW)
+    assert doc["recordings"][0]["stages"]["association"]["cause"] == "no_slide_text"
+    result = tl.enrich(view(), source_map=blank, links=tl.evaluate(doc, copy.deepcopy(doc["inputs"])), generated={RECORDING["source_id"]: mat["recordings"][0]["generated"]})
+    state = slide(result, 5)["no_range"]
+    assert state["state"] == "association_not_run" and state["detail"] == {"cause": "no_adequate_method", "differs": [], "reason": "no_slide_text"}
+    assert "no readable text" in state["text"] and "has not run" not in state["text"]
+    association = result["timing"]["recordings"][0]["association"]
+    assert association["state"] == "not_run" and association["cause"] == "no_adequate_method"
+    # Nothing built yet stays "not run": running it would help.
+    waiting = tl.enrich(view(), source_map=source_map(), links=None, generated={RECORDING["source_id"]: generation(LINES)})
+    assert slide(waiting, 5)["no_range"]["detail"]["cause"] == "not_run" and "has not run" in slide(waiting, 5)["no_range"]["text"]
+
+
+def test_a_page_never_lists_the_same_stretch_twice():
+    """A suggestion for the page and a course-stated section can have the very same ends (the section's lines are the
+    occurrence's lines). The page shows the suggestion, which already names the course's pairing in its basis."""
+    mat = material(pairings=[pairing([5], [LINE_OF["gluten"]])])
+    doc = tl.compose(mat, now=NOW)
+    (suggestion,), (section,) = of_pages(doc, [5]), of_pages(doc, [5], origin="reviewed_source_map")
+    assert (suggestion["start_ms"], suggestion["end_ms"]) == (section["start_ms"], section["end_ms"]), "the case this test is about"
+    ranges = slide(enriched(mat), 5)["ranges"]
+    assert [r["range_id"] for r in ranges] == [suggestion["range_id"]] and "course-stated pairing" in ranges[0]["quality"]["association"]["basis"]
+    assert ranges[0]["why"].endswith("The course's own record places these transcript lines with this page as well.") and ranges[0]["origin"] == "pipeline"
+    assert "course's own record" not in slide(enriched(), 5)["ranges"][0]["why"]  # without the statement the sentence is not there
+    assert len(doc["links"]) == len({link["range_id"] for link in doc["links"]})  # both stay in the document
+
+
+def test_the_times_of_aligned_lines_reach_the_transcript_of_the_lecture_view_and_no_other_line_gets_one():
+    spoken = list(LINES)
+    spoken[10] = "Then someone asked whether the exam would cover the history of the bakery guilds."  # line 11 was said in other words
+    mat = material(spoken=spoken)
+    the_view = view()
+    by_hand = {"annotation_id": "ann-syn-lines", "review_state": "confirmed", "start": 4, "end": 4, "start_ms": 30_500, "end_ms": 39_000, "recording_source_id": RECORDING["source_id"]}
+    the_view["transcripts"] = [dict(TRANSCRIPT, filename="Synthetic transcript.txt", lines=list(LINES), line_times=[dict(by_hand)], timing="annotated"),
+                               dict(TRANSCRIPT, source_id="src-syn-other-transcript", filename="Another file.txt", lines=[], line_times=[], timing="untimed")]
+    result = enriched(mat, the_view=the_view)
+    own, other = result["transcripts"]
+    assert own["line_times"] == [by_hand], "a person's line link is not replaced or rewritten"
+    rows = {row["line"]: row for row in own["generated_line_times"]}
+    assert sorted(rows) == [n for n in range(1, len(LINES) + 1) if n != 11] and set(rows[1]) == {"line", "start_ms", "end_ms", "recording_source_id", "review_state", "method"}
+    stored = {row["line"]: row for row in tl.compose(mat, now=NOW)["line_times"]}
+    assert all((rows[n]["start_ms"], rows[n]["end_ms"], rows[n]["recording_source_id"]) == (stored[n]["start_ms"], stored[n]["end_ms"], RECORDING["source_id"]) for n in rows)
+    assert rows[1]["review_state"] == "generated" and rows[1]["method"] == {"name": "anchored-token-alignment", "version": "2"}
+    assert own["text_alignment"] == [{"recording_source_id": RECORDING["source_id"], "state": "accepted", "reason": None, "lines_aligned": len(LINES) - 1, "lines_total": len(LINES),
+                                      "method": {"name": "anchored-token-alignment", "version": "2"}}]
+    assert other["generated_line_times"] == [] and other["text_alignment"] == []
+    # Stale links give no line a time.
+    doc = tl.compose(mat, now=NOW)
+    changed = copy.deepcopy(doc["inputs"])
+    changed["transcript"] = dict(changed["transcript"], sha256="9" * 64)
+    stale_view = view()
+    stale_view["transcripts"] = [dict(TRANSCRIPT, filename="Synthetic transcript.txt", lines=list(LINES), line_times=[], timing="untimed")]
+    stale = tl.enrich(stale_view, source_map=source_map(), links=tl.evaluate(doc, changed), generated={RECORDING["source_id"]: mat["recordings"][0]["generated"]})
+    assert stale["transcripts"][0]["generated_line_times"] == [] and stale["transcripts"][0]["text_alignment"] == []
+
+
+def test_the_slide_input_is_the_one_slide_identity_builds_from_the_same_map():
+    from lecture_brain import slide_identity
+
+    stored = corrected_map({"kind": "learner", "ref": None})
+    mine = tl.slides_from_map(stored)["logical_slides"]
+    theirs = slide_identity.alignment_slides(stored)
+    keys = ("slide_id", "pages", "title", "text", "role")  # everything the engine scores with
+    assert [{k: row[k] for k in keys} for row in mine] == [{k: row[k] for k in keys} for row in theirs]
+    assert [row["grouping"] for row in mine] == [row["grouping"] for row in theirs]
+
+
+def test_the_queue_row_carries_what_the_speech_runner_reports_and_no_invented_position(local, journal, tmp_path, monkeypatch):
+    from lecture_brain import speech
+
+    source_id = unit(local)["recording"]["source_id"]
+    other = unit(local, "lecture-02")["recording"]["source_id"]
+    report = {"allowance": {"ceiling_seconds": 14_400, "used_seconds": 100, "remaining_seconds": 14_300, "ledger": "ok"}, "resume_command": "python -m lecture_brain speech-run",
+              "courses": {"be505": {"recordings": [{"source_id": other, "state": "complete", "chunks_done": 2, "chunks_total": 2, "seconds_covered": 60.0},
+                                                   {"source_id": source_id, "state": "queued", "chunks_done": 0, "chunks_total": 3, "seconds_covered": 0.0}]}}}
+    monkeypatch.setattr(speech, "status", lambda settings: report)
+    rows = {r["source_id"]: r["queue"] for lecture in tl.status(local, "be505")["lectures"] for r in lecture["recordings"]}
+    assert rows[source_id] == {"state": "queued", "chunks_done": 0, "chunks_total": 3, "seconds_covered": 0.0}
+    assert rows[other] == {"state": "complete", "chunks_done": 2, "chunks_total": 2, "seconds_covered": 60.0}, "a finished recording has no place in a queue"

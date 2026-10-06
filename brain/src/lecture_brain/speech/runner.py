@@ -7,13 +7,16 @@ One call of :meth:`SpeechRunner.run` is one bounded run:
   ``config/local-bindings/speech.json`` (the fixture profile takes a test binding from ``LL_SPEECH_BINDING``). The
   interpreter is EXTERNAL: this process never imports a speech library, it launches ``worker.py`` with that
   interpreter and an offline child environment, one worker, at most four threads. Outside the fixture profile the
-  binding also names the ONE state directory the grant's ledger lives in (``state_dir``): a run or a status for
-  another state directory is refused (``state_dir_not_bound``), so a second allowance cannot be opened under the
-  same grant by pointing the command somewhere else.
+  binding also names the ONE state directory the grant's ledger lives in (``state_dir``, an ABSOLUTE path: a
+  relative one would be another directory in every copy of the working tree): a run or a status for another state
+  directory is refused (``state_dir_not_bound``), so a second allowance cannot be opened under the same grant by
+  pointing the command somewhere else.
 * **Allowance** — wall time of speech processing is charged to the durable ledger (``ledger.py``): reserved before
   the worker is launched, refreshed while it runs, settled when it ends — also when the run ends by an error or an
-  interrupt — and settled conservatively when a run died. When less than the safety margin is left the run stops
-  cleanly with ``ceiling_reached`` and the queue stays.
+  interrupt — and settled conservatively when a run died. A refresh (of the reservation and of the worker's lease)
+  that cannot be written at one look is tried again at the next; the run gives up only when none went through for
+  a whole lease. When less than the safety margin is left the run stops cleanly with ``ceiling_reached`` and the
+  queue stays.
 * **Frozen queue** — ``queue.json`` is written at the first run: every recording of every configured course with its
   identity (source id, version id, SHA-256 of the bytes on disk, size, container duration, linked lecture ids).
   Later runs reuse it. A recording whose bytes changed is a ``source_conflict`` and is skipped; missing media stays
@@ -21,25 +24,34 @@ One call of :meth:`SpeechRunner.run` is one bounded run:
   lecture ids from the inventory as it is NOW (the frozen copy is kept beside them).
 * **Chunks** — fixed windows of original-media time with a small overlap (``chunks.py``). Each result is written
   atomically by the worker to ``work/<short id>/chunk-<n>.json``; a finished chunk is never done again. A result
-  the supervisor does not accept counts as a failed attempt of that chunk with the reason shown; it is never
-  silently done again.
+  the supervisor does not accept — also one whose inside the merge could not read — counts as a failed attempt of
+  that chunk with the reason shown; it is never silently done again.
 * **Repetition loops** — a recogniser can emit one word over and over instead of the speech. The settings of the
   verified proof are the PRIMARY pass; only a chunk whose first pass fails the repetition check is decoded once
   more with the second-pass settings below, and the pass that keeps more accepted words is kept. The second-pass
   settings and the selection rule have their own identity (``SECOND_PASS_SHA256``), recorded in every chunk result
   that used them and in the published provenance. Whatever still fails the check is WITHHELD from the published
-  text and reported as unresolved intervals (not speech, not silence). A chunk on disk that is mostly such output
-  and was made without a second pass is done again.
+  text and reported as unresolved intervals (not speech, not silence), each running from the accepted text before
+  the withheld run to the accepted text after it: around a loop the recogniser often emits nothing, and that time
+  is not known to be silence either. A chunk on disk that is mostly such output and was made without a second pass
+  is done again.
 * **Publication** — the contiguous processed prefix is merged deterministically and published as a new immutable
   generation of the existing derived store through the importer's own admission checks, as generated, unreviewed
-  text with its window, its covered intervals and its unresolved intervals. The generation id is derived from the
-  published content itself, so other content — after other chunk results, another merge rule or an edit of this
-  code — is always another generation and never a conflict with a stored one. A recording whose every chunk is
-  published is ``complete`` only when nothing is unresolved; otherwise it is ``complete_with_unresolved``.
+  text with its window, its covered intervals and its unresolved intervals. The generation id ends in a digest of
+  the generation as it is assembled (the bytes that are stored, with a stand-in for the id and the time), so other
+  content — after other chunk results, another merge rule, an edit of this code or of the assembly, another
+  consumer version — is always another generation and never a conflict with a stored one. A run that finds a
+  recording published whole by other publication code publishes it again from the chunk results on disk: no
+  worker, no charge. Accepted chunk results that still cannot be merged set THAT recording aside
+  (``publish_rejected``) and the queue goes on. A recording whose every chunk is published is ``complete`` only
+  when nothing is unresolved; otherwise it is ``complete_with_unresolved``.
 * **Stopping** — the stop file ``STOP``, the ceiling, a worker failure. The supervisor stops only its own child.
   A RESOURCE failure reported by the worker (memory, model, runtime, also at start-up) PAUSES the queue: nothing is
   set aside, later runs start no worker and say ``paused``, and ``--retry-failed`` continues — with the recording
-  whose chunk it happened in tried last, so a problem of that one recording does not hold up the others.
+  whose chunk it happened in tried last, so a problem of that one recording does not hold up the others. A worker
+  that dies or stalls without saying why is counted against the chunk it was in (twice sets that recording
+  aside); when it ends the same way in the NEXT recording with no chunk finished in between, the cause is taken
+  to be the machine and the queue pauses as well.
 
 Every run, no-change run, refusal, error and interrupt leaves one ``speech-run`` receipt in the journal. Nothing is
 written into a course folder: the runner reads recordings and writes only below the app's private state directory.

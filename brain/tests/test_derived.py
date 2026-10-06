@@ -765,8 +765,10 @@ def test_the_private_commands_import_selected_roots_and_read_the_status_back(wor
     assert row["current_generation"] == "gen-0001" and row["covers_whole_recording"] is False and row["coverage_fraction"] == pytest.approx(1 / 3)
     assert row["bytes"] == item["bytes"] and row["sha256"] == Preparation(settings, converter=None).identity_of("be505", item)[1] and row["path"] == item["path"]
     assert [(g["generation"], g["state"], g["input_fingerprint"]) for g in row["generations"]] == [("gen-0001", "current", report["results"][0]["input_fingerprint"])]
-    assert {r["source_id"]: r["current_generation"] for r in status["recordings"]} == {item["source_id"]: "gen-0001", recording(settings, registered=False)["source_id"]: None}
-    assert status["totals"]["recordings"] == 2 and status["totals"]["with_current_generation"] == 1 and status["totals"]["whole_recording_covered"] == 0
+    # Every recording of the course is listed, with or without generated text: lecture 01's, the unregistered one, and the showcase unit's (lecture 05).
+    assert {r["source_id"]: r["current_generation"] for r in status["recordings"]} == {item["source_id"]: "gen-0001", recording(settings, registered=False)["source_id"]: None,
+                                                                                       "src-lecture-05-recording": None}
+    assert status["totals"]["recordings"] == 3 and status["totals"]["with_current_generation"] == 1 and status["totals"]["whole_recording_covered"] == 0
     assert "current" not in status  # the generated text itself is printed only when one recording is asked for
 
     code, one = run("derived-status", "--course", "be505", "--source", item["source_id"], "--segments")

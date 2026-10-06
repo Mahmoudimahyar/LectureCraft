@@ -5,6 +5,8 @@ hand-made stand-in with the fields ``Projector.lecture_view`` returns for its pa
 """
 from __future__ import annotations
 
+import argparse
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -749,6 +751,35 @@ def test_a_refusal_is_an_explicit_4xx_with_the_modules_reason_and_records_nothin
     assert waiting.status_code == 409 and waiting.json()["code"] == "not_built" and inspected == []  # a correction never starts a long build inside a request
 
 
+def test_a_store_that_cannot_be_read_or_written_just_now_is_an_explicit_answer_that_claims_nothing(client, monkeypatch):
+    body = {"op": "split_before", "pages": [5], "reason": "page 5 is its own slide"}
+    record = sm.apply_override
+
+    def busy(*args, **kwargs):  # what Windows answers while another writer's revision file is landing
+        raise PermissionError(13, "Permission denied")
+
+    def recorded_then_failed(*args, **kwargs):  # the revision is stored, and what follows it (the corrected map) cannot be written
+        record(*args, **kwargs)
+        raise OSError(28, "No space left on device")
+
+    assert client.get(BASE).json()["override_revision"] == 0  # read once, so that the map is also held in memory
+    with monkeypatch.context() as patched:
+        patched.setattr(sm, "apply_override", busy)
+        lost = client.post(OVERRIDES, json=body)
+    # Not a 4xx refusal (those change nothing) and not an unexplained failure: the answer says it does not know.
+    assert lost.status_code == 503 and lost.json()["code"] == "store_unavailable" and isinstance(lost.json()["detail"], str)
+    assert "read the source map again" in lost.json()["detail"].lower() and "Permission denied" not in lost.json()["detail"]
+    assert client.get(BASE).json()["override_revision"] == 0
+
+    with monkeypatch.context() as patched:
+        patched.setattr(sm, "apply_override", recorded_then_failed)
+        unsure = client.post(OVERRIDES, json=body)
+    assert unsure.status_code == 503 and unsure.json()["code"] == "store_unavailable"
+    after = client.get(BASE).json()  # the next read comes from the store, not from what was in memory before the failure
+    assert after["override_revision"] == 1 and [entry["op"]["before_page"] for entry in after["overrides"]] == [5]
+    assert [slide["pages"] for slide in after["logical_slides"] if 5 in slide["pages"]] == [[5]]
+
+
 def test_an_agent_correction_never_overrides_a_learner_one(course, client):
     settings, _ = course
     lecture, deck = _shown(settings)
@@ -864,6 +895,45 @@ def test_a_group_is_confirmed_only_by_whoever_joined_its_pages(tmp_path):
     assert _row(_enriched(role), 4)["role"]["state"] == "human_confirmed"
 
 
+def test_a_page_that_two_authors_cut_free_is_only_as_confirmed_as_the_weaker_of_the_cuts(tmp_path):
+    path = tmp_path / "deck.pdf"
+    write_slide_pdf(path, DECK)
+    learner_before_4 = _correction("learner", {"type": "split", "before_page": 4}, "page 4 starts a new slide")
+    agent_before_5 = _correction("agent", {"type": "split", "before_page": 5}, "page 5 starts a new slide")
+
+    def states(source_map: dict) -> list[str]:
+        block = si.block(source_map)
+        assert [_logical(block, page)["pages"] for page in (3, 4, 5)] == [[3], [4], [5]]
+        assert all(_logical(block, page)["grouping"]["basis"] == "override" for page in (3, 4, 5))
+        return [_logical(block, page)["grouping"]["state"] for page in (3, 4, 5)]
+
+    # The learner said where page 4 starts and left it together with page 5; that it ends before page 5 is the agent's
+    # word. Nobody but the agent said that page 4 stands alone, so it is not the learner's confirmation.
+    learner_then_agent = sm.build_source_map(path, overrides=[learner_before_4, agent_before_5])
+    assert _stored(learner_then_agent, [4])["overrides"] == [1, 2]  # the source map lists both cuts on the page between them
+    assert states(learner_then_agent) == ["human_confirmed", "agent_reviewed", "agent_reviewed"]
+    assert si.grouping_state(learner_then_agent, _stored(learner_then_agent, [4])) == "agent_reviewed"
+    # The same the other way round: the learner's cut is the one before page 5.
+    agent_then_learner = sm.build_source_map(path, overrides=[_correction("agent", {"type": "split", "before_page": 4}, "page 4 starts a new slide"),
+                                                              _correction("learner", {"type": "split", "before_page": 5}, "page 5 starts a new slide")])
+    assert states(agent_then_learner) == ["agent_reviewed", "agent_reviewed", "human_confirmed"]
+
+    # Both cuts the learner's (one correction, or two; or one an agent recorded on the learner's say): the page is theirs.
+    assert states(sm.build_source_map(path, overrides=[_correction("learner", {"type": "split", "pages": [4]}, "page 4 stands alone")])) == ["human_confirmed"] * 3
+    assert states(sm.build_source_map(path, overrides=[learner_before_4, _correction("learner", {"type": "split", "before_page": 5}, "so does page 5")])) == ["human_confirmed"] * 3
+    on_their_say = _correction("agent", {"type": "split", "before_page": 5}, "the learner asked for it", learner_authority=True)
+    assert states(sm.build_source_map(path, overrides=[learner_before_4, on_their_say])) == ["human_confirmed"] * 3
+
+    # A correction whose author is not recorded confirms nothing, alone or beside the learner's.
+    cut_free = {"logical_slide_id": "x", "kind": "single", "grouping": "override", "pages": [4], "overrides": [1, 2]}
+    history = [{"revision": 1, "op": {"type": "split", "before_page": 4}, "author": {"kind": "learner", "ref": None}},
+               {"revision": 2, "op": {"type": "split", "before_page": 5}, "author": None}]
+    assert si.grouping_state({"overrides": {"history": history}}, cut_free) == "generated"
+    assert si.grouping_state({"overrides": {"history": history}}, dict(cut_free, overrides=[2])) == "generated"
+    assert si.grouping_state({"overrides": {"history": history}}, dict(cut_free, overrides=[1])) == "human_confirmed"
+    assert si.grouping_state({"overrides": {"history": history}}, dict(cut_free, overrides=[7])) == "generated"  # a revision the history does not hold
+
+
 # ---- 8. closing round: what the index declares, a file the source map never reads, the groups for the aligner ---------
 def test_the_identity_the_index_declares_for_the_same_bytes_is_never_served_from_an_older_read(course, monkeypatch):
     settings, root = course
@@ -921,3 +991,68 @@ def test_the_groups_for_the_aligner_are_the_maps_logical_slides(tmp_path):
     # Handed to the aligner with the page texts, they give exactly the list alignment_slides returns.
     assert alignment.logical_slides_from_pages(texts, groups=groups) == si.alignment_slides(source_map, texts)
     assert si.alignment_groups(None) == []
+
+
+# ---- 9. the command that builds maps ahead of time (what a request leaves unbuilt) ------------------------------------
+def _command(settings: Settings, *argv: str) -> int:
+    """Parse ``argv`` with the parser the module registers and run it, as ``lecture_brain.cli`` does for a module's own commands."""
+    parser = argparse.ArgumentParser(prog="lecture_brain")
+    si.cli_register(parser.add_subparsers(dest="command", required=True))
+    return si.cli_run(parser.parse_args(list(argv)), settings)
+
+
+def test_the_build_command_maps_what_a_request_leaves_unbuilt_and_says_what_it_could_not_map(course, monkeypatch, capsys):
+    settings, root = course
+    write_slide_pdf(root / UNIT / "Deck.pdf", DECK)
+    monkeypatch.setattr(si, "REQUEST_BUILD_MAX_PAGES", 5)  # the deck has 14 pages: a request does not build its map
+    assert _current(settings) == (None, "not_built")
+    before = _course_files(root)
+
+    assert _command(settings, "source-map-build", "--course", COURSE) == 0
+    report = json.loads(capsys.readouterr().out)  # one JSON document: the counts of prebuild
+    assert {key: report[key] for key in ("course_id", "lectures", "decks", "built", "already_built", "unreadable", "not_built", "pages")} == {
+        "course_id": COURSE, "lectures": 1, "decks": 1, "built": 1, "already_built": 0, "unreadable": 0, "not_built": 0, "pages": 14}
+    assert [(item["lecture_id"], item["state"], item["page_count"]) for item in report["items"]] == [(LECTURE, "built", 14)]
+    source_map, reason = _current(settings)  # the request that was refused a build now reads the stored map
+    assert reason is None and source_map["page_count"] == 14 and source_map["map_revision"] == report["items"][0]["map_revision"]
+    assert _course_files(root) == before and len(_stored_maps(settings)) == 1  # the course folder is only read
+
+    # Run again it inspects nothing; --refresh does; --lecture narrows to one unit.
+    inspected = _count_inspections(monkeypatch)
+    assert _command(settings, "source-map-build", "--course", COURSE, "--lecture", LECTURE) == 0
+    again = json.loads(capsys.readouterr().out)
+    assert (again["built"], again["already_built"]) == (0, 1) and inspected == []
+    assert _command(settings, "source-map-build", "--course", COURSE, "--refresh") == 0
+    assert json.loads(capsys.readouterr().out)["built"] == 1 and sorted(set(inspected)) == list(range(1, 15))
+
+    # A unit without a deck, or shown with a presentation, has nothing to map: that is not a failure of the command.
+    for name in ("lecture-02", "lecture-03", "lecture-04"):
+        (root / "materials/lectures" / name).mkdir()
+    write_synthetic_pptx(root / "materials/lectures/lecture-02/Deck.pptx", PPTX_SLIDES)
+    assert _command(settings, "source-map-build", "--course", COURSE) == 0
+    nothing_to_map = json.loads(capsys.readouterr().out)
+    assert (nothing_to_map["no_deck"], nothing_to_map["not_a_pdf"], nothing_to_map["already_built"]) == (2, 1, 1)
+    # A deck that could not be read is: the command ends with 1 and the document names the unit.
+    (root / "materials/lectures/lecture-04/Deck.pdf").write_bytes(b"%PDF-1.4 synthetic bytes that are not a document")
+    assert _command(settings, "source-map-build", "--course", COURSE) == 1
+    failed = json.loads(capsys.readouterr().out)
+    assert [(item["lecture_id"], item["state"]) for item in failed["items"] if item["state"] in {"unreadable", "not_built"}] == [("lecture-04", "unreadable")]
+    # A unit with two candidate decks and nothing that decides between them is shown with neither until a request
+    # names one. --every-deck maps each PDF of the unit, so whichever the request names is ready.
+    write_slide_pdf(root / UNIT / "Deck-handout.pdf", DECK[:6])
+    assert _command(settings, "source-map-build", "--course", COURSE, "--lecture", LECTURE) == 0
+    assert [(item["source_id"], item["state"]) for item in json.loads(capsys.readouterr().out)["items"]] == [(None, "no_deck")]
+    assert _command(settings, "source-map-build", "--course", COURSE, "--lecture", LECTURE, "--every-deck") == 0
+    both = json.loads(capsys.readouterr().out)
+    assert both["decks"] == 2 and sorted(item["page_count"] for item in both["items"] if item["source_id"]) == [6, 14]
+    lecture, shown = _shown(settings)
+    assert shown is None
+    for deck in lecture["decks"]:
+        named, reason = si.map_for(settings, COURSE, lecture, si.displayed_deck(lecture, deck["source_id"]), build="never")  # the store alone answers
+        assert reason is None and named["source"]["source_id"] == deck["source_id"]
+
+    # An unknown course or unit ends with 2, says so on stderr and prints no document.
+    assert _command(settings, "source-map-build", "--course", "nowhere") == 2
+    assert _command(settings, "source-map-build", "--course", COURSE, "--lecture", "lecture-99") == 2
+    output = capsys.readouterr()
+    assert output.out == "" and "nowhere" in output.err and "lecture-99" in output.err

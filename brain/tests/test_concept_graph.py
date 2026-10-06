@@ -533,6 +533,26 @@ def test_without_a_source_map_the_slide_scope_is_the_course_anchors_of_that_page
     assert {n["id"]: n["where"] for n in derived["nodes"] if n["kind"] == "concept"} == {"c.gauge": "elsewhere_in_sequence", "c.pump": "elsewhere_in_sequence", "c.valve": "elsewhere_in_sequence"}
 
 
+def test_a_criterion_of_a_suggested_link_is_supported_only_by_the_pages_the_link_states_for_it():
+    """A suggestion may say page by page which criteria it supports. The concept behind a criterion is then on the pages of
+    THAT criterion, not on every page of the link: build 2 does not support what only build 3 shows."""
+    def slide(page, ordinal, ties):
+        return {"page": page, "identity": {"page_index": page, "page_count": 40, "logical_slide_id": GROUP, "position": {"ordinal": ordinal, "of": 3, "kind": "build"},
+                                           "label": f"PDF page {page} of 40 · build {ordinal} of 3"},
+                "role": {"value": "instructional", "state": "generated", "uncertain": False, "forced_requirements": True, "basis": []}, "question_ties": ties}
+
+    ties = [{"question_id": "Q2", "tie": "agent_inferred", "where": "on_this_page", "support_pages": [23, 24], "learner_decision": None,
+             "criteria": [{"criterion_id": "Q2.C01", "number": 1, "label": "Criterion 1", "pages": [23, 24]},      # both builds
+                          {"criterion_id": "Q2.C02", "number": 2, "label": "Criterion 2", "pages": [24]},          # the last build only
+                          {"criterion_id": "Q2.C03", "number": 3, "label": "Criterion 3"},                         # no page stated per criterion: the link's pages
+                          {"criterion_id": "Q2.C04", "number": 4, "label": "Criterion 4", "pages": [31]}]}]        # pages outside the link's own: not widened, the link's pages
+    view = {"source_map": {"state": "ready", "map_revision": "a1b2c3d4e5f60718", "logical_slides": [{"id": GROUP, "kind": "build_group", "pages": [22, 23, 24]}]},
+            "slides": [slide(22, 1, ties), slide(23, 2, ties), slide(24, 3, ties)]}
+    for page in (22, 23, 24):
+        entries = {entry["node_id"]: entry["pages"] for entry in cg.slide_support_from_lecture_view(view, page)["entries"]}
+        assert entries == {"Q2.C01": [23, 24], "Q2.C02": [24], "Q2.C03": [23, 24], "Q2.C04": [23, 24]}
+
+
 def test_slide_support_is_read_from_an_enriched_lecture_view():
     def slide(page, ordinal, ties, role="instructional"):
         return {"page": page, "identity": {"page_index": page, "page_count": 40, "logical_slide_id": GROUP, "position": {"ordinal": ordinal, "of": 3, "kind": "build"},

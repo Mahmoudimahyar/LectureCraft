@@ -578,7 +578,7 @@ def slide_support_from_lecture_view(view: dict, page: int) -> dict[str, Any] | N
 
     A course anchor names a page for a question, so the question is the entry. A suggested link names the criteria its
     pages support, so those criteria are the entries (the question itself when it lists none): a criterion the link does
-    not list puts nothing on the slide. A tie the learner rejected is not a link and is left out; an accepted suggestion
+    not list puts nothing on the slide, and a criterion for which the link states its own pages is on those pages only. A tie the learner rejected is not a link and is left out; an accepted suggestion
     stays a suggestion (``agent_inferred``) and its entries carry the decision. A tie that is not page support of this
     slide is left out and never widened: one of section granularity (the course's study map names a range of pages; such
     ties belong in ``section_ties``), and one that lists no support page. When the page has an identity but no
@@ -604,8 +604,14 @@ def slide_support_from_lecture_view(view: dict, page: int) -> dict[str, Any] | N
             pages = tie.get("support_pages")
             if tie.get("tie") not in TIES or tie.get("learner_decision") == "rejected" or tie.get("granularity") not in (None, "page") or not isinstance(pages, list) or not pages:
                 continue
-            listed = [c.get("criterion_id") for c in tie.get("criteria") or [] if isinstance(c, dict) and c.get("criterion_id")] if tie["tie"] == "agent_inferred" else []
-            entries += [{"node_id": node_id, "tie": tie["tie"], "pages": list(pages), "decision": tie.get("learner_decision")} for node_id in (listed or [tie.get("question_id")])]
+            listed = [c for c in tie.get("criteria") or [] if isinstance(c, dict) and c.get("criterion_id")] if tie["tie"] == "agent_inferred" else []
+            for criterion in listed:
+                # A link may state page by page which criteria it supports: a criterion is then on ITS pages, never on
+                # every page of the link. Pages it states outside the link's own are not support of this slide.
+                own = [p for p in criterion.get("pages") or [] if p in pages]
+                entries.append({"node_id": criterion["criterion_id"], "tie": tie["tie"], "pages": own or list(pages), "decision": tie.get("learner_decision")})
+            if not listed:
+                entries.append({"node_id": tie.get("question_id"), "tie": tie["tie"], "pages": list(pages), "decision": tie.get("learner_decision")})
     return {"logical_slide_id": identity["logical_slide_id"], "label": identity.get("label"), "page": page, "pages": sorted((logical or {}).get("pages") or [page]), "entries": entries,
             "role": {"value": role.get("value"), "forced_requirements": role.get("forced_requirements")} if role else None}
 

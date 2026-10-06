@@ -87,7 +87,7 @@ Every field returned before R2 stays. R2 adds the fields below.
      "timebase": "original_source_start", "start_ms": 1072000, "end_ms": 1236000,
      "relation": "discussed_during",       // "displayed_during" only with inspected frame evidence
      "occurrence_index": 1, "occurrences_total": 2,
-     "support": {"scope": "build_group", "pages": [22, 23, 24], "builds": null},   // scope "page" | "build_group" | "region"
+     "support": {"scope": "build_group", "pages": [22, 23, 24], "builds": null},   // scope "page" | "build_group" | "region" | "section"
      "method": {"name": "lexical-sequence", "version": "2"},
      "origin": "pipeline",                 // "pipeline" | "manual" | "reviewed_source_map"
      "review_state": "generated",          // "generated" | "agent_reviewed" | "human_confirmed"
@@ -121,7 +121,7 @@ compatibility; `ranges` is the list the UI plays from and already includes confi
                      "on_displayed_deck": true}],
            "no_link": null,                // or {"state": "inspected_no_support" | "no_suggestion", "reason": "…"}
            "evidence": {"state": "unknown", "assistance": null, "prior_exposure": "unknown", "attempts": 0, "last_at": null}}],
-  "counts": {"all": 20, "course_anchor": 12, "agent_inferred": 6, "without_link": 2}
+  "counts": {"all": 20, "course_anchor": 12, "agent_inferred": 6, "without_link": 2, "course_section": 20}
 },
 "timing": {
   "stage": "associated",                   // "no_recording" | "audio_unprocessed" | "partly_processed" | "processed" | "associated"
@@ -148,6 +148,32 @@ or when the file's optional top-level list `no_candidate` holds a record for tha
 question_version, why, verifier: {confirmed, note}}` — a question that was examined and for which no page of the unit's
 deck was found; decision D77 adds this optional list to `ll.inferred-anchors/1`). Otherwise it is `no_suggestion` with the
 recorded reason (`no_file`, `no_item`, `stale`).
+
+### 1.4 Additions fixed while building (2026-10-06)
+
+- **Section ties.** `slides[].section_ties` lists ties of `granularity: "section"` (the course's own study map, D78) apart from
+  `question_ties`; they are counted in `questions.counts.course_section` and never in `course_anchor`. A range whose
+  `support.scope` is `"section"` is a course-stated pairing of pages with transcript lines (`origin: "reviewed_source_map"`); it
+  appears on every page it names and carries no per-page time.
+- **Per-page support.** An `agent_inferred` tie on a slide also carries `criteria_supported_here`: how many of the question's
+  criteria THIS page (or the member pages of this logical slide) supports, from the item's optional `per_page` list. Tie rows carry
+  `criteria`: `null` for course anchors, otherwise `[{criterion_id, number, label, concept_id, concept_label, skill_id, action_types}]`
+  — identity only, never wording — and `regions`.
+- **Lecture rows.** `questions.all[].ties[]` also carry `transcript_lines`; a question anchored only to transcript lines has one tie
+  row with `pages: []`. `questions.all[].suggestion_history {stale, rejected_by_verifier, rejected_by_learner}` lets a rejection be
+  taken back. `slides[].related_questions_total` reports the total when the list is capped at 30. `questions.ties_version`.
+- **`no_link.reason`** may also be `rejected_by_learner` or `file_unreadable`.
+- **Decision route.** Body `{decision, expected_revision?}`; answer `{course_id, suggestion_id, decision, revision, status:
+  "recorded" | "unchanged", decided_at, question_id}`; 400 bad body, 404 unknown course or not a current link, 409 conflict.
+- **Concept graph.** Top level adds `dropped` and `revisions.scope_revision`; `scope` adds `pages` and `note`; edges add `tie` and
+  `support_pages` (source edges only; a source edge starts at `scope.logical_slide_id`, which is not a node — the page is drawn from
+  `scope`); relations `slide_supports` and `slide_supports_by_assessment`; node `counts` entries are `null` where a count does not
+  apply; errors are `{course_id, graph_version, error: {code: "unknown_scope" | "unknown_focus", detail}}` with 404, and 422 for a
+  malformed request. Node detail adds `sources_total`, `questions_total`, `definition` (concept only), `basis` and `from` on source
+  rows, `criterion_ids` on question rows, `skill_id` on observation rows.
+- **Evidence.** `independent` needs both no assistance and no reference recorded as none; reference-only help is `assisted` with
+  kind `reference_<value>`; an attempt with neither recorded is `unknown`. Aggregates state the latest attempt that separately
+  observed the thing and carry their composition in `summary`.
 
 ## 2. Other routes
 
@@ -204,7 +230,7 @@ mutate the view and read only what they are handed:
 | Module | Function | Adds |
 |---|---|---|
 | `slide_identity.py` | `enrich(view, *, source_map, reason=None)` | `source_map`, `slides[].identity`, `slides[].role` |
-| `question_ties.py` | `enrich(view, *, bank, index, source_map, inferred, decisions, evidence_of, concepts_of_page)` | `slides[].question_ties`, `slides[].related_questions`, `questions.all[].ties/no_link/evidence`, `questions.counts` |
+| `question_ties.py` | `enrich(view, *, bank, index, source_map, inferred, decisions, evidence_of, concepts_of_page, section_ties)` | `slides[].question_ties`, `slides[].related_questions`, `questions.all[].ties/no_link/evidence`, `questions.counts` |
 | `timing_links.py` | `enrich(view, *, source_map, links, generated)` | `slides[].ranges`, `slides[].no_range`, `timing` |
 
 Each module registers its own routes through `register(app, runtime, locked)`, called from `create_app`.

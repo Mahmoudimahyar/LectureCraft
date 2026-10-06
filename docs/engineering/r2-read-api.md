@@ -175,6 +175,13 @@ recorded reason (`no_file`, `no_item`, `stale`).
   kind `reference_<value>`; an attempt with neither recorded is `unknown`. Aggregates state the latest attempt that separately
   observed the thing and carry their composition in `summary`.
 
+- **Session link.** `session_link` on a lecture (course view rows and the lecture view) is `owner_related_sources` (the course index
+  links the session), `none_recorded`, or `suggested_by_file_name` (D79): the one session the index links to no unit whose
+  recording or transcript file name carries exactly this unit's lecture number, offered only when the private read
+  configuration switches it on. `session_link_evidence` is then `{state: "suggested", rule, number, session_id, files, note}`, or
+  `{state: "ambiguous", number, candidates, note}` when several sessions carry the number (nothing is offered). Every range of a
+  lecture whose session link is suggested rests on that suggestion and the screen says so.
+
 ## 2. Other routes
 
 | Route | Returns |

@@ -105,7 +105,7 @@ def make_suggestions() -> dict:
 class Lecture:
     """Everything the lead's wiring hands to ``enrich``, built for the synthetic course."""
 
-    def __init__(self, tmp_path: Path, *, suggestions: dict | None | bool = True, fillers: int = 0, decide: bool = True):
+    def __init__(self, tmp_path: Path, *, suggestions: dict | None | bool = True, fillers: int = 0, decide: bool = True, strict: bool = True):
         root = tmp_path / "course"
         root.mkdir(parents=True, exist_ok=True)
         self.settings = Settings(profile="local", repo=tmp_path, state_dir=tmp_path / "state", planner_root=tmp_path / "planner", planner_config=tmp_path / "planner" / "planner-config.yaml",
@@ -118,7 +118,7 @@ class Lecture:
         if suggestions is True:
             suggestions = make_suggestions()
         if suggestions:
-            ia.store(self.settings, COURSE, suggestions, **self.context)
+            ia.store(self.settings, COURSE, suggestions, strict=strict, **self.context)
         self.inferred = ia.load(self.settings, COURSE, **self.context)
         if suggestions and decide:
             for item in self.inferred["items"]:
@@ -176,8 +176,9 @@ def test_a_locator_naming_one_page_a_range_and_transcript_lines_ties_every_page_
         assert (tie["collection"], tie["number"], tie["title"], tie["prompt"], tie["prompt_in_index"]) == ("L01", 1, "Synthetic T-L01-Q01", "Synthetic prompt of T-L01-Q01.", True)
     (whole,) = row(view, "T-L01-Q01")["ties"]
     assert whole == {"tie": "exact", "lecture_id": "lecture-01", "source_id": "src-l01-slides", "pages": [5, 9, 10, 11], "logical_slide_ids": ["ls-syn-p5", "ls-syn-p9", "ls-syn-p10", "ls-syn-p11"],
-                     "transcript_lines": [[2, 4]], "criteria_supported": None, "criteria_total": None, "criteria": None, "coverage": None, "state": None, "verdict": None, "rationale": None,
-                     "regions": None, "suggestion_id": None, "learner_decision": None, "on_displayed_deck": True}
+                     "transcript_lines": [[2, 4]], "criteria_supported": None, "criteria_total": None, "criteria": None, "coverage": None, "state": None, "verdict": None, "verdict_note": None,
+                     "rationale": None, "regions": None, "suggestion_id": None, "learner_decision": None, "on_displayed_deck": True,
+                     "granularity": "page", "from": "course_locator", "catalog_field": "locator", "section": None}
     assert row(view, "T-L01-Q01")["no_link"] is None
 
 
@@ -230,7 +231,7 @@ def test_enriching_changes_the_view_only(lecture):
     assert qt.enrich(view, bank=lecture.bank, index=lecture.index, source_map=SOURCE_MAP, inferred=lecture.inferred, decisions=lecture.decisions) is view
     assert (lecture.bank, lecture.index, lecture.inferred, lecture.decisions, SOURCE_MAP) == before
     assert {key: value for key, value in view.items() if key not in {"slides", "questions"}} == kept
-    added = {"question_ties", "related_questions", "related_questions_total"}
+    added = {"question_ties", "section_ties", "related_questions", "related_questions_total"}
     assert [{k: v for k, v in s.items() if k not in added} for s in view["slides"]] == old_slides and all(added <= set(s) for s in view["slides"])  # what was there before stays as it was
     assert json.loads(json.dumps(view)) == view  # plain data, ready to be sent
 
@@ -320,8 +321,11 @@ def test_a_suggested_link_counts_the_criteria_it_supports_and_never_words_the_wh
     part = next(t for t in view["slides"][3]["question_ties"] if t["question_id"] == "T-L01-Q04")
     assert (part["criteria_supported"], part["criteria_total"], part["coverage"]) == (2, 3, "partial")
     assert part["criteria"] == [
-        {"criterion_id": "T-L01-Q04.C01", "number": 1, "label": "Criterion 1 of 3", "concept_id": "t.concept.alpha", "concept_label": "Alpha", "skill_id": "t.skill.alpha", "action_types": ["explain"]},
-        {"criterion_id": "T-L01-Q04.C02", "number": 2, "label": "Criterion 2 of 3", "concept_id": "t.concept.beta", "concept_label": "Beta", "skill_id": "t.skill.beta", "action_types": ["explain"]}]
+        {"criterion_id": "T-L01-Q04.C01", "number": 1, "label": "Criterion 1 of 3", "concept_id": "t.concept.alpha", "concept_label": "Alpha", "skill_id": "t.skill.alpha", "action_types": ["explain"],
+         "pages": None},
+        {"criterion_id": "T-L01-Q04.C02", "number": 2, "label": "Criterion 2 of 3", "concept_id": "t.concept.beta", "concept_label": "Beta", "skill_id": "t.skill.beta", "action_types": ["explain"],
+         "pages": None}]
+    assert part["criteria_supported_here"] is None  # the producer made no page-by-page statement for this item, so none is made here
     assert part["rationale"].startswith("Synthetic rationale") and part["suggestion_id"] == ia.suggestion_id("T-L01-Q04", 1, DECK_SHA, [4])
     every = view["slides"][11]["question_ties"][0]  # lists the question's only criterion, on its principal page
     assert (every["criteria_supported"], every["criteria_total"], every["coverage"]) == (1, 1, "main")
@@ -389,7 +393,7 @@ def test_no_link_is_inspected_no_support_or_no_suggestion_with_its_recorded_reas
     assert row(view, "T-L01-Q06")["no_link"] == {"state": "no_suggestion", "reason": "no_item"}
     assert row(view, "T-L01-Q08")["no_link"] == {"state": "no_suggestion", "reason": "stale"}
     assert [q["question_id"] for q in view["questions"]["all"] if q["no_link"] is None] == ["T-L01-Q01", "T-L01-Q03", "T-L01-Q04", "T-L01-Q09", "T-L01-Q10", "T-L01-Q11", "T-L01-Q13", "T-L01-Q14", "T-L01-Q02"]
-    assert row(view, "T-L01-Q05")["suggestion_history"] == {"stale": 0, "rejected_by_verifier": 1, "rejected_by_learner": []}
+    assert row(view, "T-L01-Q05")["suggestion_history"] == {"stale": 0, "rejected_by_verifier": 1, "rejected_by_learner": [], "decisions_not_shown": []}
 
     # no suggestions file for the course: the reason is that, for every question without a course anchor — also when the caller passes nothing at all
     bare = Lecture(tmp_path / "bare", suggestions=None)
@@ -412,7 +416,7 @@ def test_no_link_is_inspected_no_support_or_no_suggestion_with_its_recorded_reas
     assert row(unconfirmed.enriched(), "T-L01-Q07")["no_link"] == {"state": "no_suggestion", "reason": "no_item"}
     old = make_suggestions()
     old["question_index_sha256"] = "9" * 64
-    earlier = Lecture(tmp_path / "old", suggestions=old, decide=False).enriched()
+    earlier = Lecture(tmp_path / "old", suggestions=old, decide=False, strict=False).enriched()
     assert earlier["questions"]["counts"]["agent_inferred"] == 0 and not [t for s in earlier["slides"] for t in s["question_ties"] if t["tie"] == "agent_inferred"]
     assert row(earlier, "T-L01-Q04")["no_link"] == {"state": "no_suggestion", "reason": "stale"} and row(earlier, "T-L01-Q06")["no_link"] == {"state": "no_suggestion", "reason": "no_item"}
     assert row(earlier, "T-L01-Q07")["no_link"] == {"state": "no_suggestion", "reason": "stale"}
@@ -421,7 +425,7 @@ def test_no_link_is_inspected_no_support_or_no_suggestion_with_its_recorded_reas
 def test_the_counts_partition_the_lectures_catalogued_questions(lecture):
     view = lecture.enriched()
     counts = view["questions"]["counts"]
-    assert counts == {"all": 14, "course_anchor": 6, "agent_inferred": 3, "without_link": 5}
+    assert counts == {"all": 14, "course_anchor": 6, "agent_inferred": 3, "without_link": 5, "course_section": 0}
     assert counts["all"] == len(view["questions"]["all"]) == counts["course_anchor"] + counts["agent_inferred"] + counts["without_link"]
     assert counts["without_link"] == sum(1 for q in view["questions"]["all"] if q["no_link"] is not None)
     assert counts["course_anchor"] == sum(1 for q in view["questions"]["all"] if any(t["tie"] in {"exact", "stated"} for t in q["ties"]))
@@ -431,7 +435,7 @@ def test_the_counts_partition_the_lectures_catalogued_questions(lecture):
 # ---- concept-related (R2-Q5, R2-Q6) -----------------------------------------------------------------------------------
 def test_related_questions_share_a_concept_with_what_the_logical_slide_supports_and_are_not_tied_to_it(lecture):
     view = lecture.enriched()
-    alpha = [{"concept_id": "t.concept.alpha", "label": "Alpha"}]
+    alpha = [{"concept_id": "t.concept.alpha", "label": "Alpha", "basis": "page_concepts"}]
     assert view["slides"][4]["related_questions"] == [
         {"question_id": "T-L01-Q04", "collection": "L01", "number": 4, "title": "Synthetic T-L01-Q04", "prompt_in_index": True, "tie": "concept_related", "via_concepts": alpha, "lecture_ids": ["lecture-01"], "evidence": UNKNOWN},
         {"question_id": "T-L02-Q01", "collection": "L02", "number": 1, "title": "Synthetic T-L02-Q01", "prompt_in_index": True, "tie": "concept_related", "via_concepts": alpha, "lecture_ids": ["lecture-02"], "evidence": UNKNOWN},
@@ -454,13 +458,13 @@ def test_related_questions_are_capped_at_thirty_and_the_total_is_reported(tmp_pa
     view = lecture.enriched(concepts_of_page=lambda page: [filler] if page == 11 else [])
     related = view["slides"][10]["related_questions"]
     assert len(related) == qt.RELATED_CAP == 30 and view["slides"][10]["related_questions_total"] == 35
-    assert [r["question_id"] for r in related] == [f"T-PS02-Q{n:02d}" for n in range(1, 31)] and all(r["via_concepts"] == [filler] for r in related)
+    assert [r["question_id"] for r in related] == [f"T-PS02-Q{n:02d}" for n in range(1, 31)] and all(r["via_concepts"] == [dict(filler, basis="page_concepts")] for r in related)
     assert view["slides"][0]["related_questions"] == [] and view["slides"][0]["related_questions_total"] == 0
 
 
 def test_the_concepts_of_a_page_can_be_supplied_by_the_caller(lecture):
     view = lecture.enriched(concepts_of_page=lambda page: ["t.concept.theta"] if page == 1 else [])
-    assert [(r["question_id"], r["via_concepts"]) for r in view["slides"][0]["related_questions"]] == [("T-PS01-Q01", [{"concept_id": "t.concept.theta", "label": "Theta"}])]
+    assert [(r["question_id"], r["via_concepts"]) for r in view["slides"][0]["related_questions"]] == [("T-PS01-Q01", [{"concept_id": "t.concept.theta", "label": "Theta", "basis": "page_concepts"}])]
     assert view["slides"][4]["related_questions"] == []  # the caller's list replaces the view's own concept list
     # a suggested link still contributes the concepts of the criteria it lists
     assert [r["question_id"] for r in view["slides"][3]["related_questions"]] == ["T-L01-Q01", "T-L02-Q01", "T-PS01-Q02"]
@@ -492,11 +496,11 @@ def test_evidence_comes_from_the_injected_reader_and_is_unknown_without_one(lect
 def test_a_lecture_without_a_deck_or_without_a_catalog_is_enriched_without_inventing_anything(lecture, tmp_path):
     view = lecture.view(deck=None)
     qt.enrich(view, bank=lecture.bank, index=lecture.index, source_map=None, inferred=lecture.inferred, decisions=lecture.decisions)
-    assert view["slides"] == [] and view["questions"]["counts"] == {"all": 14, "course_anchor": 6, "agent_inferred": 3, "without_link": 5}
+    assert view["slides"] == [] and view["questions"]["counts"] == {"all": 14, "course_anchor": 6, "agent_inferred": 3, "without_link": 5, "course_section": 0}
     assert not [t for q in view["questions"]["all"] for t in q["ties"] if t["on_displayed_deck"]]
     empty = {"course_id": COURSE, "lecture_id": "lecture-09", "deck": None, "slides": [], "questions": {"all": [], "related_by_relationship": [], "gap": "none"}}
     qt.enrich(empty, bank={"questions": {}, "lectures": {}, "collections": []}, index=None, source_map=None, inferred=None, decisions=None)
-    assert empty["questions"]["counts"] == {"all": 0, "course_anchor": 0, "agent_inferred": 0, "without_link": 0}
+    assert empty["questions"]["counts"] == {"all": 0, "course_anchor": 0, "agent_inferred": 0, "without_link": 0, "course_section": 0}
 
 
 def test_questions_related_by_a_catalog_relationship_carry_the_same_three_fields(lecture):
@@ -506,6 +510,302 @@ def test_questions_related_by_a_catalog_relationship_carry_the_same_three_fields
     (related,) = view["questions"]["related_by_relationship"]
     assert [(t["tie"], t["source_id"], t["pages"], t["on_displayed_deck"]) for t in related["ties"]] == [("stated", "src-ps-01", [1], False), ("agent_inferred", "src-l01-slides", [10], True)]
     assert related["no_link"] is None and related["evidence"] == UNKNOWN and view["questions"]["counts"]["all"] == 14  # counted are the lecture's own questions only
+
+
+# ---- what each page supports (r2-read-api.md 1.4) -----------------------------------------------------------------------
+def per_page_suggestions() -> dict:
+    doc = make_suggestions()
+    doc["no_candidate"] = []
+    doc["items"] = [
+        # two builds of the group of pages 2-4, each carrying a different criterion; the build between them is not named
+        suggestion("T-L01-Q04", [2, 4], [1, 2], per_page=[{"page": 2, "supports": ["T-L01-Q04.C01"]}, {"page": 4, "supports": ["T-L01-Q04.C02"]}]),
+        # both builds of the group of pages 6-7 are named; only the second one carries the criterion
+        suggestion("T-L01-Q12", [6, 7], [1], per_page=[{"page": 6, "supports": []}, {"page": 7, "supports": ["T-L01-Q12.C01"]}]),
+        # the producer said what page 11 supports and nothing about page 12
+        suggestion("T-L01-Q05", [11, 12], [1], per_page=[{"page": 11, "supports": ["T-L01-Q05.C01"]}]),
+        # nothing was said page by page
+        suggestion("T-L01-Q13", [9, 10], [1]),
+        # two pages far apart, each carrying one criterion about a different concept (Alpha on page 1, Beta on page 12)
+        suggestion("T-L02-Q01", [1, 12], [1, 2], per_page=[{"page": 1, "supports": ["T-L02-Q01.C01"]}, {"page": 12, "supports": ["T-L02-Q01.C02"]}]),
+    ]
+    return doc
+
+
+def suggested_on(view: dict, page: int, question_id: str) -> dict:
+    return next(t for t in view["slides"][page - 1]["question_ties"] if t["question_id"] == question_id and t["tie"] == "agent_inferred")
+
+
+def test_a_page_that_carries_one_criterion_of_a_link_says_so_and_never_reads_like_the_page_for_all_of_them(tmp_path):
+    lecture = Lecture(tmp_path, suggestions=per_page_suggestions(), decide=False)
+    view = lecture.enriched()
+    first, between, last = (suggested_on(view, page, "T-L01-Q04") for page in (2, 3, 4))
+    assert [(t["where"], t["support_pages"], t["criteria_supported"], t["criteria_total"], t["criteria_supported_here"]) for t in (first, between, last)] == [
+        ("on_this_page", [2, 4], 2, 3, 1),            # this build carries criterion 1 only
+        ("elsewhere_in_sequence", [2, 4], 2, 3, 2),   # not this page: the count is that of the two builds the link names
+        ("on_this_page", [2, 4], 2, 3, 1)]            # this build carries criterion 2 only
+    assert [(c["criterion_id"], c["pages"]) for c in first["criteria"]] == [("T-L01-Q04.C01", [2]), ("T-L01-Q04.C02", [4])]  # which page carries which criterion, by identity
+    assert "1 of the 2 criteria" in first["why"] and "1 of the 2 criteria" in last["why"] and "criteria the link lists" not in between["why"]
+    # every member of a group named: still counted page by page, so the first build does not borrow what only the second one shows
+    assert [(suggested_on(view, page, "T-L01-Q12")["where"], suggested_on(view, page, "T-L01-Q12")["criteria_supported_here"]) for page in (6, 7)] == [("group_level", 0), ("group_level", 1)]
+    assert "none of the" in suggested_on(view, 6, "T-L01-Q12")["why"] and "criteria the link lists" not in suggested_on(view, 7, "T-L01-Q12")["why"]
+    # what was not said is not known: a page the list leaves out, and an item without the list
+    assert (suggested_on(view, 11, "T-L01-Q05")["criteria_supported_here"], suggested_on(view, 12, "T-L01-Q05")["criteria_supported_here"]) == (1, None)
+    assert suggested_on(view, 9, "T-L01-Q13")["criteria_supported_here"] is None and suggested_on(view, 9, "T-L01-Q13")["criteria"][0]["pages"] is None
+    assert "criteria the link lists" not in suggested_on(view, 12, "T-L01-Q05")["why"] + suggested_on(view, 9, "T-L01-Q13")["why"]
+    # course anchors name pages, not criteria; the lecture's own row lists the pages per criterion and has no "here"
+    assert all(t["criteria_supported_here"] is None for s in view["slides"] for t in s["question_ties"] if t["tie"] != "agent_inferred")
+    (whole,) = row(view, "T-L01-Q04")["ties"]
+    assert [(c["criterion_id"], c["pages"]) for c in whole["criteria"]] == [("T-L01-Q04.C01", [2]), ("T-L01-Q04.C02", [4])] and "criteria_supported_here" not in whole
+    for slide in view["slides"]:
+        for tie in slide["question_ties"]:
+            if tie["tie"] == "agent_inferred" and tie["criteria_supported_here"] is not None:
+                assert tie["criteria_supported_here"] <= tie["criteria_supported"] <= tie["criteria_total"]
+            assert not [w for w in ("whole", "entire", "complete", "answers", "teaches", "all of") if w in tie["why"].lower()], tie["why"]
+    assert RUBRIC_MARKER not in json.dumps(view) and GUIDANCE_MARKER not in json.dumps(view)
+
+
+def test_a_concept_counts_as_supported_only_on_the_page_that_carries_its_criterion(tmp_path):
+    """Related questions follow what THIS logical slide supports: a criterion the link places on another page lends its concept to that page only."""
+    view = Lecture(tmp_path, suggestions=per_page_suggestions(), decide=False).enriched()
+    assert (suggested_on(view, 1, "T-L02-Q01")["criteria_supported_here"], suggested_on(view, 12, "T-L02-Q01")["criteria_supported_here"]) == (1, 1)
+    first = {r["question_id"]: [(c["label"], c["basis"]) for c in r["via_concepts"]] for r in view["slides"][0]["related_questions"]}
+    last = {r["question_id"]: [(c["label"], c["basis"]) for c in r["via_concepts"]] for r in view["slides"][11]["related_questions"]}
+    assert first == {"T-L01-Q01": [("Alpha", "suggested_link")], "T-L01-Q04": [("Alpha", "suggested_link")], "T-PS01-Q02": [("Alpha", "suggested_link")]}   # Alpha is carried by page 1
+    assert last == {"T-L01-Q02": [("Beta", "suggested_link")], "T-L01-Q03": [("Beta", "suggested_link")], "T-L01-Q04": [("Beta", "suggested_link")]}      # Beta by page 12, and Alpha is not
+    # the criterion of the link on pages 11-12 was placed on page 11: its concept (Delta) is not lent to page 12, about which nothing was said
+    assert "Delta" not in {label for row_ in last.values() for label, _ in row_}
+
+
+# ---- section ties from the course's own study maps (D78; r2-read-api.md 1.2 and 1.4) -----------------------------------------
+def section(ranges=((1, 8),), *, row_number: int = 1, label: str = "Synthetic section one", scope: str | None = "all", source_id: str = "src-l01-slides", deck_state: str = "current",
+            lines=((10, 40),)) -> dict:
+    """One row of ``ownerio.study_maps.section_ties`` for a question, written by hand."""
+    return {"lecture_id": "lecture-01", "source_id": source_id, "pages": [p for a, b in ranges for p in range(a, b + 1)], "page_ranges": [list(r) for r in ranges],
+            "transcript_ranges": [list(r) for r in lines], "row": row_number, "label": label, "scope": scope, "map_sha256": "f" * 64, "deck_state": deck_state, "on_displayed_deck": True,
+            "deck_bytes_verified": False, "as_written": "Q (synthetic)", "number_basis": "lecture_collections"}
+
+
+def make_sections() -> dict[str, list[dict]]:
+    return {
+        "T-L01-Q01": [section(((5, 11),), row_number=2, label="Synthetic section two")],                                    # also anchored to pages by the course
+        "T-L01-Q04": [section(((2, 5),), scope="part")],                                                                    # also carries a suggested link
+        "T-L01-Q06": [section(), section(((10, 10), (12, 12)), row_number=3, label="Synthetic section three", scope=None)],   # nothing else; named by two rows
+        "T-L01-Q07": [section(deck_state="stale")],                                                                         # a map made for other deck bytes
+        "T-L01-Q10": [section(((1, 3),), source_id="src-l01-alt")],                                                         # a map bound to the unit's other deck
+    }
+
+
+NO_SUGGESTION = {"criteria_supported": None, "criteria_total": None, "criteria": None, "coverage": None, "state": None, "verdict": None, "verdict_note": None, "rationale": None, "regions": None,
+                 "suggestion_id": None, "learner_decision": None}
+
+
+def test_a_study_map_row_is_a_section_tie_listed_apart_and_never_a_page_tie(lecture):
+    plain = lecture.enriched()
+    view = lecture.enriched(section_ties=make_sections())
+    # nothing about pages changed: an eight-page section adds no row to any page's own list and no course anchor
+    assert [s["question_ties"] for s in view["slides"]] == [s["question_ties"] for s in plain["slides"]]
+    assert [(s["related_questions"], s["related_questions_total"]) for s in view["slides"]] == [(s["related_questions"], s["related_questions_total"]) for s in plain["slides"]]
+    assert view["questions"]["counts"] == {"all": 14, "course_anchor": 6, "agent_inferred": 3, "without_link": 5, "course_section": 4}
+    assert {q["question_id"]: q["no_link"] for q in view["questions"]["all"]} == {q["question_id"]: q["no_link"] for q in plain["questions"]["all"]}
+    # its own list per page: the pages inside the stated range, in catalog order, a question once per row that names the page
+    assert {s["page"]: [(t["question_id"], t["section"]["row"]) for t in s["section_ties"]] for s in view["slides"]} == {
+        1: [("T-L01-Q06", 1)], 2: [("T-L01-Q04", 1), ("T-L01-Q06", 1)], 3: [("T-L01-Q04", 1), ("T-L01-Q06", 1)], 4: [("T-L01-Q04", 1), ("T-L01-Q06", 1)],
+        5: [("T-L01-Q01", 2), ("T-L01-Q04", 1), ("T-L01-Q06", 1)], 6: [("T-L01-Q01", 2), ("T-L01-Q06", 1)], 7: [("T-L01-Q01", 2), ("T-L01-Q06", 1)], 8: [("T-L01-Q01", 2), ("T-L01-Q06", 1)],
+        9: [("T-L01-Q01", 2)], 10: [("T-L01-Q01", 2), ("T-L01-Q06", 3)], 11: [("T-L01-Q01", 2)], 12: [("T-L01-Q06", 3)]}
+    on_slide = view["slides"][0]["section_ties"][0]
+    assert on_slide == {"question_id": "T-L01-Q06", "collection": "L01", "number": 6, "title": "Synthetic T-L01-Q06", "prompt": "Synthetic prompt of T-L01-Q06.", "prompt_in_index": True,
+                        "tie": "stated", "granularity": "section", "from": "course_study_map", "catalog_field": None,
+                        "section": {"page_ranges": [[1, 8]], "label": "Synthetic section one", "row": 1, "scope": "all"},
+                        "where": None, "support_pages": [], "other_pages": [], "transcript_lines": [[10, 40]], **NO_SUGGESTION, "criteria_supported_here": None,
+                        "why": "The course's study map places this question in the section on pages 1 to 8; it names no single page.", "evidence": UNKNOWN}
+    assert "pages 10 and 12" in view["slides"][11]["section_ties"][0]["why"]
+    # the lecture's row: page anchors of the course, then its section statements, then suggestions
+    assert [(t["tie"], t["granularity"], t["from"]) for t in row(view, "T-L01-Q01")["ties"]] == [("exact", "page", "course_locator"), ("stated", "section", "course_study_map")]
+    assert [(t["tie"], t["granularity"], t["from"]) for t in row(view, "T-L01-Q04")["ties"]] == [("stated", "section", "course_study_map"), ("agent_inferred", "page", "inferred_anchor_file")]
+    only = row(view, "T-L01-Q06")
+    assert only["ties"] == [
+        {"tie": "stated", "granularity": "section", "from": "course_study_map", "catalog_field": None, "section": {"page_ranges": [[1, 8]], "label": "Synthetic section one", "row": 1, "scope": "all"},
+         "lecture_id": "lecture-01", "source_id": "src-l01-slides", "pages": [1, 2, 3, 4, 5, 6, 7, 8], "logical_slide_ids": ["ls-syn-p1", "ls-syn-p2-4", "ls-syn-p5", "ls-syn-p6-7", "ls-syn-p8"],
+         "transcript_lines": [[10, 40]], **NO_SUGGESTION, "on_displayed_deck": True},
+        {"tie": "stated", "granularity": "section", "from": "course_study_map", "catalog_field": None, "section": {"page_ranges": [[10, 10], [12, 12]], "label": "Synthetic section three", "row": 3, "scope": None},
+         "lecture_id": "lecture-01", "source_id": "src-l01-slides", "pages": [10, 12], "logical_slide_ids": ["ls-syn-p10", "ls-syn-p12"],
+         "transcript_lines": [[10, 40]], **NO_SUGGESTION, "on_displayed_deck": True}]
+    assert only["no_link"] == {"state": "no_suggestion", "reason": "no_item"}  # a section is where to look, not a link to a page: the line about page links still shows
+    # a map made for other deck bytes states nothing current; a map bound to the other deck is a statement about that deck and sits on no page of this one
+    assert row(view, "T-L01-Q07")["ties"] == [] and row(view, "T-L01-Q07")["no_link"]["state"] == "inspected_no_support"
+    (lines, elsewhere) = row(view, "T-L01-Q10")["ties"]
+    assert (lines["granularity"], lines["pages"]) == ("page", []) and (elsewhere["granularity"], elsewhere["source_id"], elsewhere["on_displayed_deck"], elsewhere["logical_slide_ids"]) == ("section", "src-l01-alt", False, [])
+    assert not [s["page"] for s in view["slides"] for t in s["section_ties"] if t["question_id"] in {"T-L01-Q07", "T-L01-Q10"}]
+    # kinds and granularities stay what they are, in both lists, also when the enriched view is enriched again
+    for slide in view["slides"]:
+        assert all((t["granularity"], t["section"]) == ("page", None) and t["from"] in {"course_locator", "inferred_anchor_file"} for t in slide["question_ties"])
+        assert all((t["tie"], t["granularity"], t["from"], t["where"]) == ("stated", "section", "course_study_map", None) for t in slide["section_ties"])
+    assert all(t["from"] == ("inferred_anchor_file" if t["tie"] == "agent_inferred" else "course_study_map" if t["granularity"] == "section" else "course_locator")
+               for q in view["questions"]["all"] for t in q["ties"])
+    again = qt.enrich(copy.deepcopy(view), bank=lecture.bank, index=lecture.index, source_map=SOURCE_MAP, inferred=lecture.inferred, decisions=lecture.decisions, section_ties=make_sections())
+    assert again == view and json.loads(json.dumps(view)) == view
+    assert RUBRIC_MARKER not in json.dumps(view) and GUIDANCE_MARKER not in json.dumps(view)
+
+
+def test_without_study_maps_every_page_has_an_empty_section_list_and_nothing_is_counted(lecture):
+    for nothing in (None, {}, {"T-L01-Q06": []}, {"T-UNKNOWN-Q99": [section()]}):
+        view = lecture.enriched(section_ties=nothing)
+        assert all(s["section_ties"] == [] for s in view["slides"]) and view["questions"]["counts"]["course_section"] == 0
+        assert not [t for q in view["questions"]["all"] for t in q["ties"] if t["granularity"] != "page"]
+
+
+def test_a_section_is_listed_on_the_pages_inside_its_range_and_not_on_the_rest_of_a_build_sequence(lecture):
+    """A section is a range of physical pages. Builds 2-4 and 6-7 each reach over one of its ends: the pages outside the range do not list it."""
+    view = lecture.enriched(section_ties={"T-L01-Q06": [section(((3, 6),))]})
+    assert [s["page"] for s in view["slides"] if [t for t in s["section_ties"] if t["question_id"] == "T-L01-Q06"]] == [3, 4, 5, 6]
+    assert row(view, "T-L01-Q06")["ties"][0]["logical_slide_ids"] == ["ls-syn-p2-4", "ls-syn-p5", "ls-syn-p6-7"]  # the row names the logical slides the range touches
+
+
+def test_section_ties_do_not_move_a_question_between_the_three_counted_kinds(lecture):
+    """course_anchor + agent_inferred + without_link stays the partition of the lecture's rows; course_section is counted beside it."""
+    everything = {q: [section(((1, 12),))] for q in lecture.bank["lectures"]["lecture-01"]["question_ids"]}
+    counts = lecture.enriched(section_ties=everything)["questions"]["counts"]
+    assert counts == {"all": 14, "course_anchor": 6, "agent_inferred": 3, "without_link": 5, "course_section": 14}
+    assert counts["all"] == counts["course_anchor"] + counts["agent_inferred"] + counts["without_link"]
+
+
+# ---- the learner's decision and a regenerated file (R2-Q5) ---------------------------------------------------------------
+def regenerate(lecture: Lecture, change) -> dict:
+    """Store a later suggestions file made from the fixture's one by ``change(items)`` and enrich with it and the decisions on disk."""
+    doc = make_suggestions()
+    doc["produced_at"] = "2026-10-06T09:00:00Z"
+    doc["items"] = change(doc["items"])
+    ia.store(lecture.settings, COURSE, doc, **lecture.context)
+    lecture.inferred = ia.load(lecture.settings, COURSE, **lecture.context)
+    lecture.decisions = ia.decisions(lecture.settings, COURSE)
+    return doc
+
+
+def test_a_link_the_learner_confirmed_stays_when_a_later_checking_pass_rejects_it(lecture):
+    confirmed_id = ia.suggestion_id("T-L01-Q13", 1, DECK_SHA, [12])
+    note = "Synthetic note: page 12 only shares words with the criterion."
+    regenerate(lecture, lambda items: [dict(i, state="agent_reviewed", verifier={"verdict": "rejected", "note": note}) if i["question_id"] == "T-L01-Q13" else i for i in items])
+    assert [i["suggestion_id"] for i in lecture.inferred["by_question"]["T-L01-Q13"]["rejected_by_verifier"]] == [confirmed_id] and lecture.decisions[confirmed_id]["decision"] == "confirmed"
+    view = lecture.enriched()
+    (kept,) = [t for t in view["slides"][11]["question_ties"] if t["question_id"] == "T-L01-Q13"]
+    assert (kept["tie"], kept["state"], kept["verdict"], kept["verdict_note"], kept["learner_decision"], kept["suggestion_id"]) == ("agent_inferred", "agent_reviewed", "rejected", note, "confirmed", confirmed_id)
+    assert "rejected" in kept["why"] and "You confirmed" in kept["why"] and "checked by a second agent pass." not in kept["why"]  # both facts are said; it is not worded as endorsed
+    assert [(t["tie"], t["verdict"], t["learner_decision"]) for t in row(view, "T-L01-Q13")["ties"]] == [("agent_inferred", "rejected", "confirmed")] and row(view, "T-L01-Q13")["no_link"] is None
+    assert view["questions"]["counts"] == {"all": 14, "course_anchor": 6, "agent_inferred": 3, "without_link": 5, "course_section": 0}
+    # an item the checking pass rejected and the learner never confirmed is no link, exactly as before
+    assert "T-L01-Q05" not in [t["question_id"] for s in view["slides"] for t in s["question_ties"]] and row(view, "T-L01-Q05")["ties"] == []
+    assert not [t for s in view["slides"] for t in s["question_ties"] if t["verdict"] == "rejected" and t["learner_decision"] != "confirmed"]
+    # the caller can decide the other way: then the rejection wins, and the row still says what the learner had decided
+    other = lecture.enriched(confirmed_outranks_verifier=False)
+    assert "T-L01-Q13" not in [t["question_id"] for s in other["slides"] for t in s["question_ties"]]
+    assert row(other, "T-L01-Q13")["ties"] == [] and row(other, "T-L01-Q13")["no_link"] == {"state": "inspected_no_support", "reason": note}
+    assert row(other, "T-L01-Q13")["suggestion_history"]["decisions_not_shown"] == [
+        {"suggestion_id": confirmed_id, "lecture_id": "lecture-01", "source_id": "src-l01-slides", "pages": [12], "learner_decision": "confirmed", "reason": "rejected_by_verifier"}]
+    assert row(view, "T-L01-Q13")["suggestion_history"]["decisions_not_shown"] == []
+    # once the learner takes the confirmation back, nothing keeps the rejected item on screen
+    ia.decide(lecture.settings, COURSE, confirmed_id, "cleared", at="2026-10-06T10:00:00Z")
+    cleared = lecture.enriched(decisions=ia.decisions(lecture.settings, COURSE))
+    assert "T-L01-Q13" not in [t["question_id"] for s in cleared["slides"] for t in s["question_ties"]]
+    assert row(cleared, "T-L01-Q13")["no_link"] == {"state": "inspected_no_support", "reason": note}
+    assert row(cleared, "T-L01-Q13")["suggestion_history"] == {"stale": 0, "rejected_by_verifier": 1, "rejected_by_learner": [], "decisions_not_shown": []}
+
+
+def test_a_decision_whose_suggestion_is_no_longer_a_current_link_is_listed_in_the_row_with_the_reason(lecture):
+    confirmed_id, rejected_id = ia.suggestion_id("T-L01-Q13", 1, DECK_SHA, [12]), ia.suggestion_id("T-L01-Q12", 1, DECK_SHA, [12])
+
+    def later(items: list[dict]) -> list[dict]:
+        out = []
+        for entry in items:
+            if entry["question_id"] == "T-L01-Q13":   # the checking pass kept another page than the one the learner confirmed
+                out.append(dict(entry, pages=[11], state="agent_reviewed", verifier={"verdict": "narrowed", "note": "Synthetic note: page 11 kept."}))
+            elif entry["question_id"] == "T-L01-Q12":  # no longer proposed; the checking pass rejected another page for it
+                out.append(dict(entry, pages=[11], state="agent_reviewed", verifier={"verdict": "rejected", "note": "Synthetic note: shared words only."}))
+            else:
+                out.append(entry)
+        return out
+
+    regenerate(lecture, later)
+    view = lecture.enriched()
+    narrowed = row(view, "T-L01-Q13")
+    assert [(t["pages"], t["verdict"], t["learner_decision"]) for t in narrowed["ties"]] == [([11], "narrowed", None)]  # a decision about pages 12 is not carried over to page 11
+    assert narrowed["suggestion_history"]["decisions_not_shown"] == [
+        {"suggestion_id": confirmed_id, "lecture_id": "lecture-01", "source_id": "src-l01-slides", "pages": [12], "learner_decision": "confirmed", "reason": "not_in_file"}]
+    dropped = row(view, "T-L01-Q12")
+    assert dropped["ties"] == [] and dropped["no_link"]["state"] == "inspected_no_support"
+    assert dropped["suggestion_history"] == {"stale": 0, "rejected_by_verifier": 1, "rejected_by_learner": [], "decisions_not_shown": [
+        {"suggestion_id": rejected_id, "lecture_id": "lecture-01", "source_id": "src-l01-slides", "pages": [12], "learner_decision": "rejected", "reason": "not_in_file"}]}
+    assert not [t for s in view["slides"] for t in s["question_ties"] if t["suggestion_id"] in {confirmed_id, rejected_id}]  # neither is a link
+    # the deck's bytes change: the decisions stay on record and the row says their suggestions were made for other bytes
+    regenerate(lecture, lambda items: items)
+    moved = ia.load(lecture.settings, COURSE, **dict(lecture.context, deck_sha256_of=lambda item: "e" * 64))
+    stale = lecture.enriched(inferred=moved)
+    assert [(d["suggestion_id"], d["learner_decision"], d["reason"]) for d in row(stale, "T-L01-Q13")["suggestion_history"]["decisions_not_shown"]] == [(confirmed_id, "confirmed", "stale")]
+    assert [(d["suggestion_id"], d["learner_decision"], d["reason"]) for d in row(stale, "T-L01-Q12")["suggestion_history"]["decisions_not_shown"]] == [(rejected_id, "rejected", "stale")]
+    # a cleared decision is no decision and is listed nowhere
+    ia.decide(lecture.settings, COURSE, confirmed_id, "cleared", at="2026-10-06T10:00:00Z")
+    assert row(lecture.enriched(inferred=moved, decisions=ia.decisions(lecture.settings, COURSE)), "T-L01-Q13")["suggestion_history"]["decisions_not_shown"] == []
+
+
+def test_what_the_learner_rejected_is_listed_in_one_order_whatever_the_order_of_the_file(tmp_path):
+    def build(where: Path, pages_in_file: list[list[int]]) -> list[list[int]]:
+        doc = make_suggestions()
+        doc["items"] = [suggestion("T-L01-Q06", pages, [1]) for pages in pages_in_file]
+        lecture = Lecture(where, suggestions=doc, decide=False)
+        for item in lecture.inferred["items"]:
+            ia.decide(lecture.settings, COURSE, item["suggestion_id"], "rejected", at=NOW, suggestion=item)
+        view = lecture.enriched(decisions=ia.decisions(lecture.settings, COURSE))
+        return [d["pages"] for d in row(view, "T-L01-Q06")["suggestion_history"]["rejected_by_learner"]]
+
+    assert build(tmp_path / "a", [[12], [9], [10, 11]]) == build(tmp_path / "b", [[10, 11], [12], [9]]) == [[9], [10, 11], [12]]
+
+
+# ---- small rules that had no test ---------------------------------------------------------------------------------------
+def test_a_source_map_that_is_not_ready_groups_nothing_even_when_it_lists_groups(lecture):
+    view = lecture.enriched(source_map=dict(SOURCE_MAP, state="unavailable", reason="unreadable"))
+    assert ties(view, 2) == [("T-L01-Q03", "exact", "on_this_page", [2], [3, 4, 8])] and row(view, "T-L01-Q03")["ties"][0]["logical_slide_ids"] == []
+    assert ties(view, 7) == [("T-L01-Q09", "agent_inferred", "on_this_page", [7], [6])]
+
+
+def custom(index: dict, lecture_id: str = "lecture-01") -> dict:
+    """A bare lecture view over a hand-made index, enriched with nothing but the course's own anchors."""
+    bank = build_question_bank(index, make_inventory(), reviewed_collections=("L01",))
+    view = {"course_id": COURSE, "lecture_id": lecture_id, "deck": {"source_id": "src-l01-slides", "version_id": "v1", "sha256": DECK_SHA},
+            "slides": [{"page": p, "title": f"Synthetic page {p}", "concepts": []} for p in range(1, 13)],
+            "questions": {"all": [dict(bank["questions"][q]) for q in bank["lectures"][lecture_id]["question_ids"]], "related_by_relationship": [dict(q) for q in bank["questions"].values() if not q["lecture_ids"]]}}
+    return qt.enrich(view, bank=bank, index=index, source_map=None, inferred=None, decisions=None)
+
+
+def test_transcript_lines_of_another_unit_do_not_travel_with_a_page_tie():
+    index = make_index()
+    index["questions"]["T-L01-Q15"] = dict(question("T-L01-Q15", "L01", 15, ["delta"], "Slides 5"), source_refs=[
+        {"source_id": "src-l01-slides", "locator": "Slides 5"}, {"source_id": "src-l02-slides", "locator": "Transcript 7-9"}])
+    view = custom(index)
+    two = sorted(row(view, "T-L01-Q15")["ties"], key=lambda t: str(t["lecture_id"]))
+    assert [(t["lecture_id"], t["pages"], t["transcript_lines"]) for t in two] == [("lecture-01", [5], []), ("lecture-02", [], [[7, 9]])]
+    assert next(t for t in view["slides"][4]["question_ties"] if t["question_id"] == "T-L01-Q15")["transcript_lines"] == []  # lines of lecture 2 are not lines of this page's lecture
+
+
+def test_the_page_a_question_is_printed_on_is_told_apart_from_a_locator(lecture):
+    """The catalog's ``page`` field says where the question itself is printed; a locator says where its content is."""
+    index = make_index()
+    index["questions"]["T-PS01-Q03"] = dict(question("T-PS01-Q03", "PS01", 3, ["delta"], "page 1", "src-ps-01"), page=2, source_path="materials/src-ps-01.pdf")
+    index["questions"]["T-L01-Q16"] = dict(question("T-L01-Q16", "L01", 16, ["delta"], COARSE), page=7, source_path="materials/src-l01-slides.pdf")
+    view = custom(index)
+    printed = next(q for q in view["questions"]["related_by_relationship"] if q["question_id"] == "T-PS01-Q03")
+    assert [(t["tie"], t["source_id"], t["pages"], t["from"], t["catalog_field"]) for t in printed["ties"]] == [
+        ("stated", "src-ps-01", [1], "course_locator", "locator"), ("stated", "src-ps-01", [2], "course_locator", "page")]
+    on_deck = next(t for t in view["slides"][6]["question_ties"] if t["question_id"] == "T-L01-Q16")
+    assert (on_deck["tie"], on_deck["catalog_field"], on_deck["where"]) == ("exact", "page", "on_this_page") and "printed" in on_deck["why"]
+    assert all(t["catalog_field"] == "locator" for s in lecture.enriched()["slides"] for t in s["question_ties"] if t["tie"] != "agent_inferred")
+    assert all(t["catalog_field"] is None for s in lecture.enriched()["slides"] for t in s["question_ties"] if t["tie"] == "agent_inferred")
+
+
+def test_a_related_question_says_whether_its_concept_comes_from_the_page_or_only_from_a_suggested_link(lecture):
+    view = lecture.enriched()
+    by_question = {r["question_id"]: {c["label"]: c["basis"] for c in r["via_concepts"]} for r in view["slides"][1]["related_questions"]}
+    # on pages 2-4 Beta is a concept of the pages' own anchors; Alpha is there only because an unchecked suggestion lists a criterion about it
+    assert by_question == {"T-L01-Q01": {"Alpha": "suggested_link"}, "T-L02-Q01": {"Alpha": "suggested_link", "Beta": "page_concepts"}, "T-PS01-Q02": {"Alpha": "suggested_link"}}
+    assert {c["basis"] for r in view["slides"][4]["related_questions"] for c in r["via_concepts"]} == {"page_concepts"}
 
 
 # ---- the real projection of the generated fixture course ----------------------------------------------------------------
@@ -539,7 +839,7 @@ def test_the_fixture_lecture_view_is_enriched_as_the_lead_will_wire_it(settings,
         four = enriched("lecture-04")  # "Slides 1, 3; transcript 4-9": a reviewed page list and a separate line map
         per_page = {s["page"]: [(t["question_id"], t["tie"], t["where"], t["transcript_lines"]) for t in s["question_ties"]] for s in four["slides"]}
         assert per_page == {1: [("BE505-L04-Q01", "exact", "on_this_page", [[4, 9]])], 2: [], 3: [("BE505-L04-Q01", "exact", "on_this_page", [[4, 9]])]}
-        assert four["questions"]["counts"] == {"all": 3, "course_anchor": 3, "agent_inferred": 0, "without_link": 0}
+        assert four["questions"]["counts"] == {"all": 3, "course_anchor": 3, "agent_inferred": 0, "without_link": 0, "course_section": 0}
         one = enriched("lecture-01")
         coarse = next(q for q in one["questions"]["all"] if q["question_id"] == "BE505-L01-Q04")
         assert [(t["tie"], t["pages"], t["criteria_supported"], t["criteria_total"], t["on_displayed_deck"]) for t in coarse["ties"]] == [("agent_inferred", [2, 3], 1, 1, True)] and coarse["no_link"] is None
@@ -551,5 +851,45 @@ def test_the_fixture_lecture_view_is_enriched_as_the_lead_will_wire_it(settings,
         text = json.dumps([four, one])
         assert not [q["answer"] for q in content.BE505_QUESTIONS if q["answer"] in text] and '"answer"' not in text and "observable" not in text
         assert not [k[2] for q in content.BE505_QUESTIONS for k in q["criteria"] if k[2] in text]
+    finally:
+        journal.close()
+
+
+def test_rows_of_the_study_map_reader_reach_the_lecture_view_as_section_ties(settings, clock):
+    """The seam between ``ownerio.study_maps.section_ties`` and ``enrich``, on a synthetic study note written into the generated course."""
+    from lecture_brain.journal import Journal
+    from lecture_brain.ownerio import study_maps
+    from lecture_brain.ownerio.inventory import build_inventory
+    from lecture_brain.preparation import Preparation
+    from lecture_brain.projections import Projector
+
+    root = settings.course("be505").root
+    header = ["Concept", "Slide pages", "Transcript lines", "Diagnostic", "Summary"]
+    rows = [["Synthetic topic one", "2-3", "1-4", "Q1 all", "synthetic note"], ["Synthetic topic two", "4", "5-6", "Q4 all", "synthetic note"]]
+    note = root / "work" / "lecture-review" / "lecture-01-source-map.md"
+    note.parent.mkdir(parents=True, exist_ok=True)
+    note.write_text("# Synthetic study note\n\n" + "\n".join(["| " + " | ".join(header) + " |", "|" + "---|" * len(header), *("| " + " | ".join(r) + " |" for r in rows)]) + "\n", encoding="utf-8")
+    journal = Journal.open(settings.journal_path, clock=clock, synced_roots=[])
+    try:
+        prep = Preparation(settings, converter=None, now=lambda: NOW)
+        prep.prepare_course("be505")
+        projector = Projector(settings, journal, preparation=prep, now=lambda: NOW)
+        inventory = build_inventory(settings.course("be505"))
+        catalogs = projector._catalogs("be505")
+        bank = projector._bank("be505", catalogs, inventory)
+        sections = study_maps.section_ties(study_maps.read_study_maps(root, inventory), bank)
+        assert sorted(sections) == ["BE505-L01-Q01", "BE505-L01-Q04"] and all(row_["deck_state"] == "current" for rows_ in sections.values() for row_ in rows_)
+        view = projector.lecture_view("be505", "lecture-01")
+        plain = qt.enrich(copy.deepcopy(view), bank=bank, index=catalogs["questions"], source_map=view.get("source_map"), inferred=None, decisions=None)
+        qt.enrich(view, bank=bank, index=catalogs["questions"], source_map=view.get("source_map"), inferred=None, decisions=None, section_ties=sections)
+        listed = {s["page"]: [(t["question_id"], t["tie"], t["granularity"], t["section"]["page_ranges"], t["section"]["label"], t["section"]["scope"], t["transcript_lines"]) for t in s["section_ties"]]
+                  for s in view["slides"] if s["section_ties"]}
+        assert listed == {2: [("BE505-L01-Q01", "stated", "section", [[2, 3]], "Synthetic topic one", "all", [[1, 4]])], 3: [("BE505-L01-Q01", "stated", "section", [[2, 3]], "Synthetic topic one", "all", [[1, 4]])],
+                          4: [("BE505-L01-Q04", "stated", "section", [[4, 4]], "Synthetic topic two", "all", [[5, 6]])]}
+        assert [s["question_ties"] for s in view["slides"]] == [s["question_ties"] for s in plain["slides"]]  # the pages' own lists are what they were
+        assert view["questions"]["counts"] == dict(plain["questions"]["counts"], course_section=2)
+        coarse = next(q for q in view["questions"]["all"] if q["question_id"] == "BE505-L01-Q04")
+        assert [(t["tie"], t["granularity"], t["from"], t["pages"]) for t in coarse["ties"]] == [("stated", "section", "course_study_map", [4])]
+        assert coarse["no_link"] == {"state": "no_suggestion", "reason": "no_file"}  # the section says where to look; no page link exists and the row says why
     finally:
         journal.close()

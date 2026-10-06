@@ -9,7 +9,10 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 from fastapi import FastAPI
@@ -153,8 +156,10 @@ def test_an_accepted_item_keeps_exactly_the_contract_fields_and_gets_a_stable_su
     loaded = read(settings, document([item()]))
     assert loaded["file"] == {"state": "ok", "produced_at": "2026-10-05T10:00:00Z", "sha256": loaded["file"]["sha256"], "question_index_matches": True, "producer": "claude-session", "reason": None}
     (accepted,) = loaded["items"]
-    assert set(accepted) == {"suggestion_id", "question_id", "question_version", "lecture_id", "source_id", "source_sha256", "pages", "regions", "criteria", "coverage", "rationale", "state", "verifier"}
+    assert set(accepted) == {"suggestion_id", "question_id", "question_version", "lecture_id", "source_id", "source_sha256", "pages", "regions", "criteria", "per_page", "coverage", "rationale", "state",
+                             "verifier"}
     assert accepted["pages"] == [4, 5] and accepted["criteria"] == ["SYN-L01-Q01.C01", "SYN-L01-Q01.C02"] and accepted["verifier"] == {"verdict": None, "note": None}
+    assert accepted["per_page"] is None  # the producer said nothing page by page, so nothing is said here
     assert accepted["suggestion_id"] == ia.suggestion_id("SYN-L01-Q01", 2, DECK_SHA, [4, 5]) and accepted["suggestion_id"].startswith("ia-")
     assert loaded["by_question"]["SYN-L01-Q01"]["items"] == [accepted]
     # the id depends on the question, its version, the deck bytes and the pages — and on nothing else
@@ -171,10 +176,53 @@ def test_a_version_written_as_text_or_as_a_number_is_the_same_version(settings):
 
 
 def test_fields_the_producer_added_are_dropped_and_named_never_passed_on(settings):
-    extra = item(confidence="high", per_page=[{"page": 4, "what_is_on_the_page": "SYNTHETIC-PRIVATE-PAGE-NOTE"}], criteria_without_support=["SYN-L01-Q01.C03"])
+    extra = item(confidence="high", per_page=[{"page": 4, "supports": ["SYN-L01-Q01.C01"], "what_is_on_the_page": "SYNTHETIC-PRIVATE-PAGE-NOTE"}], criteria_without_support=["SYN-L01-Q01.C03"])
     loaded = read(settings, document([extra], batch="b1"))
-    assert len(loaded["items"]) == 1 and loaded["unknown_fields"] == {"file": ["batch"], "items": ["confidence", "criteria_without_support", "per_page"], "no_candidate": []}
+    assert len(loaded["items"]) == 1 and loaded["unknown_fields"] == {"file": ["batch"], "items": ["confidence", "criteria_without_support"], "no_candidate": [], "per_page": ["what_is_on_the_page"]}
     assert "SYNTHETIC-PRIVATE-PAGE-NOTE" not in json.dumps(loaded)
+
+
+# ---- per-page support (optional; r2-read-api.md 1.4) ---------------------------------------------------------
+def test_per_page_support_is_read_as_page_and_criterion_ids_and_nothing_else(settings):
+    per_page = [{"page": 5, "supports": ["SYN-L01-Q01.C02", "SYN-L01-Q01.C01"], "what_is_on_the_page": "SYNTHETIC-PRIVATE-PAGE-NOTE", "looked_at": "SYNTHETIC-PRIVATE-LOOK"},
+                {"page": 4, "supports": ["SYN-L01-Q01.C01"]}]
+    loaded = read(settings, document([item(per_page=per_page)]))
+    (accepted,) = loaded["items"]
+    assert accepted["per_page"] == [{"page": 4, "supports": ["SYN-L01-Q01.C01"]}, {"page": 5, "supports": ["SYN-L01-Q01.C01", "SYN-L01-Q01.C02"]}]  # by page; ids in the order the item lists its criteria
+    assert loaded["refused"]["counts"] == {} and loaded["unknown_fields"]["per_page"] == ["looked_at", "what_is_on_the_page"] and loaded["unknown_fields"]["items"] == []
+    assert "SYNTHETIC-PRIVATE" not in json.dumps(loaded)
+    assert accepted["suggestion_id"] == ia.suggestion_id("SYN-L01-Q01", 2, DECK_SHA, [4, 5])  # what a page supports is no part of the suggestion's identity
+    # a page may be named as supporting nothing, a page may be left out (then nothing is known about it), and null says nothing at all
+    assert read(settings, document([item(per_page=[{"page": 4, "supports": []}])]))["items"][0]["per_page"] == [{"page": 4, "supports": []}]
+    assert read(settings, document([item(per_page=None)]))["items"][0]["per_page"] is None
+
+
+PER_PAGE_REFUSALS = [
+    ("words in place of the list", "page 4 shows the lever"),
+    ("an empty list", []),
+    ("an entry that is not an object", ["page 4"]),
+    ("a page the item does not name", [{"page": 9, "supports": ["SYN-L01-Q01.C01"]}]),
+    ("a page written as text", [{"page": "4", "supports": ["SYN-L01-Q01.C01"]}]),
+    ("a truth value as a page", [{"page": True, "supports": ["SYN-L01-Q01.C01"]}]),
+    ("a page listed twice", [{"page": 4, "supports": ["SYN-L01-Q01.C01"]}, {"page": 4, "supports": ["SYN-L01-Q01.C02"]}]),
+    ("no list of supported criteria", [{"page": 4}]),
+    ("supported criteria that are not a list", [{"page": 4, "supports": "SYN-L01-Q01.C01"}]),
+    ("a criterion of the question that the item does not list", [{"page": 4, "supports": ["SYN-L01-Q01.C03"]}]),
+    ("a criterion of another question", [{"page": 4, "supports": ["SYN-PS01-Q01.C01"]}]),
+    ("a criterion listed twice on one page", [{"page": 4, "supports": ["SYN-L01-Q01.C01", "SYN-L01-Q01.C01"]}]),
+    ("a rubric sentence in place of a criterion id", [{"page": 4, "supports": [RUBRIC]}]),
+]
+
+
+@pytest.mark.parametrize("label, per_page", PER_PAGE_REFUSALS, ids=[r[0] for r in PER_PAGE_REFUSALS])
+def test_per_page_support_that_does_not_fit_its_own_item_refuses_the_item(settings, label, per_page):
+    loaded = read(settings, document([item(pages=[4, 5], per_page=per_page), item(pages=[9])]))
+    assert loaded["refused"]["counts"] == {"invalid_per_page": 1}, loaded["refused"]
+    assert [i["pages"] for i in loaded["items"]] == [[9]]  # not accepted with the list silently dropped, clipped or completed
+    assert RUBRIC not in json.dumps(loaded["refused"]) and "lever" not in json.dumps(loaded["refused"])
+    with pytest.raises(ia.InferredAnchorError) as refused:
+        ia.store(settings, COURSE, document([item(pages=[4, 5], per_page=per_page)], produced_at="2026-10-06T10:00:00Z"), **context())
+    assert refused.value.code == "refused_items"
 
 
 def test_a_question_with_no_catalogued_criteria_takes_an_empty_list_and_nothing_else(settings):
@@ -289,8 +337,17 @@ def test_a_file_made_against_another_question_index_is_listed_as_made_for_an_ear
     assert loaded["items"] == [] and loaded["rejected_by_verifier"] == [] and loaded["no_candidate"] == []
     assert [s["stale_reason"] for s in loaded["stale"]] == ["earlier_catalog", "earlier_catalog"] and loaded["refused"]["counts"] == {"unknown_question": 1}
     assert loaded["stale_no_candidate"] == [{"question_id": "SYN-PS01-Q01", "question_version": 1, "stale_reason": "earlier_catalog"}]
-    # a course whose catalog cannot be read has no current index either
-    assert read(settings, document([item()]), index=None)["file"]["state"] == "made_for_earlier_catalog"
+
+
+def test_without_a_readable_question_index_nothing_is_called_earlier_or_unknown(settings):
+    """No catalog, no comparison: the file is not said to be older than a catalog nobody read, and no question is called unknown."""
+    record = {"question_id": "SYN-PS01-Q01", "question_version": 1, "why": "Spoken only.", "verifier": {"confirmed": True, "note": None}}
+    loaded = read(settings, document([item(), item(question_id="SYN-GONE-Q01", pages=[9]), item(pages=[0])], no_candidate=[record]), index=None)
+    assert loaded["file"]["state"] == "catalog_unavailable" and loaded["file"]["question_index_matches"] is None
+    assert loaded["items"] == [] and loaded["no_candidate"] == [] and [s["stale_reason"] for s in loaded["stale"]] == ["catalog_unavailable", "catalog_unavailable"]
+    assert loaded["refused"]["counts"] == {"invalid_pages": 1}  # what is wrong in itself is still refused
+    assert loaded["stale_no_candidate"] == [{"question_id": "SYN-PS01-Q01", "question_version": 1, "stale_reason": "catalog_unavailable"}]
+    assert ia.readback(loaded, index=None)["stale_by_reason"] == {"catalog_unavailable": 3}
 
 
 # ---- the verifying pass -----------------------------------------------------------------------------------
@@ -330,14 +387,19 @@ def test_no_candidate_records_are_read_with_the_same_care(settings):
 
 # ---- store ------------------------------------------------------------------------------------------------
 def test_store_writes_the_contract_and_nothing_else_inside_the_private_state_area(settings):
-    doc = document([item(confidence="high", per_page=[{"page": 4, "what_is_on_the_page": "SYNTHETIC-PRIVATE-PAGE-NOTE"}])], batch="b1")
+    doc = document([item(confidence="high", per_page=[{"page": 4, "supports": ["SYN-L01-Q01.C01"], "what_is_on_the_page": "SYNTHETIC-PRIVATE-PAGE-NOTE"}, {"page": 5, "supports": ["SYN-L01-Q01.C02"]}])], batch="b1")
     result = ia.store(settings, COURSE, doc, **context())
     path = settings.state_dir / "inferred-anchors" / f"{COURSE}.json"
     assert result["status"] == "stored" and result["path"] == f"inferred-anchors/{COURSE}.json" and result["history"] is None
-    assert result["accepted"] == 1 and result["refused"] == {} and result["dropped_fields"] == {"file": ["batch"], "items": ["confidence", "per_page"], "no_candidate": []}
+    assert result["accepted"] == 1 and result["refused"] == {} and result["dropped_fields"] == {"file": ["batch"], "items": ["confidence"], "no_candidate": [], "per_page": ["what_is_on_the_page"]}
     written = json.loads(path.read_text(encoding="utf-8"))
     assert set(written) == {"contract", "course_id", "produced_at", "producer", "question_index_sha256", "items"}
-    assert set(written["items"][0]) == {"question_id", "question_version", "lecture_id", "source_id", "source_sha256", "pages", "regions", "criteria", "coverage", "rationale", "state", "verifier"}
+    assert set(written["items"][0]) == {"question_id", "question_version", "lecture_id", "source_id", "source_sha256", "pages", "regions", "criteria", "per_page", "coverage", "rationale", "state",
+                                        "verifier"}
+    # what each page supports is kept, as page and criterion ids only: the producer's note about the page stays out of the file
+    assert written["items"][0]["per_page"] == [{"page": 4, "supports": ["SYN-L01-Q01.C01"]}, {"page": 5, "supports": ["SYN-L01-Q01.C02"]}]
+    assert b"SYNTHETIC-PRIVATE-PAGE-NOTE" not in path.read_bytes()
+    assert ia.load(settings, COURSE, **context())["items"][0]["per_page"] == written["items"][0]["per_page"]
     assert result["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest() == ia.load(settings, COURSE, **context())["file"]["sha256"]
     assert ia.load(settings, COURSE, **context())["items"][0]["suggestion_id"] == ia.suggestion_id("SYN-L01-Q01", 2, DECK_SHA, [4, 5])
     assert sorted(p.relative_to(settings.state_dir).as_posix() for p in settings.state_dir.rglob("*") if p.is_file()) == [f"inferred-anchors/{COURSE}.json"]
@@ -471,8 +533,10 @@ def test_regenerating_the_suggestions_does_not_erase_decisions_and_a_vanished_su
     assert [d["suggestion_id"] for d in report["on_stale"]] == [kept] and [d["suggestion_id"] for d in report["orphaned"]] == [gone]
 
 
-def test_a_confirmation_does_not_keep_alive_a_suggestion_the_verifying_pass_later_rejected(settings):
-    """The verifying pass's rejection is never displayed as a link; the learner's record stays and is reported beside it."""
+def test_the_reader_reports_a_confirmation_beside_an_item_the_verifying_pass_later_rejected(settings):
+    """The reader sorts by the file alone: a rejected item is in the audit list whatever the learner decided, and the
+    learner's record stays and is reported beside it. What is shown is decided where ties are made
+    (``question_ties.enrich``): there the learner's confirmation stands (R2-Q5)."""
     ia.store(settings, COURSE, document([item()]), **context())
     sid = ia.suggestion_id("SYN-L01-Q01", 2, DECK_SHA, [4, 5])
     ia.decide(settings, COURSE, sid, "confirmed", at=NOW, suggestion=ia.load(settings, COURSE, **context())["items"][0])
@@ -500,7 +564,166 @@ def test_a_damaged_decision_chain_is_reported_and_only_its_verified_part_counts(
     assert blocked.value.code == "conflict"
 
 
+def test_a_decision_record_not_made_by_the_learner_is_refused_and_is_no_decision(settings):
+    sid = "ia-" + "7" * 16
+    record = {"contract": "inferred-anchor-decision/1", "course_id": COURSE, "suggestion_id": sid, "revision": 1, "supersedes": None, "decision": "confirmed", "author": "agent_review",
+              "decided_at": NOW, "suggestion": None}
+    with pytest.raises(ia.InferredAnchorError) as refused:
+        ia.put_decision(settings, COURSE, record)
+    assert refused.value.code == "invalid_decision" and not (settings.state_dir / "inferred-anchors").exists()
+    folder = settings.state_dir / "inferred-anchors" / "decisions" / COURSE
+    folder.mkdir(parents=True)
+    (folder / f"{sid}.r1.json").write_text(json.dumps(record), encoding="utf-8")  # put there by hand: reported, and it decides nothing
+    state = ia.decision_state(settings, COURSE)
+    assert state["current"] == {} and [(p["code"], p["suggestion_id"]) for p in state["problems"]] == [("invalid_decision_file", sid)]
+    assert ia.put_decision(settings, COURSE, dict(record, author="learner", suggestion_id="ia-" + "8" * 16))["status"] == "recorded"
+
+
+def test_a_number_too_long_to_read_makes_a_file_unreadable_and_a_decision_file_a_reported_problem(settings):
+    """A private file that cannot be parsed is an answer ("unreadable"), not a crash of every view of the course."""
+    for raw in (b'{"contract": "ll.inferred-anchors/1", "course_id": "syn101", "produced_at": ' + b"9" * 5000 + b', "items": []}', b"[" * 200_000):
+        write_raw(settings, None, raw=raw)
+        loaded = ia.load(settings, COURSE, **context())
+        assert (loaded["file"]["state"], loaded["file"]["reason"], loaded["items"]) == ("unreadable", "not_json", []) and loaded["file"]["sha256"] == hashlib.sha256(raw).hexdigest()
+    sid = "ia-" + "5" * 16
+    ia.decide(settings, COURSE, sid, "confirmed", at=NOW)
+    folder = settings.state_dir / "inferred-anchors" / "decisions" / COURSE
+    (folder / "ia-6666666666666666.r1.json").write_bytes(b'{"revision": ' + b"9" * 5000 + b"}")
+    (folder / "ia-6666666666666667.r1.json").write_bytes(b"[" * 200_000)
+    state = ia.decision_state(settings, COURSE)
+    assert state["current"][sid]["decision"] == "confirmed"
+    assert [(p["code"], p["suggestion_id"]) for p in state["problems"]] == [("invalid_decision_file", "ia-6666666666666666"), ("invalid_decision_file", "ia-6666666666666667")]
+    assert ia.decide(settings, COURSE, sid, "rejected", at="2026-10-05T13:00:00Z")["revision"] == 2  # one damaged file does not stop the other decisions
+
+
+def _link_directory(link: Path, target: Path) -> bool:
+    """A directory link that needs no privilege: a junction on Windows, a symlink elsewhere."""
+    if sys.platform == "win32":
+        return subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)], capture_output=True).returncode == 0
+    os.symlink(target, link, target_is_directory=True)
+    return True
+
+
+def test_nothing_is_read_or_written_through_a_link_that_leaves_the_state_area(settings, tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    with pytest.raises(ia.InferredAnchorError) as barrier:
+        ia._inside_state(settings, outside / "anything.json")
+    assert barrier.value.code == "unsafe_path"
+    assert ia._inside_state(settings, settings.state_dir / "inferred-anchors" / f"{COURSE}.json") == settings.state_dir / "inferred-anchors" / f"{COURSE}.json"
+    # the area itself replaced by a directory link that leads elsewhere
+    (outside / f"{COURSE}.json").write_text(json.dumps(document([item()])), encoding="utf-8")
+    settings.state_dir.mkdir(parents=True)
+    assert _link_directory(settings.state_dir / "inferred-anchors", outside), "could not create a directory link on this machine"
+    before = sorted(p.name for p in outside.iterdir())
+    for call in (lambda: ia.load(settings, COURSE, **context()), lambda: ia.store(settings, COURSE, document([item(pages=[9])]), **context()),
+                 lambda: ia.decide(settings, COURSE, "ia-" + "9" * 16, "confirmed", at=NOW), lambda: ia.decisions(settings, COURSE)):
+        with pytest.raises(ia.InferredAnchorError) as refused:
+            call()
+        assert refused.value.code == "unsafe_path"
+    assert sorted(p.name for p in outside.iterdir()) == before
+
+
+# ---- small rules that had no test of their own --------------------------------------------------------------
+def test_eight_consecutive_words_of_protected_text_are_a_reproduction_and_seven_are_not():
+    protected = "one two three four five six seven eight nine ten eleven twelve"
+    assert ia.REPRODUCTION_RUN == 8 and ia.REPRODUCTION_SHORTEST == 5
+    assert ia.reproduces("As said: three four five six seven eight nine ten, and so on.", protected)       # eight in a row
+    assert not ia.reproduces("As said: three four five six seven eight nine, and so on.", protected)      # seven in a row
+    assert not ia.reproduces("three four five six, then seven eight nine ten eleven", protected)          # nine of its words, never eight in a row
+    # protected text of five to seven words: quoting it whole is a reproduction, a part of it is not
+    short = "alpha beta gamma delta epsilon"
+    assert ia.reproduces("It says: Alpha, beta gamma delta epsilon.", short) and not ia.reproduces("It says alpha beta gamma delta.", short)
+    seven = "alpha beta gamma delta epsilon zeta eta"
+    assert ia.reproduces("so alpha beta gamma delta epsilon zeta eta then", seven) and not ia.reproduces("so alpha beta gamma delta epsilon zeta then", seven)
+    # under five words nothing can be told from ordinary wording
+    assert not ia.reproduces("alpha beta gamma delta", "alpha beta gamma delta")
+
+
+def test_a_reproduction_is_found_through_invisible_and_wide_characters(settings):
+    soft = GUIDANCE.replace("gizmo", "giz­mo").replace("lever", "le­ver")                    # soft hyphens inside words
+    zero = GUIDANCE.replace("rotates", "rot​ates").replace("lever", "le‍ver")                 # zero-width characters inside words
+    wide = "".join(chr(ord(ch) + 0xFEE0) if "!" <= ch <= "~" else ch for ch in GUIDANCE)               # full-width letters
+    for disguised in (soft, zero, wide):
+        assert disguised != GUIDANCE and ia.reproduces(disguised, GUIDANCE)
+        loaded = read(settings, document([item(rationale=f"Page 4 matters. {disguised}"), item(pages=[9])]))
+        assert loaded["refused"]["counts"] == {"reproduces_guidance": 1} and [i["pages"] for i in loaded["items"]] == [[9]]
+
+
+def test_a_region_id_is_a_short_id_and_never_free_text(settings):
+    named = [{"page": 4, "box": [0.1, 0.2, 0.6, 0.9], "region_id": "r1"}]
+    assert read(settings, document([item(regions=named)]))["items"][0]["regions"] == named
+    for bad in ("the top half of the page", GUIDANCE, "r 1", "", 7):
+        loaded = read(settings, document([item(regions=[dict(named[0], region_id=bad)])]))
+        assert loaded["items"] == [] and loaded["refused"]["counts"] == {"invalid_regions": 1}, bad
+        assert GUIDANCE not in json.dumps(loaded)
+
+
+def test_text_written_where_an_id_belongs_is_never_repeated_in_a_refusal_or_the_readback(settings):
+    prose = "SYNTHETIC-SENTENCE states the expected point in full"
+    doc = document([item(pages=[2], criteria=[prose]), item(pages=[3], lecture_id=prose), item(pages=[6], question_id=prose), item(pages=[7], source_id=prose), item()],
+                   no_candidate=[{"question_id": prose, "question_version": 1, "why": "Nothing found.", "verifier": None}])
+    loaded = read(settings, doc)
+    assert loaded["refused"]["counts"] == {"unknown_criterion": 1, "unknown_lecture": 1, "unknown_question": 2, "source_not_a_deck_of_lecture": 1} and len(loaded["items"]) == 1
+    assert "SYNTHETIC-SENTENCE" not in json.dumps(loaded["refused"]) and "SYNTHETIC-SENTENCE" not in json.dumps(ia.readback(loaded, index=make_index()))
+    assert [r["question_id"] for r in loaded["refused"]["items"]] == ["SYN-L01-Q01", "SYN-L01-Q01", None, "SYN-L01-Q01", None]
+    # a value that has the form of an id is still named, so a wrong id can be found
+    loaded = read(settings, document([item(pages=[2], criteria=["SYN-L01-Q01.C09", "SYN-L01-Q01.C01"]), item(pages=[3], question_id="SYN-L09-Q99"), item(pages=[6], lecture_id="lecture-77")]))
+    assert [(r["reason"], r["question_id"], r["detail"]) for r in loaded["refused"]["items"]] == [
+        ("unknown_criterion", "SYN-L01-Q01", "1 of 2 listed ids are not criteria of the question: SYN-L01-Q01.C09"), ("unknown_question", "SYN-L09-Q99", ""), ("unknown_lecture", "SYN-L01-Q01", "lecture-77")]
+
+
+def test_the_same_pages_on_two_decks_with_equal_bytes_are_two_links_that_share_one_identity(settings):
+    """The identity of a suggestion is the question, its version, the deck bytes and the pages; two files with the same bytes are two places."""
+    same = {"deck_sha256_of": lambda deck_item: DECK_SHA if deck_item["source_id"] in {"src-l01-slides", "src-l01-alt"} else SHAS.get(deck_item["source_id"])}
+    sid = ia.suggestion_id("SYN-L01-Q01", 2, DECK_SHA, [4, 5])
+    loaded = read(settings, document([item(), item(source_id="src-l01-alt")]), **same)
+    assert [(i["source_id"], i["suggestion_id"]) for i in loaded["items"]] == [("src-l01-slides", sid), ("src-l01-alt", sid)] and loaded["refused"]["counts"] == {}
+    # two different claims about the same pages of the SAME deck are still not chosen between
+    loaded = read(settings, document([item(), item(source_id="src-l01-alt"), item(source_id="src-l01-alt", coverage="main")]), **same)
+    assert [i["source_id"] for i in loaded["items"]] == ["src-l01-slides"] and loaded["refused"]["counts"] == {"conflicting_duplicate": 2}
+
+
+def test_strict_store_refuses_a_document_made_for_another_question_index_and_keeps_the_current_file(settings):
+    ia.store(settings, COURSE, document([item()]), **context())
+    path = settings.state_dir / "inferred-anchors" / f"{COURSE}.json"
+    before = path.read_bytes()
+    older = document([item(), item(pages=[9])], question_index_sha256="9" * 64, produced_at="2026-10-06T10:00:00Z")
+    with pytest.raises(ia.InferredAnchorError) as refused:
+        ia.store(settings, COURSE, older, **context())
+    assert refused.value.code == "made_for_earlier_catalog"
+    with pytest.raises(ia.InferredAnchorError) as unchecked:  # no readable catalog: nothing could be checked, so nothing replaces the current file
+        ia.store(settings, COURSE, document([item(), item(pages=[9])], produced_at="2026-10-06T10:00:00Z"), **context(index=None))
+    assert unchecked.value.code == "catalog_unavailable"
+    assert path.read_bytes() == before and not (settings.state_dir / "inferred-anchors" / "history").exists()
+    # written on purpose it reads as what it is: every item stale, none a link
+    loose = ia.store(settings, COURSE, older, strict=False, **context())
+    assert (loose["status"], loose["file_state"], loose["accepted"], loose["stale"]) == ("stored", "made_for_earlier_catalog", 0, 2)
+
+
+def test_store_says_whether_the_guidance_was_compared(settings):
+    assert ia.store(settings, COURSE, document([item()]), **context())["guidance_check"] == "guidance_and_criteria"
+    assert ia.store(settings, COURSE, document([item(pages=[9])]), **context(guidance_text_of=None))["guidance_check"] == "criteria_only"
+    without = context()
+    del without["guidance_text_of"]  # a caller that hands over the catalog and says nothing about guidance: only the rubric wording was compared, and the result says so
+    assert ia.store(settings, COURSE, document([item(pages=[11])]), **without)["guidance_check"] == "criteria_only"
+
+
 # ---- readback ---------------------------------------------------------------------------------------------
+def test_an_unconfirmed_no_candidate_record_does_not_count_a_question_as_inspected(settings):
+    """D77: "examined, no page found" reads as inspected only once the verifying pass confirmed it."""
+    records = [{"question_id": "SYN-PS01-Q01", "question_version": 1, "why": "Nothing found on any page.", "verifier": None},
+               {"question_id": "SYN-L01-Q02", "question_version": 1, "why": "Nothing found on any page.", "verifier": {"confirmed": False, "note": "Not looked at yet."}}]
+    loaded = read(settings, document([], no_candidate=records))
+    assert [r["verifier"]["confirmed"] for r in loaded["no_candidate"]] == [False, False]
+    rows = {r["collection"]: r for r in ia.readback(loaded, index=make_index())["by_collection"]}
+    assert (rows["PS01"]["questions_inspected_no_support"], rows["PS01"]["questions_without_suggestion"]) == (0, 1)
+    assert (rows["L01"]["questions_inspected_no_support"], rows["L01"]["questions_without_suggestion"]) == (0, 2)
+    records[0]["verifier"] = {"confirmed": True, "note": None}
+    rows = {r["collection"]: r for r in ia.readback(read(settings, document([], no_candidate=records)), index=make_index())["by_collection"]}
+    assert (rows["PS01"]["questions_inspected_no_support"], rows["PS01"]["questions_without_suggestion"]) == (1, 0) and rows["L01"]["questions_inspected_no_support"] == 0
+
+
 def test_the_readback_counts_what_was_accepted_refused_stale_and_rejected_per_collection(settings):
     doc = document([
         item(),                                                                                                             # accepted
@@ -664,3 +887,45 @@ def test_a_decision_made_before_the_suggestions_were_regenerated_can_still_be_cl
     assert [d["suggestion_id"] for d in back["decisions"]["orphaned"]] == [sid]
     assert client.post(f"/api/courses/be505/suggestions/{sid}/decision", json={"decision": "confirmed"}).status_code == 404  # it is no longer a suggestion
     assert client.post(f"/api/courses/be505/suggestions/{sid}/decision", json={"decision": "cleared"}).json()["revision"] == 2
+
+
+def test_the_decision_route_refuses_an_expected_revision_that_is_not_a_whole_number_and_reports_a_lost_race(fixture_app):
+    real, runtime, client = fixture_app
+    ia.store(real, "be505", _fixture_document(real, runtime), strict=False)
+    sid = ia.load(real, "be505", **ia.course_context(real, "be505"))["items"][0]["suggestion_id"]
+    url = f"/api/courses/be505/suggestions/{sid}/decision"
+    for malformed in ("0", True, 0.5, [0], {"revision": 0}):
+        assert client.post(url, json={"decision": "confirmed", "expected_revision": malformed}).status_code == 400, malformed
+    assert ia.decisions(real, "be505") == {}  # a body that was refused decided nothing
+    assert client.post(url, json={"decision": "confirmed", "expected_revision": 0}).json()["revision"] == 1
+    assert client.post(url, json={"decision": "rejected", "expected_revision": 0}).status_code == 409  # the page that sent this had not seen revision 1
+    assert client.post(url, json={"decision": "rejected", "expected_revision": 1}).json()["revision"] == 2
+
+
+def test_a_confirmation_the_checking_pass_later_contradicted_can_still_be_changed_and_a_rejected_item_cannot_be_confirmed_anew(fixture_app):
+    """An item the checking pass rejected is on screen only while the learner's own confirmation of it stands (R2-Q5)."""
+    real, runtime, client = fixture_app
+    doc = _fixture_document(real, runtime)
+    doc["items"] = doc["items"][:2]
+    ia.store(real, "be505", doc)
+    kept, never = (ia.suggestion_id(i["question_id"], 1, i["source_sha256"], i["pages"]) for i in doc["items"])
+
+    def post(sid: str, decision: str):
+        return client.post(f"/api/courses/be505/suggestions/{sid}/decision", json={"decision": decision})
+
+    assert post(kept, "confirmed").status_code == 200
+    later = copy.deepcopy(doc)
+    later["produced_at"] = "2026-10-06T09:00:00Z"
+    for entry in later["items"]:
+        entry.update(state="agent_reviewed", verifier={"verdict": "rejected", "note": "Synthetic note: the pages share words only."})
+    ia.store(real, "be505", later)
+    back = client.get("/api/courses/be505/inferred-anchors").json()
+    assert back["accepted"] == 0 and back["rejected_by_verifier"] == 2 and [d["suggestion_id"] for d in back["decisions"]["on_rejected_by_verifier"]] == [kept]
+    # rejected by the checking pass and never confirmed: it is not on screen, so there is nothing to decide about
+    assert post(never, "confirmed").status_code == 404 and post(never, "rejected").status_code == 404
+    # confirmed earlier: the learner's link is still there, so the learner can say it again, or reject it; once rejected only taking the decision back remains
+    assert post(kept, "confirmed").json()["status"] == "unchanged"
+    changed = post(kept, "rejected")
+    assert changed.status_code == 200 and (changed.json()["decision"], changed.json()["revision"]) == ("rejected", 2)
+    assert post(kept, "confirmed").status_code == 404
+    assert post(kept, "cleared").json()["revision"] == 3

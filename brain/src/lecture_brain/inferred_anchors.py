@@ -4,11 +4,17 @@ One private file per course, ``<state_dir>/inferred-anchors/<course_id>.json``, 
 pages of a lecture deck. This module is its only reader and writer:
 
 * :func:`load` reads the file against the CURRENT catalog, inventory and deck bytes and sorts every entry into exactly
-  one of four lists — accepted, rejected by the verifying pass (kept for audit, never a link), stale (made for another
-  question version, other deck bytes or an earlier catalog) or refused (with the reason). Nothing is repaired, clipped
-  or guessed: an entry is used as written or not at all.
+  one of four lists — accepted, rejected by the verifying pass (kept for audit; whether the learner's own confirmation
+  keeps it on screen is decided where ties are made, ``question_ties.enrich``), stale (made for another question
+  version, other deck bytes or an earlier catalog; all of it when no catalog could be read) or refused (with the
+  reason). Nothing is repaired, clipped or guessed: an entry is used as written or not at all. A refusal names the
+  rule and repeats what was written where an id belongs only when it has the form of an id.
+* An item may say what each of its pages supports (``per_page: [{page, supports}]``, optional): pages of the item and
+  criterion ids among the item's criteria, nothing else. It is what lets a page that carries one criterion of three
+  say so (r2-read-api.md 1.4).
 * :func:`store` checks a document with the same rules and replaces the file atomically, keeping the previous bytes as
-  a numbered history copy. It never writes outside ``settings.state_dir``.
+  a numbered history copy. By default it refuses a document holding a refused entry and a document that was not made
+  against the current question index. It never writes outside ``settings.state_dir``.
 * The learner's own accept / reject / clear is NOT a value of that file. Each decision is one immutable record per
   revision under ``<state_dir>/inferred-anchors/decisions/<course_id>/``; a second, different record with the same
   revision is refused (never last-write-wins). Decisions are keyed by a suggestion id derived from the question, its
@@ -24,6 +30,7 @@ import json
 from pathlib import Path
 import re
 from typing import Any, Callable
+import unicodedata
 
 from fastapi import HTTPException, Request
 
@@ -40,10 +47,11 @@ STATES = ("agent_inferred", "agent_reviewed")
 VERDICTS = ("upheld", "narrowed", "rejected")
 DECISIONS = ("confirmed", "rejected", "cleared")
 FILE_FIELDS = ("contract", "course_id", "produced_at", "producer", "question_index_sha256", "items", "no_candidate")
-ITEM_FIELDS = ("question_id", "question_version", "lecture_id", "source_id", "source_sha256", "pages", "regions", "criteria", "coverage", "rationale", "state", "verifier")
+ITEM_FIELDS = ("question_id", "question_version", "lecture_id", "source_id", "source_sha256", "pages", "regions", "criteria", "per_page", "coverage", "rationale", "state", "verifier")
+PER_PAGE_FIELDS = ("page", "supports")  # optional per item: which of ITS criteria each of ITS pages supports (ids only; r2-read-api.md 1.4)
 NO_CANDIDATE_FIELDS = ("question_id", "question_version", "why", "verifier")
 SNAPSHOT_FIELDS = ("question_id", "question_version", "lecture_id", "source_id", "source_sha256", "pages")
-_REQUIRED = tuple(f for f in ITEM_FIELDS if f not in {"regions", "verifier"})  # the two nullable fields may be left out
+_REQUIRED = tuple(f for f in ITEM_FIELDS if f not in {"regions", "verifier", "per_page"})  # the nullable fields may be left out
 REPRODUCTION_RUN = 8       # this many consecutive words of protected text inside a rationale is a reproduction, not shared vocabulary
 REPRODUCTION_SHORTEST = 5  # protected text shorter than this cannot be told from ordinary wording and is not checked
 MAX_REFUSED_DETAIL = 200
@@ -52,6 +60,7 @@ _SAFE_COURSE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 _SUGGESTION_ID = re.compile(r"^ia-[0-9a-f]{16}$")
 _DECISION_FILE = re.compile(r"^(?P<id>ia-[0-9a-f]{16})\.r(?P<rev>[1-9]\d{0,5})\.json$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$")  # the form of an id: one token, no spaces — a sentence written where an id belongs never has it
 _WORD = re.compile(r"[^\W_]+")
 _PAGE_COUNTS: dict[tuple[str, int, int], int | None] = {}
 _HASHES: dict[str, str] = {}  # path|size|mtime -> sha256 of deck bytes, for the life of the process
@@ -102,7 +111,15 @@ def suggestion_id(question_id: str, question_version: Any, source_sha256: str, p
 
 # ---- small checks -------------------------------------------------------------------------------------------
 def _tokens(text: str) -> list[str]:
-    return _WORD.findall(text.casefold())
+    """Words as a reader sees them: compatibility forms folded (full-width letters, ligatures) and invisible format
+    characters (soft hyphen, zero-width space and joiners) removed, so a disguised copy compares equal to the plain one."""
+    folded = unicodedata.normalize("NFKC", text)
+    return _WORD.findall("".join(ch for ch in folded if unicodedata.category(ch) != "Cf").casefold())
+
+
+def _id_or(value: Any, otherwise: Any = None) -> Any:
+    """``value`` when it has the form of an id, else ``otherwise``: what a producer wrote where an id belongs is repeated only then."""
+    return value if isinstance(value, str) and _ID.fullmatch(value) else otherwise
 
 
 def reproduces(text: str, protected: str) -> bool:
@@ -299,20 +316,24 @@ class _Reader:
         if raw["state"] == "agent_inferred" and verdict is not None:
             raise _Refuse("verdict_without_review")
         regions = self._regions(raw.get("regions"), pages)
+        per_page = self._per_page(raw.get("per_page"), pages, criteria)
 
+        entry = {"suggestion_id": suggestion_id(raw["question_id"], raw["question_version"], raw["source_sha256"], pages),
+                 "question_id": raw["question_id"], "question_version": raw["question_version"], "lecture_id": raw["lecture_id"], "source_id": raw["source_id"],
+                 "source_sha256": raw["source_sha256"], "pages": sorted(pages), "regions": regions, "criteria": list(criteria), "per_page": per_page, "coverage": raw["coverage"],
+                 "rationale": raw["rationale"], "state": raw["state"], "verifier": {"verdict": verdict, "note": note}}
+        if self.index is None:  # no catalog was read: nothing below can be compared, and nothing is called unknown or made for an earlier catalog
+            return "stale", entry, "catalog_unavailable"
+        # A refusal names what was written where an id belongs only when it has the form of an id (never a sentence).
         question = self.questions.get(raw["question_id"])
         if question is None:
             raise _Refuse("unknown_question")
         if raw["lecture_id"] not in self.decks:
-            raise _Refuse("unknown_lecture", raw["lecture_id"])
+            raise _Refuse("unknown_lecture", _id_or(raw["lecture_id"], ""))
         deck = self.decks[raw["lecture_id"]].get(raw["source_id"])
         if deck is None:
-            raise _Refuse("source_not_a_deck_of_lecture", f"{raw['source_id']} is not a deck of {raw['lecture_id']}")
-
-        entry = {"suggestion_id": suggestion_id(raw["question_id"], raw["question_version"], raw["source_sha256"], pages),
-                 "question_id": raw["question_id"], "question_version": raw["question_version"], "lecture_id": raw["lecture_id"], "source_id": raw["source_id"],
-                 "source_sha256": raw["source_sha256"], "pages": sorted(pages), "regions": regions, "criteria": list(criteria), "coverage": raw["coverage"], "rationale": raw["rationale"],
-                 "state": raw["state"], "verifier": {"verdict": verdict, "note": note}}
+            named = _id_or(raw["source_id"])
+            raise _Refuse("source_not_a_deck_of_lecture", f"{named} is not a deck of {raw['lecture_id']}" if named and _id_or(raw["lecture_id"]) else "the named source is not a deck of the named lecture")
         # Stale comes before the rules that belong to the current version: criteria of another version and pages of other bytes cannot be checked today.
         if earlier_catalog:
             return "stale", entry, "earlier_catalog"
@@ -327,7 +348,8 @@ class _Reader:
         catalogued = [k.get("criterion_id") for k in question.get("criteria") or []]
         unknown = [k for k in criteria if k not in catalogued]
         if unknown:
-            raise _Refuse("unknown_criterion", ", ".join(unknown[:5]))
+            named = [k for k in unknown if _id_or(k)][:5]
+            raise _Refuse("unknown_criterion", f"{len(unknown)} of {len(criteria)} listed ids are not criteria of the question" + (": " + ", ".join(named) if named else ""))
         if catalogued and not criteria:
             raise _Refuse("no_criteria", f"the question has {len(catalogued)} catalogued criteria and the item names none")
         count = self._deck_pages(deck)
@@ -350,10 +372,32 @@ class _Reader:
             box = region.get("box") if isinstance(region, dict) else None
             if (not isinstance(region, dict) or region.get("page") not in pages or not _whole(region.get("page")) or not isinstance(box, list) or len(box) != 4
                     or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= 1 for v in box) or not (box[0] < box[2] and box[1] < box[3])
-                    or not (region.get("region_id") is None or _text(region.get("region_id")))):
-                raise _Refuse("invalid_regions", "a region is {page, box [x0, y0, x1, y1]} inside one of the named pages, in fractions of the page")
+                    or not (region.get("region_id") is None or _id_or(region.get("region_id")))):  # a region id is an id, never a description: it reaches the row as written
+                raise _Refuse("invalid_regions", "a region is {page, box [x0, y0, x1, y1], optional region_id} inside one of the named pages, in fractions of the page")
             out.append({"page": region["page"], "box": list(box), **({"region_id": region["region_id"]} if region.get("region_id") else {})})
         return out
+
+    @staticmethod
+    def _per_page(per_page: Any, pages: list[int], criteria: list[str]) -> list[dict] | None:
+        """``[{page, supports}]`` by page, or ``None`` when the producer said nothing page by page.
+
+        Each entry names one page of THIS item and criterion ids among THIS item's criteria; a page appears once. A page
+        may support nothing and a page may be left out (nothing is then known about it). Anything else refuses the item:
+        the list is never clipped to what fits. The refusal names the rule and never repeats what was written.
+        """
+        if per_page is None:
+            return None
+        if not isinstance(per_page, list) or not per_page:
+            raise _Refuse("invalid_per_page", "per_page is null or a non-empty list")
+        seen: dict[int, list[str]] = {}
+        for entry in per_page:
+            page, supports = (entry.get("page"), entry.get("supports")) if isinstance(entry, dict) else (None, None)
+            if not _whole(page) or page not in pages or page in seen:
+                raise _Refuse("invalid_per_page", "an entry is {page, supports} for one page of the item, each page once")
+            if not isinstance(supports, list) or any(not isinstance(k, str) or k not in criteria for k in supports) or len(set(supports)) != len(supports):
+                raise _Refuse("invalid_per_page", "supports is a list of distinct criterion ids among the criteria the item lists")
+            seen[page] = [k for k in criteria if k in supports]
+        return [{"page": page, "supports": seen[page]} for page in sorted(seen)]
 
     # ---- one "examined, no page found" record (D77) ---------------------------------------------------------
     def no_candidate(self, raw: Any, earlier_catalog: bool) -> tuple[str, dict, str | None]:
@@ -376,10 +420,12 @@ class _Reader:
             raise _Refuse("outside_vocabulary", "verifier.confirmed")
         if note is not None and not isinstance(note, str):
             raise _Refuse("invalid_field", "verifier.note")
+        entry = {"question_id": raw["question_id"], "question_version": raw["question_version"], "why": raw["why"], "verifier": {"confirmed": confirmed, "note": note}}
+        if self.index is None:
+            return "stale", entry, "catalog_unavailable"
         question = self.questions.get(raw["question_id"])
         if question is None:
             raise _Refuse("unknown_question")
-        entry = {"question_id": raw["question_id"], "question_version": raw["question_version"], "why": raw["why"], "verifier": {"confirmed": confirmed, "note": note}}
         if earlier_catalog:
             return "stale", entry, "earlier_catalog"
         if question.get("version") is not None and str(raw["question_version"]) != str(question["version"]):
@@ -405,11 +451,11 @@ def _empty(course_id: str) -> dict[str, Any]:
     return {"contract": CONTRACT, "reader": READER_VERSION, "course_id": course_id,
             "file": {"state": "missing", "produced_at": None, "sha256": None, "question_index_matches": None, "producer": None, "reason": None},
             "items": [], "rejected_by_verifier": [], "stale": [], "refused": {"counts": {}, "items": []}, "no_candidate": [], "stale_no_candidate": [], "by_question": {},
-            "unknown_fields": {"file": [], "items": [], "no_candidate": []}, "duplicates_collapsed": 0, "guidance_check": "not_run"}
+            "unknown_fields": {"file": [], "items": [], "no_candidate": [], "per_page": []}, "duplicates_collapsed": 0, "guidance_check": "not_run"}
 
 
 def _classify(raw: Any, course_id: str, reader: _Reader) -> dict[str, Any]:
-    """Sort every entry of a parsed document. ``file.state`` is ``ok``, ``unreadable`` or ``made_for_earlier_catalog`` (sha256 is filled in by the caller)."""
+    """Sort every entry of a parsed document. ``file.state`` is ``ok``, ``unreadable``, ``made_for_earlier_catalog`` or ``catalog_unavailable`` (sha256 is filled in by the caller)."""
     out = _empty(course_id)
     problem = _header_problem(raw, course_id)
     refused: list[dict] = []
@@ -419,21 +465,27 @@ def _classify(raw: Any, course_id: str, reader: _Reader) -> dict[str, Any]:
             refused = [{"list": name, "index": n, "question_id": None, "reason": "course_mismatch", "detail": ""} for name in ("items", "no_candidate") for n, _ in enumerate(raw.get(name) or [])]
             out["refused"] = {"counts": dict(Counter(r["reason"] for r in refused)), "items": refused[:MAX_REFUSED_DETAIL]}
         return out
-    matches = reader.index is not None and raw["question_index_sha256"] == reader.index.get("sha256")
-    out["file"].update(state="ok" if matches else "made_for_earlier_catalog", produced_at=raw["produced_at"], producer=raw["producer"], question_index_matches=matches)
+    # Without a readable question index the comparison was not made: the file is not called older than a catalog nobody read.
+    matches = None if reader.index is None else raw["question_index_sha256"] == reader.index.get("sha256")
+    out["file"].update(state="catalog_unavailable" if matches is None else "ok" if matches else "made_for_earlier_catalog", produced_at=raw["produced_at"], producer=raw["producer"],
+                       question_index_matches=matches)
     out["guidance_check"] = "guidance_and_criteria" if reader.guidance_text_of is not None else "criteria_only"
     out["unknown_fields"] = {"file": sorted(set(raw) - set(FILE_FIELDS)), "items": sorted({k for i in raw["items"] if isinstance(i, dict) for k in i} - set(ITEM_FIELDS)),
-                             "no_candidate": sorted({k for i in raw.get("no_candidate") or [] if isinstance(i, dict) for k in i} - set(NO_CANDIDATE_FIELDS))}
+                             "no_candidate": sorted({k for i in raw.get("no_candidate") or [] if isinstance(i, dict) for k in i} - set(NO_CANDIDATE_FIELDS)),
+                             "per_page": sorted({k for i in raw["items"] if isinstance(i, dict) and isinstance(i.get("per_page"), list) for e in i["per_page"] if isinstance(e, dict) for k in e
+                                                 if isinstance(k, str)} - set(PER_PAGE_FIELDS))}
 
     def refuse(name: str, n: int, entry: Any, reason: str, detail: str = "") -> None:
-        question_id = entry.get("question_id") if isinstance(entry, dict) and isinstance(entry.get("question_id"), str) else None
+        written = entry.get("question_id") if isinstance(entry, dict) and isinstance(entry.get("question_id"), str) else None
+        question_id = written if written in reader.questions else _id_or(written)  # a sentence written in place of the id is not repeated
         refused.append({"list": name, "index": n, "question_id": question_id, "reason": reason, "detail": detail})
 
-    live: dict[str, list[tuple[int, str, dict]]] = {}  # suggestion id -> the accepted/rejected entries that carry it
+    # The same pages of the same bytes in two files of a unit are two places with one identity: a claim is compared with claims about the same file only.
+    live: dict[tuple, list[tuple[int, str, dict]]] = {}  # (suggestion id, lecture, deck) -> the accepted/rejected entries that carry it
     seen_stale: set[str] = set()
     for n, entry in enumerate(raw["items"]):
         try:
-            kind, item, why = reader.item(entry, not matches)
+            kind, item, why = reader.item(entry, matches is False)
         except _Refuse as exc:
             refuse("items", n, entry, exc.reason, exc.detail)
             continue
@@ -445,7 +497,7 @@ def _classify(raw: Any, course_id: str, reader: _Reader) -> dict[str, Any]:
                 seen_stale.add(key)
                 out["stale"].append(dict(item, stale_reason=why))
         else:
-            live.setdefault(item["suggestion_id"], []).append((n, kind, item))
+            live.setdefault((item["suggestion_id"], item["lecture_id"], item["source_id"]), []).append((n, kind, item))
     for group in sorted(live.values(), key=lambda g: g[0][0]):
         if any((kind, item) != (group[0][1], group[0][2]) for _, kind, item in group[1:]):
             for n, _, item in group:  # two different claims about the same pages of one question: neither is chosen
@@ -457,7 +509,7 @@ def _classify(raw: Any, course_id: str, reader: _Reader) -> dict[str, Any]:
     records: dict[str, list[tuple[int, dict]]] = {}
     for n, entry in enumerate(raw.get("no_candidate") or []):
         try:
-            kind, record, why = reader.no_candidate(entry, not matches)
+            kind, record, why = reader.no_candidate(entry, matches is False)
         except _Refuse as exc:
             refuse("no_candidate", n, entry, exc.reason, exc.detail)
             continue
@@ -515,7 +567,7 @@ def load(settings: Settings, course_id: str, *, index: dict | None, inventory: d
         return out
     try:
         raw = _parse(data)
-    except c.ContractError:
+    except (ValueError, RecursionError):  # not the contract's JSON, a number too long to read, or nesting too deep: an answer, never a crash
         out = _empty(course_id)
         out["file"].update(state="unreadable", reason="too_large" if len(data) > c.MAX_JSON_BYTES else "not_json", sha256=c.sha256_hex(data))
         return out
@@ -534,9 +586,12 @@ def store(settings: Settings, course_id: str, document: Any, *, strict: bool = T
     """Check ``document`` with the reader's rules and make it the course's suggestions file.
 
     A document the reader could not use as a whole is refused. With ``strict`` (the default) a document holding even
-    one entry the reader would refuse is refused too, and nothing is written. Only the contract's fields are written;
-    fields the producer added are named in the result. The previous file is kept as ``history/<course>.<NNNN>.json``.
-    Without the keyword context the catalog, inventory, deck bytes and guidance are read from the course (read-only).
+    one entry the reader would refuse is refused too, and so is a document that was not made against the current
+    question index (``made_for_earlier_catalog``) or could not be compared with one (``catalog_unavailable``): it would
+    replace current links by none. Nothing is written then. Only the contract's fields are written; fields the producer
+    added are named in the result (``dropped_fields``), and the result says whether the guidance was compared
+    (``guidance_check``). The previous file is kept as ``history/<course>.<NNNN>.json``. Without the keyword context the
+    catalog, inventory, deck bytes and guidance are read from the course (read-only).
     """
     path = anchors_path(settings, course_id)
     if index is _UNSET or inventory is None or deck_sha256_of is None:
@@ -552,9 +607,16 @@ def store(settings: Settings, course_id: str, document: Any, *, strict: bool = T
         raise InferredAnchorError(checked["file"]["reason"], "the document is not a suggestions file of this course", checked["refused"])
     if strict and checked["refused"]["counts"]:
         raise InferredAnchorError("refused_items", "the reader would refuse entries of this document; nothing was written", checked["refused"])
+    if strict and checked["file"]["state"] != "ok":  # made for another question index, or no index could be read: none of it could be a current link
+        raise InferredAnchorError(checked["file"]["state"], "the document was not checked against the course's current question index, so it replaces nothing; nothing was written")
 
     def pure(entry: Any, fields: tuple[str, ...]) -> Any:
-        return {k: entry[k] for k in fields if k in entry} if isinstance(entry, dict) else entry
+        if not isinstance(entry, dict):
+            return entry
+        kept = {k: entry[k] for k in fields if k in entry}
+        if isinstance(kept.get("per_page"), list):  # page and criterion ids only: a producer's note about a page is not part of the contract
+            kept["per_page"] = [pure(e, PER_PAGE_FIELDS) for e in kept["per_page"]]
+        return kept
 
     clean = {k: document[k] for k in FILE_FIELDS if k in document and k not in {"items", "no_candidate"}}
     clean["items"] = [pure(i, ITEM_FIELDS) for i in document["items"]]
@@ -565,7 +627,8 @@ def store(settings: Settings, course_id: str, document: Any, *, strict: bool = T
         raise InferredAnchorError("too_large", "the document is larger than the reader accepts; nothing was written")
     result = {"path": path.relative_to(settings.state_dir).as_posix(), "sha256": c.sha256_hex(data), "history": None, "file_state": checked["file"]["state"],
               "accepted": len(checked["items"]), "rejected_by_verifier": len(checked["rejected_by_verifier"]), "stale": len(checked["stale"]), "no_candidate": len(checked["no_candidate"]),
-              "refused": checked["refused"]["counts"], "dropped_fields": checked["unknown_fields"], "duplicates_collapsed": checked["duplicates_collapsed"]}
+              "refused": checked["refused"]["counts"], "dropped_fields": checked["unknown_fields"], "duplicates_collapsed": checked["duplicates_collapsed"],
+              "guidance_check": checked["guidance_check"]}
     previous = path.read_bytes() if path.is_file() else None
     if previous == data:
         return dict(result, status="unchanged")
@@ -643,7 +706,7 @@ def decision_state(settings: Settings, course_id: str) -> dict[str, Any]:
         try:
             record = c.parse_json(data)
             errors = _decision_errors(record, course_id)
-        except c.ContractError:
+        except (ValueError, RecursionError):  # as for the suggestions file: one file that cannot be parsed is one reported problem
             record, errors = None, ["not JSON"]
         if errors or record["suggestion_id"] != sid or record["revision"] != revision:
             problems.append({"code": "invalid_decision_file", "suggestion_id": sid, "revision": revision, "file": path.name})
@@ -821,7 +884,12 @@ def register(app: Any, runtime: Any, locked: Callable[[Callable[[], Any]], Any])
         def apply() -> dict:
             suggestion = None
             if decision != "cleared":  # only a suggestion that is a current link can be accepted or rejected; clearing an older decision always works
-                suggestion = next((i for i in current(course_id)[1]["items"] if i["suggestion_id"] == suggestion_id), None)
+                document = current(course_id)[1]
+                suggestion = next((i for i in document["items"] if i["suggestion_id"] == suggestion_id), None)
+                if suggestion is None:  # an item the checking pass rejected stays a link only while the learner's confirmation of it stands: that one can be changed
+                    kept = next((i for i in document["rejected_by_verifier"] if i["suggestion_id"] == suggestion_id), None)
+                    head = decision_state(settings, course_id)["current"].get(suggestion_id) if kept is not None else None
+                    suggestion = kept if head is not None and head["decision"] == "confirmed" else None
                 if suggestion is None:
                     raise HTTPException(404, "Unknown suggestion: it is not among the current suggested links of this course.")
             try:

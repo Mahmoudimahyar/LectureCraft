@@ -84,6 +84,8 @@ class OutlineModel:
     def _in_scope(self, scope: dict) -> tuple[set[str] | None, set[str] | None, set[str] | None]:
         if scope["question_ids"] is None:
             return None, None, None
+        if "concept_ids" in scope and "skill_ids" in scope:  # R2: a scope resolved by ``concept_graph.resolve_scope`` states its filter; nothing is derived again
+            return scope["question_ids"], scope["concept_ids"], scope["skill_ids"]
         questions = scope["question_ids"]
         criteria = [c for q in questions for c in self.questions[q].get("criteria") or []]
         return questions, {c["concept_id"] for c in criteria if c.get("concept_id")}, {c["skill_id"] for c in criteria if c.get("skill_id")}
@@ -91,6 +93,7 @@ class OutlineModel:
     def children(self, node_id: str | None, scope: dict) -> list[tuple[str, str]]:
         """(child id, relation) of one node in the hierarchy subset, in a stable order. Cross-links are not children."""
         questions, concepts, skills = self._in_scope(scope)
+        criteria = scope.get("criterion_ids")  # R2: set only by a resolved slide scope whose support names single criteria; ``None`` leaves every criterion in
         if node_id is None:
             topics = [t for t in self.topics if concepts is None or any(t in self.concepts[c].get("topic_ids", []) for c in concepts if c in self.concepts)
                       or any(t in self.skills[s].get("topic_ids", []) for s in (skills or ()) if s in self.skills and self.skills[s].get("concept_id") not in self.concepts)]
@@ -104,9 +107,9 @@ class OutlineModel:
             out = [(s, "concept_assessed_as_skill") for s, skill in self.skills.items() if skill.get("concept_id") == node_id and (skills is None or s in skills)]
         elif kind == "skill":
             out = [(q, "skill_assessed_by_question") for q, question in self.questions.items() if (questions is None or q in questions)
-                   and any(c.get("skill_id") == node_id for c in question.get("criteria") or [])]
+                   and any(c.get("skill_id") == node_id and (criteria is None or c["criterion_id"] in criteria) for c in question.get("criteria") or [])]
         elif kind == "question":
-            out = [(c["criterion_id"], "question_has_criterion") for c in self.questions[node_id].get("criteria") or []]
+            out = [(c["criterion_id"], "question_has_criterion") for c in self.questions[node_id].get("criteria") or [] if criteria is None or c["criterion_id"] in criteria]
         else:
             out = []
         return sorted(out, key=lambda pair: (_ORDER[self.kind_of(pair[0]) or "criterion"], self.label_of(pair[0]).lower() if self.kind_of(pair[0]) != "criterion" else "", pair[0]))

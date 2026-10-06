@@ -169,3 +169,26 @@ def test_a_suggested_session_link_reaches_the_lecture_view_with_its_evidence(set
     assert view["session_link"] == "suggested_by_file_name"
     assert view["session_link_evidence"]["state"] == "suggested" and view["session_link_evidence"]["session_id"] == "2026-09-03"
     assert view["recordings"] or view["transcripts"], "the offered session's files are shown with the unit"
+
+
+def test_one_api_request_lists_each_course_folder_once(client, settings, monkeypatch):
+    """Listing a course folder is the slowest thing a view does on a synced drive; a request must not repeat it."""
+    from lecture_brain.ownerio import inventory
+
+    calls: list[str] = []
+    real = inventory._build_inventory
+
+    def counted(binding):
+        calls.append(binding.course_id)
+        return real(binding)
+
+    monkeypatch.setattr(inventory, "_build_inventory", counted)
+    for path in (f"/api/courses/{COURSE}", f"/api/courses/{COURSE}/lectures/lecture-01", f"/api/courses/{COURSE}/timing", f"/api/courses/{COURSE}/outline",
+                 f"/api/courses/{COURSE}/concept-graph", "/api/workspace", "/api/coverage"):
+        calls.clear()
+        assert client.get(path).status_code == 200
+        counts = {course_id: calls.count(course_id) for course_id in set(calls)}
+        assert counts and max(counts.values()) == 1, (path, counts)
+    calls.clear()
+    assert client.get(f"/api/courses/{COURSE}/lectures/lecture-01").status_code == 200
+    assert calls.count(COURSE) == 1, "nothing is remembered between requests: the next request lists the folder again"

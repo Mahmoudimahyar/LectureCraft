@@ -1376,3 +1376,20 @@ def test_a_page_cut_free_by_a_learner_and_by_an_agent_is_only_agent_reviewed_as_
     assert tl._grouping_state(slide, {1: learner, 2: learner}) == "human_confirmed"
     assert tl._grouping_state(slide, {1: learner, 2: {"author": None}}) == "generated"
     assert tl._grouping_state(dict(slide, overrides=[]), {}) == "generated"
+
+
+def test_the_course_readback_can_leave_out_the_transcription_queue_and_then_never_asks_the_runner(local, journal, tmp_path, monkeypatch):
+    """Study only needs stages and ranges per lecture; the runner's queue readback walks every course and is asked for
+    only where it is shown (Settings)."""
+    import lecture_brain.speech as speech
+
+    def refuse(*_args, **_kwargs):
+        raise AssertionError("the transcription runner's readback was asked for although it was not wanted")
+
+    full = tl.status(local, "be505")
+    monkeypatch.setattr(speech, "status", refuse)
+    lean = tl.status(local, "be505", queue=False)
+    assert lean["allowance"] is None and lean["resume_command"] is None and lean["queue_included"] is False and full["queue_included"] is True
+    assert [row["lecture_id"] for row in lean["lectures"]] == [row["lecture_id"] for row in full["lectures"]]
+    assert all(recording["queue"] is None for lecture in lean["lectures"] for recording in lecture["recordings"])
+    assert [lecture["stage"] for lecture in lean["lectures"]] == [lecture["stage"] for lecture in full["lectures"]]

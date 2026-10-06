@@ -314,18 +314,46 @@ def artifact_for_bytes(data: bytes, relative: str, media_type: str) -> dict:
     return {"path": relative, "sha256": sha256_hex(data), "bytes": len(data), "media_type": media_type}
 
 
-def resolve_inside(root: Path, relative: str) -> Path:
-    """Resolve a declared relative path under a trusted root, refusing symlinks and escapes."""
+def resolve_inside(root: Path, relative: str, *, checked: dict | None = None) -> Path:
+    """Resolve a declared relative path under a trusted root, refusing symlinks and escapes.
+
+    ``checked`` is an optional memory for ONE listing of ONE root (pass the same dict for every file of that listing and
+    throw it away afterwards): the folders already found link-free and inside the root are not examined again, so a
+    folder's files cost one look each instead of one per path component. Every path gets the verdict it gets without
+    it: a parent that is a link or leads outside refuses all its files, and a plain file under checked parents resolves
+    to ``<parent>/<name>``, which is inside."""
     if not safe_relative(relative):
         raise ContractError("Unsafe portable relative artifact path")
+    if checked is None:
+        current = root
+        for part in relative.split("/"):
+            current = current / part
+            if current.is_symlink():
+                raise ContractError("Symlink in artifact path")
+        if not current.resolve().is_relative_to(root.resolve()):
+            raise ContractError("Path escapes trusted root")
+        return current
+    root_resolved = checked.get("")
+    if root_resolved is None:
+        root_resolved = checked[""] = root.resolve()
+    parts = relative.split("/")
     current = root
-    for part in relative.split("/"):
+    for part in parts[:-1]:
         current = current / part
-        if current.is_symlink():
+        verdict = checked.get(current)
+        if verdict is None:
+            verdict = checked[current] = "symlink" if current.is_symlink() else "inside" if current.resolve().is_relative_to(root_resolved) else "escape"
+        if verdict == "symlink":
             raise ContractError("Symlink in artifact path")
-    if not current.resolve().is_relative_to(root.resolve()):
+        if verdict == "escape":
+            raise ContractError("Path escapes trusted root")
+    leaf = current / parts[-1]
+    if leaf.is_symlink():
+        raise ContractError("Symlink in artifact path")
+    # A regular file is no link of its own; anything else (a folder, which may be a junction, or a missing name) is resolved.
+    if not leaf.is_file() and not leaf.resolve().is_relative_to(root_resolved):
         raise ContractError("Path escapes trusted root")
-    return current
+    return leaf
 
 
 def verify_files(root: Path, bundle: dict) -> list[str]:

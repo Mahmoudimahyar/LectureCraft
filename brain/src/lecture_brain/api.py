@@ -41,6 +41,7 @@ from .journal import JournalError
 from .native.fixture_tutor import MODES
 from .native.probe import probe_native
 from .ownerio.inventory import PROVISIONAL_NOTE, build_inventory, identity_status
+from .ownerio.inventory import request_memo as inventory_request_memo
 from .preparation import TOOL_VERSION as PREPARATION_TOOL_VERSION
 from .projections import Projector
 from .runtime import Runtime
@@ -113,7 +114,9 @@ def create_app(runtime: Runtime, *, extra_hosts: set[str] | None = None, static_
         return binding
 
     def locked(fn):
-        return runtime.with_lock(fn)
+        # One request lists each course folder once (it is the slowest step on a synced drive); nothing outlives the request.
+        with inventory_request_memo():
+            return runtime.with_lock(fn)
 
     # ---- views -----------------------------------------------------------------------------------
     @app.get("/api/workspace")

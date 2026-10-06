@@ -151,12 +151,12 @@ def _disclosure(kind: str | None, name: str | None) -> str:
     return "restricted_solution" if _SOLUTION.search(kind or "") or _SOLUTION.search(name or "") else "open"
 
 
-def _registered_item(root: Path, entry: dict) -> dict:
+def _registered_item(root: Path, entry: dict, checked: dict | None = None) -> dict:
     rel = entry["path"]
     current = entry["current"]
     size = None
     declared_name = Path(rel).name if rel else None
-    if rel is not None and not _path_in_course(root, rel):
+    if rel is not None and not _path_in_course(root, rel, checked):
         # The index is the owner's, but a path is only followed inside this course folder. It is reported, not read.
         rel, state = None, "registered_path_outside_course"
     elif rel is None:
@@ -183,10 +183,11 @@ def _registered_item(root: Path, entry: dict) -> dict:
     }
 
 
-def _path_in_course(root: Path, rel: Any) -> bool:
-    """True only for a portable relative path that stays inside the course folder without passing through a link."""
+def _path_in_course(root: Path, rel: Any, checked: dict | None = None) -> bool:
+    """True only for a portable relative path that stays inside the course folder without passing through a link.
+    ``checked`` is the memory of one listing (see ``resolve_inside``)."""
     try:
-        resolve_inside(root, rel)
+        resolve_inside(root, rel, checked=checked)
     except (ContractError, OSError):
         return False
     return True
@@ -302,6 +303,7 @@ def _build_inventory(binding: CourseBinding) -> dict[str, Any]:
     by_path = {e["path"]: e for e in entries.values() if e["path"]}
     used_ids: set[str] = set()
     count = 0
+    checked_folders: dict = {}  # folders found link-free and inside the course during THIS listing only
 
     def item_for(rel: str, guessed_kind: str) -> dict:
         nonlocal count
@@ -309,7 +311,7 @@ def _build_inventory(binding: CourseBinding) -> dict[str, Any]:
         entry = by_path.get(rel)
         if entry is not None:
             used_ids.add(entry["source_id"])
-            return _registered_item(root, entry)
+            return _registered_item(root, entry, checked_folders)
         return _disk_item(root, rel, guessed_kind)
 
     def files_in(directory: Path) -> list[Path]:
@@ -411,7 +413,7 @@ def _build_inventory(binding: CourseBinding) -> dict[str, Any]:
     # --- registered entries that are not files under the enumerated folders (placeholders etc.) --
     for entry in entries.values():
         if entry["source_id"] not in used_ids:
-            result["other_sources"].append(_registered_item(root, entry))
+            result["other_sources"].append(_registered_item(root, entry, checked_folders))
     return result
 
 

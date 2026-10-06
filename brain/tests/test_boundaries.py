@@ -13,6 +13,8 @@ import os
 import subprocess
 import sys
 
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -371,3 +373,44 @@ def test_an_unregistered_file_has_a_provisional_identity_that_never_enters_a_cou
         for attempt in (binding.root / "learning" / "attempts").glob("*/*.json"):
             text = attempt.read_text(encoding="utf-8")
             assert "unreg-" not in text and '"disk-' not in text, attempt
+
+
+def test_remembering_checked_folders_changes_no_verdict_about_a_path(tmp_path):
+    """Listing a course asks about hundreds of files of a few folders. Folders already found link-free and inside the
+    root may be remembered for ONE listing; every path must still get exactly the verdict it gets without that memory."""
+    root, outside = tmp_path / "course", tmp_path / "outside"
+    (root / "materials" / "lectures" / "lecture-01").mkdir(parents=True)
+    (root / "materials" / "lectures" / "lecture-01" / "deck.pdf").write_bytes(b"%PDF-synthetic")
+    (root / "materials" / "notes.txt").write_text("synthetic", encoding="utf-8")
+    outside.mkdir()
+    (outside / "secret.pdf").write_bytes(b"%PDF-outside")
+    linked_out = _link_directory(root / "materials" / "leaves-the-course", outside)
+    (root / "materials" / "inner-target").mkdir()
+    (root / "materials" / "inner-target" / "kept.pdf").write_bytes(b"%PDF-inner")
+    linked_in = _link_directory(root / "materials" / "stays-inside", root / "materials" / "inner-target")
+    paths = ["materials/lectures/lecture-01/deck.pdf", "materials/notes.txt", "materials/lectures/lecture-01/missing.pdf", "materials/lectures/lecture-01", "materials",
+             "materials/leaves-the-course/secret.pdf", "materials/leaves-the-course", "materials/stays-inside/kept.pdf", "materials/stays-inside", "../outside/secret.pdf",
+             "materials/../materials/notes.txt", "/abs/notes.txt", "materials//notes.txt"]
+    try:
+        (root / "materials" / "file-link.pdf").symlink_to(outside / "secret.pdf")
+        paths.append("materials/file-link.pdf")
+    except OSError:
+        pass  # creating a file symlink needs a privilege on Windows; the directory cases above run everywhere
+
+    def verdict(relative: str, **kwargs):
+        try:
+            return ("inside", c.resolve_inside(root, relative, **kwargs).relative_to(root).as_posix())
+        except c.ContractError as exc:
+            return ("refused", str(exc))
+
+    memory: dict = {}
+    for _round in range(2):  # the second round answers from memory where it can
+        for relative in paths:
+            assert verdict(relative, checked=memory) == verdict(relative), relative
+    assert verdict("materials/lectures/lecture-01/deck.pdf")[0] == "inside"
+    if linked_out:
+        assert verdict("materials/leaves-the-course/secret.pdf", checked=memory)[0] == "refused"
+    if linked_in:
+        assert verdict("materials/stays-inside/kept.pdf", checked=memory) == verdict("materials/stays-inside/kept.pdf")
+    # A folder that is replaced by a link AFTER it was remembered is the reason the memory lives for one listing only.
+    assert all(isinstance(key, (str, Path)) for key in memory)

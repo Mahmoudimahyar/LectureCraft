@@ -1320,13 +1320,15 @@ def _speech(settings: Settings, course_id: str) -> tuple[dict | None, str | None
     return (numbers if numbers["ceiling_seconds"] is not None and allowance.get("ledger") != "unreadable" else None), report.get("resume_command"), queue
 
 
-def status(settings: Settings, course_id: str, *, preparation: Preparation | None = None) -> dict[str, Any]:
+def status(settings: Settings, course_id: str, *, preparation: Preparation | None = None, queue: bool = True) -> dict[str, Any]:
     """For ``GET /api/courses/{course_id}/timing``: per lecture and recording the stage, what is covered and what is
     unresolved, where the association stands, the queue row of the speech runner, the allowance used and remaining and
     the command that resumes transcription. Measured values only; nothing is extrapolated."""
     ctx = _Course(settings, course_id, preparation)
     served = {row["source_id"]: row for row in ctx.derived.status(course_id)["recordings"]}
-    allowance, resume_command, queue = _speech(settings, course_id)
+    # The runner's readback walks every configured course; a caller that shows no queue (Study) leaves it out.
+    include_queue = queue
+    allowance, resume_command, queue_rows = _speech(settings, course_id) if include_queue else (None, None, {})
     lectures = []
     totals = Counter()
     stages = {stage: 0 for stage in LECTURE_STAGES}
@@ -1349,7 +1351,7 @@ def status(settings: Settings, course_id: str, *, preparation: Preparation | Non
         view = {"recordings": recordings, "sessions": lecture["sessions"], "slides": []}
         timing = _timing_block(view, links, generated, _associations(view, links, generated))
         for row in timing["recordings"]:
-            row["queue"] = queue.get(row["source_id"]) or {"state": "not_listed", "chunks_done": None, "chunks_total": None, "seconds_covered": None}
+            row["queue"] = (queue_rows.get(row["source_id"]) or {"state": "not_listed", "chunks_done": None, "chunks_total": None, "seconds_covered": None}) if include_queue else None
             block = row["generated"]
             totals["recordings"] += 1
             totals["recordings_with_generated"] += 1 if block else 0
@@ -1361,7 +1363,8 @@ def status(settings: Settings, course_id: str, *, preparation: Preparation | Non
         stages[timing["stage"]] += 1
         lectures.append({"lecture_id": lecture_id, "title": lecture.get("title"), "stage": timing["stage"], "links": {"state": links["state"], "differs": links["differs"], "built_at": links.get("built_at")},
                          "recordings": timing["recordings"]})
-    return {"course_id": course_id, "allowance": allowance, "resume_command": resume_command, "build_command": _build_command(settings, course_id), "lectures": lectures,
+    return {"course_id": course_id, "allowance": allowance, "resume_command": resume_command, "queue_included": include_queue, "build_command": _build_command(settings, course_id),
+            "lectures": lectures,
             "summary": {"lectures": len(lectures), "stages": stages, **{key: totals[key] for key in ("recordings", "recordings_with_generated", "recordings_associated", "covered_ms",
                                                                                                     "unresolved_ms", "duration_ms", "ranges")}},
             "note": "Stages and times as measured. Generated timing is unreviewed; ranges are suggestions; nothing here estimates what remains."}
@@ -1395,9 +1398,9 @@ def register(app: Any, runtime: Any, locked: Callable[[Callable[[], Any]], Any])
         return HTTPException(404 if exc.code in {"unknown_lecture", "unknown_course"} else 409, exc.message)
 
     @app.get("/api/courses/{course_id}/timing")
-    def timing_status(course_id: str):
+    def timing_status(course_id: str, queue: bool = True):
         course(course_id)
-        return locked(lambda: status(settings, course_id, preparation=getattr(runtime, "preparation", None)))
+        return locked(lambda: status(settings, course_id, preparation=getattr(runtime, "preparation", None), queue=queue))
 
     @app.post("/api/courses/{course_id}/lectures/{lecture_id}/timing/build")
     def timing_build(course_id: str, lecture_id: str):

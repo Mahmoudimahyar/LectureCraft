@@ -815,7 +815,7 @@ class _Course:
         if study_maps is not None:
             try:
                 maps = study_maps.read_study_maps(self.root, self.inventory, page_counts={deck["source_id"]: page_count} if page_count else None,
-                                                  line_counts={transcript["source_id"]: line_count} if line_count else None, sha_of=self.sha_of)
+                                                  line_counts={transcript["source_id"]: line_count} if line_count else None, sha_of=self.sha_of, only=[lecture_id])
                 for row in study_maps.timing_hints(maps, lecture_id, deck_source_id=deck["source_id"], transcript_source_id=transcript["source_id"]):
                     found.append({"pages": list(row["pages"]), "line_ranges": [list(r) for r in row["transcript_ranges"]], "basis": "course_study_map", "label": row.get("label") or "",
                                   "refs": [{"row": row.get("row"), "map_sha256": row.get("map_sha256"), "bytes_verified": bool(row.get("bytes_verified"))}]})

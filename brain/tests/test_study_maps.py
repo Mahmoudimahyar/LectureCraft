@@ -347,6 +347,24 @@ def write_map(root: Path, number: int, *blocks: str, folder: str = "work/lecture
     return path
 
 
+def test_a_caller_that_needs_one_lecture_reads_only_that_lectures_note(root, inventory, opened):
+    """The timing readback asks for one lecture at a time. Reading every note of the course for each of them made a course
+    with seven notes read forty-nine: ``only`` names the lectures whose notes are read; nothing else is opened."""
+    inv = inventory()
+    first = write_map(root, 1, table(["Slide pages", "Transcript lines", "Topic"], ["2-3", "4-9", "Synthetic topic"]))
+    second = write_map(root, 2, table(["Slide pages", "Transcript lines", "Topic"], ["1", "2-3", "Synthetic topic"]))
+    everything = sm.read_study_maps(root, inv)
+    assert sorted(everything["lectures"]) == ["lecture-01", "lecture-02"]
+    opened.clear()
+    one = sm.read_study_maps(root, inv, only=["lecture-02"])
+    assert list(one["lectures"]) == ["lecture-02"] and one["lectures"]["lecture-02"] == everything["lectures"]["lecture-02"]
+    assert second.resolve() in opened and first.resolve() not in opened
+    assert sm.read_study_maps(root, inv, only=[])["lectures"] == {} and sm.read_study_maps(root, inv, only=["lecture-77"])["lectures"] == {}
+    # a problem of a note that was not asked for is not this caller's to report
+    write_map(root, 1, "| Slide pages | Transcript lines |\n|---|---|\n| not a page | 4 |")
+    assert sm.read_study_maps(root, inv, only=["lecture-02"])["problems"] == one["problems"]
+
+
 def unit(inv: dict, lecture_id: str) -> dict:
     return next(lecture for lecture in inv["lectures"] if lecture["lecture_id"] == lecture_id)
 

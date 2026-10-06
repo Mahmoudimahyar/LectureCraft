@@ -37,7 +37,7 @@ its number whatever happens to its neighbours. Together with the file's sha256 a
 """
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 import hashlib
 from pathlib import Path, PurePosixPath
 import re
@@ -603,8 +603,11 @@ def _question_map(review: Path, folder: str, names: list[str], number: str, repo
 
 
 def read_study_maps(root: Path, inventory: dict, *, page_counts: Mapping[str, int] | None = None, line_counts: Mapping[str, int] | None = None,
-                    sha_of: Callable[[Path], str] | None = None) -> dict[str, Any]:
+                    sha_of: Callable[[Path], str] | None = None, only: Iterable[str] | None = None) -> dict[str, Any]:
     """Every study map of a course, per lecture of the inventory: ``{maps_version, lectures: {lecture_id: …}, problems}``.
+
+    ``only`` names the lecture ids whose notes are read; the note of any other lecture is not opened and none of its
+    problems is reported (a caller that needs one lecture reads one file).
 
     Per lecture: ``source {path, sha256, bytes}``, ``deck`` and ``transcript`` (``source_id``, ``basis``
     listed_sha256_match | unit_displayed_deck | unit_transcript, ``bytes_verified``, ``state`` current | stale |
@@ -640,11 +643,14 @@ def read_study_maps(root: Path, inventory: dict, *, page_counts: Mapping[str, in
         problem("unreadable", folder, None, f"the review folder cannot be listed: {exc.__class__.__name__}")
         return result
     lectures = {lecture["lecture_id"]: lecture for lecture in inventory.get("lectures") or []}
+    wanted = None if only is None else set(only)
     for name in listing:
         if not _STUDY_MAP.match(name):
             continue
         path = review / name
         lecture_id = f"lecture-{_STUDY_MAP.match(name).group(1)}"
+        if wanted is not None and lecture_id not in wanted:
+            continue
         try:
             if path.is_symlink():
                 problem("unsafe_path", name, lecture_id if lecture_id in lectures else None, "the file is a link; it was not read")

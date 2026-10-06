@@ -45,3 +45,26 @@ def test_every_ui_task_has_a_browser_check():
     ui_tasks = {"LL005", "LL010", "LL011", "LL012", "LL013", "LL016", "LL022", "LL023", "LL024", "LL026", "LL027", "LL028", "LL029", "LL030", "LL031", "LL032", "LL033", "LL034"}
     for task in ui_tasks:
         assert any(stage == "e2e" for stage, _ in CHECKS["tasks"][task]), task
+
+
+def test_the_app_can_be_built_into_another_folder_so_a_running_server_keeps_the_build_it_serves(monkeypatch, tmp_path):
+    """By default the build goes to web/dist. With LL_WEB_DIST it goes elsewhere and the browser tests are told to
+    serve that folder, so checking a new build never swaps the files under a server that is serving the old one."""
+    monkeypatch.delenv("LL_WEB_DIST", raising=False)
+    monkeypatch.delenv("LL_E2E_DIST", raising=False)
+    default = ci.stages([])
+    assert "--outDir" not in default["web-build"][0][0] and "--outDir" not in default["e2e"][0][0]
+    assert ci.stage_environment() == {}
+    monkeypatch.setenv("LL_WEB_DIST", ".local/build/dist-check")
+    moved = ci.stages([])
+    for stage in ("web-build", "e2e"):
+        argv = moved[stage][0][0]
+        assert argv[argv.index("--outDir") + 1] == str(ci.ROOT / ".local" / "build" / "dist-check") and "--emptyOutDir" in argv
+    assert ci.stage_environment() == {"LL_E2E_DIST": ".local/build/dist-check"}
+    monkeypatch.setenv("LL_WEB_DIST", str(tmp_path / "outside"))
+    try:
+        ci.stages([])
+    except SystemExit as refused:
+        assert "inside the repository" in str(refused)
+    else:
+        raise AssertionError("a build folder outside the repository was accepted")

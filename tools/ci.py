@@ -37,8 +37,28 @@ def _web(script: str, *args: str) -> list[str]:
     return [_node(), str(WEB / "node_modules" / script), *args]
 
 
+def _dist() -> tuple[str, Path] | None:
+    """LL_WEB_DIST: a folder inside the repository to build the app into instead of web/dist (repo-relative)."""
+    wanted = os.environ.get("LL_WEB_DIST")
+    if not wanted:
+        return None
+    target = (ROOT / wanted).resolve()
+    if not target.is_relative_to(ROOT.resolve()) or target == ROOT.resolve():
+        raise SystemExit("LL_WEB_DIST must name a folder inside the repository")
+    return target.relative_to(ROOT.resolve()).as_posix(), target
+
+
+def stage_environment() -> dict[str, str]:
+    """What the stages add to the environment: the browser tests serve the folder the app was built into."""
+    dist = _dist()
+    return {"LL_E2E_DIST": dist[0]} if dist else {}
+
+
 def stages(extra: list[str]) -> dict[str, list[tuple[list[str], Path]]]:
     py = sys.executable
+    dist = _dist()
+    # A server that is serving web/dist keeps its build: with LL_WEB_DIST the new build goes to another folder.
+    build = _web("vite/bin/vite.js", "build", *(["--outDir", str(dist[1]), "--emptyOutDir"] if dist else []))
     return {
         # Retained kit checks: specification baseline, contract fixtures, handoff consistency.
         "kit": [
@@ -59,11 +79,11 @@ def stages(extra: list[str]) -> dict[str, list[tuple[list[str], Path]]]:
             (_web("typescript/bin/tsc", "--noEmit", "-p", "tsconfig.json"), WEB),
         ],
         "web-unit": [(_web("vitest/vitest.mjs", "run", *extra), WEB)],
-        "web-build": [(_web("vite/bin/vite.js", "build"), WEB)],
+        "web-build": [(build, WEB)],
         "storybook": [(_web("storybook/dist/bin/dispatcher.js", "build", "-o", str(ROOT / ".local" / "storybook-static"), "--quiet"), WEB)],
         # Real browser against a fresh fixture-profile Brain on loopback, serving the app that was just built.
         "e2e": [
-            (_web("vite/bin/vite.js", "build"), WEB),
+            (build, WEB),
             (_web("storybook/dist/bin/dispatcher.js", "build", "-o", str(ROOT / ".local" / "storybook-static"), "--quiet"), WEB),
             (_web("@playwright/test/cli.js", "test", *extra), WEB),
         ],
@@ -111,7 +131,7 @@ def main() -> int:
             print("Extra arguments require exactly one --only stage", file=sys.stderr)
             return 2
         runs = [(name, table[name]) for name in selected]
-    env = dict(os.environ, PYTHONIOENCODING="utf-8", CI="1", NO_COLOR="1")
+    env = dict(os.environ, PYTHONIOENCODING="utf-8", CI="1", NO_COLOR="1", **stage_environment())
     env.pop("FORCE_COLOR", None)
     summary = []
     failed = False

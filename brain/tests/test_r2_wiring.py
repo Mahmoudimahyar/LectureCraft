@@ -154,3 +154,18 @@ def test_one_request_reads_the_inventory_once_and_the_next_request_sees_a_new_fi
         listed = inventory.build_inventory(binding)
     names = {i["filename"] for l in listed["lectures"] for i in [*l["decks"], *l["extra_materials"]]} | {i["filename"] for i in listed["other_sources"]}
     assert "an-extra-handout.pdf" in names
+
+
+def test_a_suggested_session_link_reaches_the_lecture_view_with_its_evidence(settings, clock):
+    from dataclasses import replace
+
+    offered = replace(settings, courses={**settings.courses, "ds551": replace(settings.course("ds551"), suggest_session_links=True)})
+    rt = Runtime(offered, clock=clock)
+    rt.startup()
+    try:
+        view = TestClient(create_app(rt, extra_hosts={"testserver"})).get("/api/courses/ds551/lectures/lecture-01").json()
+    finally:
+        rt.journal.close()
+    assert view["session_link"] == "suggested_by_file_name"
+    assert view["session_link_evidence"]["state"] == "suggested" and view["session_link_evidence"]["session_id"] == "2026-09-03"
+    assert view["recordings"] or view["transcripts"], "the offered session's files are shown with the unit"

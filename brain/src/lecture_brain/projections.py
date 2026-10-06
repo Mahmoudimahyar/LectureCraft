@@ -215,7 +215,7 @@ class Projector:
             cov = coverage.get(lecture["lecture_id"], {})
             rendition = ((cov.get("stages") or {}).get("rendition") or {})
             displayable = bool(deck) and (deck["rendition"] == "native_pdf" and deck["state"] in {"registered_readable", "present_unindexed"} or rendition.get("status") == "rendition")
-            lectures.append({"lecture_id": lecture["lecture_id"], "title": lecture["title"], "session_link": lecture["session_link"],
+            lectures.append({"lecture_id": lecture["lecture_id"], "title": lecture["title"], "session_link": lecture["session_link"], "session_link_evidence": lecture.get("session_link_evidence"),
                              "deck": ({k: deck[k] for k in ("source_id", "state", "registration", "rendition", "filename", "bytes")} if deck else None),
                              "displayable": displayable, "other_materials_count": len(other_materials(lecture)),
                              "deck_choice": {"state": lecture["deck_choice"]["state"], "basis": lecture["deck_choice"]["basis"], "candidates": len(lecture["deck_choice"]["candidate_source_ids"])},
@@ -388,7 +388,7 @@ class Projector:
                     times = sorted(line_times.get(item["source_id"], []), key=lambda t: t["start"])
                     transcripts.append(dict(base, lines=lines, line_times=times, timing="annotated" if times else "untimed",
                                             timing_note=None if times else "This transcript has no verified timing: line references only, no playback highlight."))
-        view = {"course_id": course_id, "lecture_id": lecture_id, "title": lecture["title"], "session_link": lecture["session_link"],
+        view = {"course_id": course_id, "lecture_id": lecture_id, "title": lecture["title"], "session_link": lecture["session_link"], "session_link_evidence": lecture.get("session_link_evidence"),
                 "deck": ({"source_id": deck["source_id"], "version_id": deck_identity[0], "sha256": deck_identity[1], "filename": deck["filename"], "state": deck["state"],
                           "registration": deck["registration"], "rendition": deck["rendition"]} if deck else None),
                 "deck_choice": choice, "questions": lecture_questions,

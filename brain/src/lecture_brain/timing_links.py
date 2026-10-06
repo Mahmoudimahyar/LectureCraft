@@ -61,7 +61,7 @@ from .ownerio.question_links import build_question_bank
 from .preparation import Preparation, extract_slide_texts, file_sha256, tokens
 
 LINKS_CONTRACT = "timing-links/1"
-BUILDER_VERSION = "timing-links-builder/2"  # /2: speech outside every window is listed; a document checks its own revision
+BUILDER_VERSION = "timing-links-builder/3"  # /2: speech outside every window is listed; a document checks its own revision. /3: quality sentences in plain words
 RECEIPT_KIND = "timing-build"
 COURSE_STATED_METHOD = "course-stated-lines/1"
 NO_FORCED_ROLES = frozenset({"structural_title_or_section", "administrative", "blank"})  # interface-contracts.md, "Content role"
@@ -207,22 +207,34 @@ def _grouping_state(slide: dict, history: dict[Any, Any]) -> str:
     return "agent_reviewed" if "agent" in who else "human_confirmed"  # the weakest author decides
 
 
+_KIND_WORDS = {"incremental_build": "builds of one slide", "animation_steps": "steps of one slide", "duplicate": "repeated copies of one slide", "manual_group": "one slide"}
+_GROUPING_BASIS_WORDS = {"page": "each page is a slide of its own", "inferred": "inferred from the file", "pptx": "from the PowerPoint file", "override": "set by a correction"}
+
+
+def _plain(name: Any) -> str:
+    """A field value as words: the sentence a learner reads never carries an identifier."""
+    return str(name).replace("_", " ").strip()
+
+
 def _group_mapping(slide: dict, history: dict[Any, Any]) -> dict[str, str]:
     """The grouping quality of a link, carried from the source map: who or what says these pages are one slide."""
     grouping, pages, kind = slide.get("grouping") or "none", slide.get("pages") or [], slide.get("kind") or "single"
     span = f"pages {pages[0]}–{pages[-1]}" if len(pages) > 1 else f"page {pages[0]}" if pages else "no page"
     state = _grouping_state(slide, history)
     if isinstance(grouping, dict):
-        return {"state": state, "basis": f"{span}: as the source map states it ({grouping.get('basis') or 'basis not stated'})."}
+        stated = grouping.get("basis")
+        return {"state": state, "basis": f"{span}: as the source map states it ({_GROUPING_BASIS_WORDS.get(stated) or (_plain(stated) if stated else 'basis not stated')})."}
     if grouping == "override":
-        revisions = ", ".join(f"r{revision}" for revision in slide.get("overrides") or []) or "revision not stated"
-        return {"state": state, "basis": f"{span}: set by a correction ({revisions}) {_WHO[state]}."}
+        revisions = slide.get("overrides") or []
+        named = ("correction " if len(revisions) == 1 else "corrections ") + ", ".join(str(revision) for revision in revisions) if revisions else "a correction whose number is not stated"
+        return {"state": state, "basis": f"{span}: set by {named}, {_WHO[state]}."}
     if grouping == "inferred":
         signals = sorted({signal for item in slide.get("evidence") or [] for signal in item.get("signals") or []})
-        return {"state": "generated", "basis": f"{span}: {kind} inferred from {', '.join(signals) or 'the file'} (confidence {slide.get('confidence') or 'not stated'}); nobody has looked."}
+        return {"state": "generated", "basis": (f"{span}: {_KIND_WORDS.get(kind) or _plain(kind)}, inferred from the file ({', '.join(_plain(s) for s in signals) or 'signals not stated'}; "
+                                                f"confidence {_plain(slide.get('confidence') or 'not stated')}); nobody has looked.")}
     if grouping == "uncertain":
         return {"state": "generated", "basis": f"{span}: kept as a page of its own because grouping it with a neighbour was uncertain."}
-    return {"state": "generated", "basis": f"{span}: one page is one logical slide (no grouping applied)."}
+    return {"state": "generated", "basis": f"{span}: one page is one slide; nothing was grouped."}
 
 
 def slides_from_map(source_map: dict | None) -> dict[str, Any]:
@@ -410,9 +422,9 @@ def _section_links(pairings: list[dict], line_rows: list[dict], recording: dict,
             "support": {"scope": "section", "pages": list(entry["pages"]), "builds": None, "group_kind": None},
             "relation": "discussed_during", "method": _method(COURSE_STATED_METHOD), "origin": "reviewed_source_map", "review_state": "generated",
             "quality": {
-                "acoustic": {"state": generated.get("review_state") or "generated_unreviewed",
-                             "basis": f"Times of generated speech text (generation {generated.get('generation')}), unreviewed, carried to transcript lines by {alignment.TEXT_METHOD}."},
-                "association": {"state": "course_stated", "basis": f"The course's own record ({', '.join(bases)}) pairs transcript lines {written} with these pages; it names a section, not one page."},
+                "acoustic": {"state": generated.get("review_state") or "generated_unreviewed", "basis": _acoustic_words(generated, carried=True)},
+                "association": {"state": "course_stated",
+                                "basis": f"The course's own record ({_hint_words(bases)}) pairs transcript lines {written} with these pages; it names a section, not one page."},
                 "group_mapping": {"state": "not_applicable", "basis": "The pages are the ones the course wrote; no grouping of pages is involved."}},
             "why": "The course's own record places these transcript lines with these pages.",
             "evidence": {"transcript_lines": [[first, last]], "terms": [], "shape": "course_stated_section", "lines_timed": len(rows),
@@ -462,6 +474,29 @@ def _speech_outside(segments: list[dict], windows: list[dict], source_id: str, d
         if end_ms > start_ms:
             found.append({"recording_source_id": source_id, "start_ms": start_ms, "end_ms": end_ms, "words": len(run), "within": None})
     return found
+
+
+_SHAPE_WORDS = {"sustained_clear": "a sustained stretch, clearly ahead of every other slide", "brief_or_close": "a brief stretch, or one that another slide fits almost as well"}
+_HINT_WORDS = {"course_study_map": "the course's study map", "course_locator": "a question's source locator"}
+
+
+def _hint_words(bases) -> str:
+    """Which of the course's own records state a pairing, in words ("course_study_map+course_locator" is one basis naming two)."""
+    names = sorted({part for basis in bases for part in str(basis).split("+") if part})
+    return " and ".join(_HINT_WORDS.get(name) or _plain(name) for name in names) or "basis not stated"
+
+
+def _acoustic_words(generated: dict, *, carried: bool) -> str:
+    """Where a link's times come from, as the learner reads it. The generation id, the model revision and the method
+    versions are data elsewhere in the document (``stages.generated``, ``inputs``, ``method``), not part of the sentence."""
+    producer = generated.get("producer") or {}
+    tool = str(producer.get("tool") or "").strip()
+    model = str(producer.get("model") or "").split("@", 1)[0].rsplit("/", 1)[-1].strip()
+    if tool and model.startswith(f"{tool}-"):
+        model = model[len(tool) + 1:]
+    made_by = f"{tool}, model {model}" if tool and model and model != "none" else tool or "tool not stated"
+    how = "They reached the transcript's lines by matching the words in order." if carried else "They are the times of the generated segments."
+    return f"Times come from speech text generated on this computer ({made_by}). Nobody has listened. {how}"
 
 
 def _recording_record(recording: dict, material: dict, slides_block: dict, pairings: list[dict], stated: int) -> tuple[dict, dict[str, list]]:
@@ -548,8 +583,7 @@ def _recording_record(recording: dict, material: dict, slides_block: dict, pairi
         return record, produced
     result = alignment.cross_check_with_baseline(alignment.align_windows_to_slides(windows, engine_slides, hints=hints or None, acoustic=review_state, initial="auto"), windows, engine_slides)
     baseline = alignment.baseline_assignments(windows, engine_slides)
-    acoustic_basis = (f"Times of generated speech text (generation {generated.get('generation')}; {producer.get('tool') or 'tool not stated'}, {producer.get('model') or 'model not stated'}), "
-                      "unreviewed, " + (f"carried to transcript lines by {alignment.TEXT_METHOD}." if mapping is not None else "taken from generated segments."))
+    acoustic_basis = _acoustic_words(generated, carried=mapping is not None)
     shown = kept = 0
     for occurrence in result["occurrences"]:
         if occurrence.get("start") is None or occurrence.get("end") is None:
@@ -574,8 +608,9 @@ def _recording_record(recording: dict, material: dict, slides_block: dict, pairi
             "quality": {
                 "acoustic": {"state": review_state, "basis": acoustic_basis},
                 "association": {"state": "candidate",
-                                "basis": (f"{alignment.SEQUENCE_METHOD} from wording and order: {support['shape'].replace('_', ' ')}; the lexical baseline puts {agreement['same_slide']:.0%} of "
-                                          "these windows on the same slide" + (f"; a course-stated pairing covers them ({', '.join(support['hint_bases'])})" if support["hint_bases"] else "") + ".")},
+                                "basis": (f"Matched by wording and order: {_SHAPE_WORDS.get(support['shape']) or _plain(support['shape'])}. A plain word-overlap check puts "
+                                          f"{agreement['same_slide']:.0%} of this stretch on the same slide."
+                                          + (f" The course's own record ({_hint_words(support['hint_bases'])}) also pairs this stretch with the slide." if support["hint_bases"] else ""))},
                 "group_mapping": dict(slide["group_mapping"])},
             "why": "The wording of this stretch of the lecture overlaps the text of the " + ("slide's pages." if len(slide["pages"]) > 1 else "page."),
             "evidence": {"transcript_lines": [list(occurrence["lines"])] if occurrence.get("lines") else [],

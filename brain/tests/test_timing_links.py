@@ -12,6 +12,7 @@ import copy
 import hashlib
 import itertools
 import json
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -183,6 +184,33 @@ def test_a_link_binds_recording_time_slide_method_and_three_separate_qualities_a
             assert link["evidence"]["shape"] in {"sustained_clear", "brief_or_close"} and link["evidence"]["terms"]
             assert set(link["evidence"]["baseline"]) >= {"same_slide", "other_slide", "unassigned"}
     assert len({link["range_id"] for link in everything(doc)}) == len(everything(doc))
+
+
+# What a learner reads under "Qualities" is the Brain's sentence, verbatim. An identifier there (a generation id, a digest, a
+# method name with its version, a field name) is noise to them; the identifiers stay in the structured fields beside it.
+_IDENTIFIER = re.compile(r"sp-[a-z0-9]+-|[0-9a-f]{12,}|[a-z]+(?:_[a-z]+)+|[a-z-]+/\d+|@")
+
+
+def test_the_quality_sentences_are_plain_words_and_the_identifiers_stay_in_the_structured_fields():
+    stated = [pairing([6, 7], [LINE_OF["oven"]]), pairing([5], [LINE_OF["gluten"]], basis="course_locator")]
+    produced = dict(generation(LINES), producer={"tool": "faster-whisper", "tool_version": "1.2.1", "model": "Systran/faster-whisper-base.en@3d3d5dee26484f91867d81cb899cfcf72b96be6c",
+                                                 "language": "en", "parameters_sha256": "b" * 64})
+    doc = tl.compose(material(pairings=stated, generated=produced), now=NOW)
+    links = everything(doc)
+    assert {link["origin"] for link in links} == {"pipeline", "reviewed_source_map"} and any(len(link["support"]["pages"]) > 1 and link["origin"] == "pipeline" for link in links)
+    for link in links:
+        for name, facet in link["quality"].items():
+            assert not _IDENTIFIER.search(facet["basis"]), (name, facet["basis"])
+        assert not _IDENTIFIER.search(link["why"])
+        acoustic = link["quality"]["acoustic"]["basis"]
+        assert "faster-whisper, model base.en" in acoustic and "obody has listened" in acoustic
+    # nothing was dropped: the same facts are still data
+    assert doc["recordings"][0]["stages"]["generated"]["generation"] == "sp-syn-0001"
+    assert all(link["method"]["name"] and link["method"]["version"] for link in links)
+    hinted = [link for link in links if link["origin"] == "pipeline" and link["evidence"]["hint_bases"]]
+    assert hinted and all("the course's study map" in link["quality"]["association"]["basis"] or "source locator" in link["quality"]["association"]["basis"] for link in hinted)
+    segments_only = tl.compose(material(transcript="none", generated=produced), now=NOW)
+    assert all("generated segments" in link["quality"]["acoustic"]["basis"] and not _IDENTIFIER.search(link["quality"]["acoustic"]["basis"]) for link in everything(segments_only))
 
 
 def test_a_build_group_link_is_group_level_and_has_no_time_per_build():
@@ -1061,7 +1089,7 @@ def corrected_map(author) -> dict:
 def test_a_grouping_correction_is_read_with_its_author_and_the_links_of_that_group_say_who_made_it(author, state):
     stored = corrected_map(author)
     joined = next(s for s in tl.slides_from_map(stored)["logical_slides"] if s["pages"] == [6, 7])
-    assert joined["group_mapping"]["state"] == state and "r1" in joined["group_mapping"]["basis"] and joined["kind"] == "manual_group"
+    assert joined["group_mapping"]["state"] == state and "correction 1" in joined["group_mapping"]["basis"] and joined["kind"] == "manual_group"
     doc = tl.compose(material(smap=stored), now=NOW)
     group = [link for link in everything(doc) if link["support"]["pages"] == [6, 7] and link["origin"] == "pipeline"]
     assert group and all(link["quality"]["group_mapping"]["state"] == state and link["support"]["scope"] == "build_group" for link in group)
@@ -1307,7 +1335,7 @@ def test_a_page_never_lists_the_same_stretch_twice():
     (suggestion,), (section,) = of_pages(doc, [5]), of_pages(doc, [5], origin="reviewed_source_map")
     assert (suggestion["start_ms"], suggestion["end_ms"]) == (section["start_ms"], section["end_ms"]), "the case this test is about"
     ranges = slide(enriched(mat), 5)["ranges"]
-    assert [r["range_id"] for r in ranges] == [suggestion["range_id"]] and "course-stated pairing" in ranges[0]["quality"]["association"]["basis"]
+    assert [r["range_id"] for r in ranges] == [suggestion["range_id"]] and "The course's own record" in ranges[0]["quality"]["association"]["basis"]
     assert ranges[0]["why"].endswith("The course's own record places these transcript lines with this page as well.") and ranges[0]["origin"] == "pipeline"
     assert "course's own record" not in slide(enriched(), 5)["ranges"][0]["why"]  # without the statement the sentence is not there
     assert len(doc["links"]) == len({link["range_id"] for link in doc["links"]})  # both stay in the document

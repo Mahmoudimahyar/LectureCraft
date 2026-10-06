@@ -35,6 +35,43 @@ def test_fixture_links_load_with_typed_precision(store):
     assert precision_of(chapter) == "broad_reference" and chapter["review_state"] == "suggested"
 
 
+def test_a_revision_file_is_read_and_checked_once_until_the_file_changes(store, settings, monkeypatch):
+    """A revision file never changes once written, and a lecture view loads the store more than once: reading and checking
+    every file again each time was a large share of a real lecture page. A new file and a file changed in place are read."""
+    from lecture_brain import annotations
+
+    checked: list[str] = []
+    real = c.validate
+
+    def counting(kind, record):
+        checked.append(record.get("annotation_id") if isinstance(record, dict) else "?")
+        return real(kind, record)
+
+    monkeypatch.setattr(annotations.c, "validate", counting)
+    first = store.load("be505")
+    assert len(checked) == 18
+    assert store.load("be505") == first and len(checked) == 18, "an unchanged file is not read again"
+    head = first["current"]["ann-l01-s02-o1-displayed"]
+    checked.clear()
+    assert store.propose("be505", c.dump_json(_revise(head, interval=(16000, 29000))))["status"] == "saved"
+    checked.clear()   # whatever the write itself checked
+    after = store.load("be505")
+    assert checked == ["ann-l01-s02-o1-displayed"] and after["current"]["ann-l01-s02-o1-displayed"]["record"]["revision"] == 2, "only the new revision file is read"
+    # a file edited in place (not something the app does): its bytes are read again and its broken chain is reported
+    path = next(area / "ann-l01-s02-o1-displayed.r2.json" for area in store._areas("be505") if (area / "ann-l01-s02-o1-displayed.r2.json").is_file())
+    path.write_bytes(path.read_bytes().replace(b"16000", b"17000"))
+    checked.clear()
+    edited = store.load("be505")
+    assert checked == ["ann-l01-s02-o1-displayed"] and edited["current"]["ann-l01-s02-o1-displayed"]["record"]["to"]["locator"]["start_ms"] == 17000
+    # what a caller does to the entries it was handed never reaches the next caller
+    edited["current"].clear()
+    edited["history"]["ann-l01-s02-o1-displayed"].clear()
+    assert len(store.load("be505")["current"]) == 18 and len(store.load("be505")["history"]["ann-l01-s02-o1-displayed"]) == 2
+    # another store (another process start) reads everything once more: nothing is kept outside the instance
+    checked.clear()
+    assert AnnotationStore(settings).load("be505")["current"].keys() == store.load("be505")["current"].keys() and len(checked) == 19
+
+
 def test_correction_is_a_new_revision_and_survives_regenerating_exports(store, settings):
     head = store.load("be505")["current"]["ann-l01-s02-o1-displayed"]
     result = store.propose("be505", c.dump_json(_revise(head, interval=(16000, 29000))))

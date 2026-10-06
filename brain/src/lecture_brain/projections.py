@@ -202,7 +202,7 @@ class Projector:
     def course_view(self, course_id: str) -> dict[str, Any]:
         binding = self.settings.course(course_id)
         inventory = build_inventory(binding)
-        coverage = {l["lecture_id"]: l for l in self.preparation.coverage()["courses"][course_id]["lectures"]}
+        coverage = {l["lecture_id"]: l for l in self.preparation.coverage(only=course_id)["courses"][course_id]["lectures"]}
         bank = self._bank(course_id, inventory=inventory)
 
         def session(s: dict) -> dict:
@@ -427,7 +427,11 @@ class Projector:
             question_index_sha256=(index or {}).get("sha256"), inferred_anchors_sha256=inferred["file"]["sha256"], study_map_sha256=map_digests.get(lecture_id),
             evidence_revision=reader.revision)
         generated = {r["source_id"]: self._derived_current(course_id, r["source_id"]) for r in view.get("recordings") or []}
-        view = timing_links.enrich_view(self.settings, course_id, lecture_id, view, preparation=self.preparation, source_map=source_map, generated=generated)
+        try:
+            held = self.annotations.current_records(course_id)  # the service's one store: a revision file is read once
+        except Exception:  # noqa: BLE001 - a damaged annotation folder must not hide the suggestions; it is reported by its own view
+            held = []
+        view = timing_links.enrich_view(self.settings, course_id, lecture_id, view, preparation=self.preparation, source_map=source_map, generated=generated, annotations=held)
         view["revisions"].setdefault("timing_links", [])
         return view
 

@@ -852,6 +852,29 @@ def links_path(settings, lecture_id="lecture-01", course="be505") -> Path:
     return settings.app_area(course) / "timing-links" / f"{lecture_id}.json"
 
 
+def test_a_course_file_is_hashed_once_per_version_whatever_call_asks(local, tmp_path, monkeypatch):
+    """Every lecture view asks whether the unit's files are still the bytes the course's study map lists. Reading a deck
+    from a synced drive for that on every request is slow; a file is read once until its size or time changes."""
+    from lecture_brain import preparation
+
+    read: list[str] = []
+    real_open = open
+
+    def counting(path, *args, **kwargs):
+        read.append(Path(path).name)
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(preparation, "open", counting, raising=False)
+    target = tmp_path / "deck-for-hash.bin"
+    target.write_bytes(b"first bytes")
+    course_id = sorted(local.courses)[0]
+    first = tl._Course(local, course_id).sha_of(target)
+    assert first == hashlib.sha256(b"first bytes").hexdigest() and read.count(target.name) == 1
+    assert tl._Course(local, course_id).sha_of(target) == first and read.count(target.name) == 1, "another call does not read the file again"
+    target.write_bytes(b"other bytes, longer")
+    assert tl._Course(local, course_id).sha_of(target) == hashlib.sha256(b"other bytes, longer").hexdigest() and read.count(target.name) == 2
+
+
 def test_build_writes_one_private_document_and_nothing_into_any_course(local, journal, tmp_path):
     import_generation(local, journal, tmp_path / "out" / "gen-0001", transcript_lines(local))
     roots = {course: binding.root for course, binding in local.courses.items()}

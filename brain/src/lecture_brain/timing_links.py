@@ -58,7 +58,7 @@ from .ownerio import OwnerReadError
 from .ownerio.catalogs import read_question_index
 from .ownerio.inventory import build_inventory, disk_version_id, primary_deck
 from .ownerio.question_links import build_question_bank
-from .preparation import Preparation, extract_slide_texts, file_sha256, tokens
+from .preparation import Preparation, extract_slide_texts, session_sha256, tokens
 
 LINKS_CONTRACT = "timing-links/1"
 BUILDER_VERSION = "timing-links-builder/3"  # /2: speech outside every window is listed; a document checks its own revision. /3: quality sentences in plain words
@@ -759,7 +759,6 @@ class _Course:
         self.inventory = build_inventory(binding)
         self._bank: Any = _UNSET
         self._bank_problem: dict | None = None
-        self._hashes: dict[str, str] = {}
         self.notes: list[dict] = []
 
     def lecture(self, lecture_id: str) -> dict:
@@ -769,7 +768,7 @@ class _Course:
         return lecture
 
     def sha_of(self, path: Path) -> str:
-        return file_sha256(path, self._hashes)
+        return session_sha256(path)  # one context is made per call; the bytes of a course file are read once per version of the file
 
     def bank(self) -> dict | None:
         if self._bank is _UNSET:
@@ -1320,9 +1319,10 @@ def enrich(view: dict, *, source_map: dict | None, links: dict | None, generated
 
 
 def enrich_view(settings: Settings, course_id: str, lecture_id: str, view: dict, *, preparation: Preparation | None = None, source_map: Any = _UNSET, generated: dict | None = None,
-                context: _Course | None = None) -> dict[str, Any]:
+                context: _Course | None = None, annotations: list[dict] | None = None) -> dict[str, Any]:
     """Load what :func:`enrich` needs for one lecture view and apply it: the generations of the view's recordings, the
-    deck's source map, the stored links against the current inputs, and the learner's rejections."""
+    deck's source map, the stored links against the current inputs, and the learner's rejections (``annotations``: the
+    course's current annotation records when the caller already holds them; read from the store otherwise)."""
     ctx = context or _Course(settings, course_id, preparation)
     lecture = ctx.lecture(lecture_id)
     if generated is None:
@@ -1331,7 +1331,7 @@ def enrich_view(settings: Settings, course_id: str, lecture_id: str, view: dict,
     if source_map is _UNSET:
         source_map = ctx.source_map(lecture, deck) if deck is not None and deck.get("path") and deck["state"] in _READABLE else None
     material = gather(settings, course_id, lecture_id, generated=generated, source_map=source_map, context=ctx)
-    links = read(settings, course_id, lecture_id, current_inputs=inputs_of(material))
+    links = read(settings, course_id, lecture_id, current_inputs=inputs_of(material), annotations=annotations)
     shown = (view.get("deck") or {}).get("source_id")
     # Another file of the unit is on screen for this request: the unit's own map says nothing about its pages.
     return enrich(view, source_map=source_map if deck is None or shown == deck["source_id"] else None, links=links, generated=generated)

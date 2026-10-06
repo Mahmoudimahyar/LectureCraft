@@ -72,6 +72,11 @@ def file_sha256(path: Path, cache: dict | None = None) -> str:
 _SESSION_HASHES: dict[str, str] = {}
 
 
+def session_sha256(path: Path) -> str:
+    """SHA-256 of a file, read at most once per version of the file (path, size, modification time) for the life of the process."""
+    return file_sha256(path, _SESSION_HASHES)
+
+
 def current_identity(root: Path, item: dict, cache: dict | None = None) -> tuple[str | None, str | None]:
     """(version_id, sha256) of the file as it is now. Files registered by the course index keep the owner's
     version; anything else is identified by its own bytes (``disk-…``), hashed at most once per change."""
@@ -473,10 +478,15 @@ class Preparation:
             self._annotations.export_alignment(course_id)
         return {"course_id": course_id, "processed": processed, "unchanged": unchanged, "remaining_unprepared": remaining, "lecture_units": len(inventory["lectures"])}
 
-    def coverage(self) -> dict[str, Any]:
-        """All-lecture preparation coverage across every bound course (QT02 denominator)."""
+    def coverage(self, only: str | None = None) -> dict[str, Any]:
+        """All-lecture preparation coverage across every bound course (QT02 denominator).
+
+        ``only`` names one course: its rows are computed and no other course's folder is read. The totals are then that
+        course's own and are not the all-course denominator."""
         courses, totals = {}, Counter()
         for course_id, binding in sorted(self._settings.courses.items()):
+            if only is not None and course_id != only:
+                continue
             inventory = build_inventory(binding)
             links = self._annotations.load(course_id)["current"].values() if binding.usable else []
             by_deck: dict[str, dict[str, set]] = {}

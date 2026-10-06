@@ -171,6 +171,49 @@ def test_a_suggested_session_link_reaches_the_lecture_view_with_its_evidence(set
     assert view["recordings"] or view["transcripts"], "the offered session's files are shown with the unit"
 
 
+def test_a_view_of_one_course_lists_no_other_courses_folder(client, settings, monkeypatch):
+    """The page of one course, its lectures, its questions and its maps read that course. Listing the folders of the other
+    bound courses for them made every such page as slow as all five courses together on a synced drive. (The timing readback WITH
+    the transcription queue is the one course route that reads them all: the queue is one queue for every course.)"""
+    from lecture_brain.ownerio import inventory
+
+    assert len(settings.courses) > 1, "the check needs a second bound course"
+    calls: list[str] = []
+    real = inventory._build_inventory
+
+    def counted(binding):
+        calls.append(binding.course_id)
+        return real(binding)
+
+    monkeypatch.setattr(inventory, "_build_inventory", counted)
+    for path in (f"/api/courses/{COURSE}", f"/api/courses/{COURSE}/lectures/lecture-01", f"/api/courses/{COURSE}/timing?queue=false", f"/api/courses/{COURSE}/outline",
+                 f"/api/courses/{COURSE}/concept-graph", f"/api/courses/{COURSE}/questions", f"/api/courses/{COURSE}/progress", f"/api/courses/{COURSE}/inferred-anchors"):
+        calls.clear()
+        assert client.get(path).status_code == 200, path
+        assert set(calls) <= {COURSE}, (path, sorted(set(calls)))
+
+
+def test_a_lecture_view_checks_each_annotation_file_once_for_the_life_of_the_service(client, monkeypatch):
+    """Every part of a lecture view reads the learner's links through the one store of the service, and that store reads a
+    revision file once. A second request for the same lecture checks no annotation file again."""
+    from lecture_brain import annotations
+
+    checked: list[str] = []
+    real = annotations.c.validate
+
+    def counting(kind, record):
+        if kind == "annotation":
+            checked.append(record.get("annotation_id") if isinstance(record, dict) else "?")
+        return real(kind, record)
+
+    monkeypatch.setattr(annotations.c, "validate", counting)
+    assert client.get(f"/api/courses/{COURSE}/lectures/lecture-01").status_code == 200
+    assert checked and len(checked) == len(set(checked)), "within one request no file is checked twice"
+    checked.clear()
+    assert client.get(f"/api/courses/{COURSE}/lectures/lecture-01").status_code == 200
+    assert checked == []
+
+
 def test_one_api_request_lists_each_course_folder_once(client, settings, monkeypatch):
     """Listing a course folder is the slowest thing a view does on a synced drive; a request must not repeat it."""
     from lecture_brain.ownerio import inventory

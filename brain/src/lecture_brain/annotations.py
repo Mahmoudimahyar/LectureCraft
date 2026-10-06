@@ -14,6 +14,7 @@ Rules kept here:
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import re
 import struct
@@ -127,6 +128,9 @@ def media_duration_ms(path: Path) -> int | None:
 class AnnotationStore:
     def __init__(self, settings: Settings):
         self._settings = settings
+        # One revision file as read and checked, kept until its size or modification time changes. A revision file is
+        # written once and never rewritten, and one request loads the store several times.
+        self._files: dict[str, tuple[int, int, dict | None]] = {}
 
     def area(self, course_id: str) -> Path:
         return self._settings.source_links_area(course_id)
@@ -146,24 +150,19 @@ class AnnotationStore:
         chains: dict[str, dict[int, dict]] = {}
         problems: list[dict] = []
         for area in self._areas(course_id):
-            if not area.is_dir():
+            try:
+                listed = sorted(os.scandir(area), key=lambda item: item.name)
+            except OSError:  # no such folder (yet)
                 continue
-            for path in sorted(area.iterdir()):
-                match = _NAME.match(path.name)
-                if not match or not path.is_file():
+            for item in listed:
+                match = _NAME.match(item.name)
+                if not match or not item.is_file():
                     continue
-                data = path.read_bytes()
-                try:
-                    record = c.parse_json(data)
-                    errors = c.validate("annotation", record)
-                except c.ContractError as exc:
-                    errors = [str(exc)]
-                    record = None
-                if errors or record["annotation_id"] != match["id"] or record["revision"] != int(match["rev"]) or record["scope"]["course_id"] != course_id:
-                    problems.append({"code": "invalid_annotation_file", "file": path.name})
+                entry = self._file(item, match, course_id)
+                if entry is None:
+                    problems.append({"code": "invalid_annotation_file", "file": item.name})
                     continue
-                entry = {"record": record, "artifact": c.artifact_for_bytes(data, self._rel(match["id"], int(match["rev"])), "application/json")}
-                chains.setdefault(match["id"], {})[int(match["rev"])] = entry
+                chains.setdefault(match["id"], {})[int(match["rev"])] = dict(entry)  # the caller's own dict; the record inside is read-only by convention
         current: dict[str, dict] = {}
         history: dict[str, list[dict]] = {}
         for annotation_id, revisions in chains.items():
@@ -192,6 +191,26 @@ class AnnotationStore:
                     conflicts.append({"conflict_id": path.stem, "annotation_id": record["annotation_id"], "proposed": record,
                                       "current": head["record"] if head else None})
         return {"current": current, "history": history, "conflicts": conflicts, "problems": problems}
+
+    def _file(self, item: os.DirEntry, match: re.Match, course_id: str) -> dict | None:
+        """One revision file as an entry, or ``None`` when it is not a valid revision of this course. Read and checked once
+        per version of the file (its size and modification time)."""
+        stat = item.stat()
+        known = self._files.get(item.path)
+        if known is not None and known[:2] == (stat.st_size, stat.st_mtime_ns):
+            return known[2]
+        data = Path(item.path).read_bytes()
+        try:
+            record = c.parse_json(data)
+            errors = c.validate("annotation", record)
+        except c.ContractError as exc:
+            errors = [str(exc)]
+            record = None
+        entry = None
+        if not (errors or record["annotation_id"] != match["id"] or record["revision"] != int(match["rev"]) or record["scope"]["course_id"] != course_id):
+            entry = {"record": record, "artifact": c.artifact_for_bytes(data, self._rel(match["id"], int(match["rev"])), "application/json")}
+        self._files[item.path] = (stat.st_size, stat.st_mtime_ns, entry)
+        return entry
 
     def current_records(self, course_id: str) -> list[dict]:
         return [entry["record"] for entry in self.load(course_id)["current"].values()]

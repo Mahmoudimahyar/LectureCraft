@@ -217,6 +217,44 @@ def _session_state(items: list[dict]) -> str:
     return "other_material_only"
 
 
+_LECTURE_NUMBER = re.compile(r"(?i)(?<![a-z])lec(?:ture)?[\s._-]*0*(\d{1,2})(?!\d)")
+SESSION_LINK_NOTE = ("Suggested from file names only: the recording or transcript is named with this unit's number. "
+                     "The course index links this session to no lecture unit, and nobody has confirmed the suggestion.")
+
+
+def _named_lecture_numbers(session: dict) -> set[int]:
+    """Lecture numbers written in the names of a session's recordings and transcripts ("Lec 3", "Lecture_03"). A date or
+    any other number is not one."""
+    numbers: set[int] = set()
+    for item in session["items"]:
+        if item["kind"] in {"lecture_recording", "lecture_transcript"}:
+            numbers.update(int(n) for n in _LECTURE_NUMBER.findall(Path(item["filename"]).stem))
+    return numbers
+
+
+def _suggest_session_links(lectures: list[dict], sessions: dict[str, dict]) -> None:
+    """For units the course index links to no session: offer the ONE unlinked session whose file names carry exactly
+    this unit's number. Two candidates, or a session naming two numbers, offer nothing (the unit says ``ambiguous``).
+    The session keeps ``linked_lecture_ids == []``: the index's silence stays visible beside the suggestion."""
+    named = {sid: _named_lecture_numbers(s) for sid, s in sessions.items() if not s["linked_lecture_ids"]}
+    for lecture in lectures:
+        match = re.fullmatch(r"(?i)lecture-(\d{2})", lecture["lecture_id"])
+        if lecture["session_link"] != "none_recorded" or not match:
+            continue
+        number = int(match.group(1))
+        candidates = sorted(sid for sid, numbers in named.items() if numbers == {number})
+        if len(candidates) == 1:
+            session = sessions[candidates[0]]
+            files = [i["filename"] for i in session["items"] if i["kind"] in {"lecture_recording", "lecture_transcript"}]
+            lecture.update(sessions=[session], session_link="suggested_by_file_name",
+                           session_link_evidence={"state": "suggested", "rule": "lecture number in the recording or transcript file name equals the unit number",
+                                                  "number": number, "session_id": session["session_id"], "files": files, "note": SESSION_LINK_NOTE})
+            session.setdefault("suggested_lecture_ids", []).append(lecture["lecture_id"])
+        elif candidates:
+            lecture["session_link_evidence"] = {"state": "ambiguous", "number": number, "candidates": candidates,
+                                                "note": "Several sessions are named with this unit's number; none is offered."}
+
+
 _REQUEST_MEMO: contextvars.ContextVar[dict | None] = contextvars.ContextVar("ll_inventory_request_memo", default=None)
 
 
@@ -350,6 +388,8 @@ def _build_inventory(binding: CourseBinding) -> dict[str, Any]:
                                        "deck_choice": choice,
                                        "sessions": [sessions[s] for s in sorted(linked)], "session_link": "owner_related_sources" if linked else "none_recorded"})
 
+    if binding.suggest_session_links:
+        _suggest_session_links(result["lectures"], sessions)
     result["sessions"] = [sessions[k] for k in sorted(sessions)]
     result["unlinked_sessions"] = [s for s in result["sessions"] if not s["linked_lecture_ids"]]
 

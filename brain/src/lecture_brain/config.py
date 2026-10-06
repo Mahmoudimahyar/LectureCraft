@@ -48,6 +48,9 @@ class CourseBinding:
     deck_overrides: Mapping[str, str] = field(default_factory=dict)
     reviewed_collections: tuple[str, ...] = ()
     cited_source_ids: tuple[str, ...] = ()
+    # Offer, as a labelled suggestion, a session the course index links to no unit when its file names carry that
+    # unit's number. Off unless the private read configuration switches it on; the index itself is never changed.
+    suggest_session_links: bool = False
 
     @property
     def usable(self) -> bool:
@@ -185,7 +188,10 @@ def _with_read_configuration(binding: CourseBinding, overrides: Mapping[str, Any
         pass  # no catalog, or one the catalog reader will report: deck choice then simply has no question references
     decks = (overrides.get("deck_overrides") or {}).get(binding.course_id) or {}
     reviewed = (overrides.get("reviewed_page_basis") or {}).get(binding.course_id) or []
-    return replace(binding, deck_overrides={str(k): str(v) for k, v in decks.items()}, reviewed_collections=tuple(str(c) for c in reviewed), cited_source_ids=tuple(sorted(cited)))
+    wanted = overrides.get("suggest_session_links")
+    suggest = wanted is True or (isinstance(wanted, (list, tuple)) and binding.course_id in wanted)
+    return replace(binding, deck_overrides={str(k): str(v) for k, v in decks.items()}, reviewed_collections=tuple(str(c) for c in reviewed), cited_source_ids=tuple(sorted(cited)),
+                   suggest_session_links=suggest)
 
 
 def load_settings(profile: str | None = None, *, env: Mapping[str, str] | None = None, repo: Path | None = None,

@@ -58,6 +58,10 @@ Every field returned before R2 stays. R2 adds the fields below.
   "question_ties": [                       // questions tied to this page's logical slide by an anchor
     {"question_id": "L03-Q04", "collection": "L03", "number": 4, "title": "…", "prompt": "…", "prompt_in_index": true,
      "tie": "stated",                      // "exact" | "stated" | "agent_inferred"   (never rewritten into one another)
+     "granularity": "page",                // "page": the tie names these pages; "section": the course's study map places the
+                                           //   question somewhere in a range of pages (coarse; listed apart from page ties)
+     "from": "course_locator",             // "course_locator" | "course_study_map" | "inferred_anchor_file"
+     "section": null,                      // section ties only: {"page_ranges": [[5, 20]], "label": "…", "row": 1, "scope": "all" | "part" | null}
      "where": "on_this_page",              // "on_this_page" | "elsewhere_in_sequence" | "group_level"
      "support_pages": [23],                // member pages of THIS logical slide that the tie names
      "other_pages": [31],                  // pages of the same deck in the same tie outside this logical slide

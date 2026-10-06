@@ -1397,12 +1397,24 @@ def status(settings: Settings, course_id: str, *, preparation: Preparation | Non
             totals["ranges"] += row["association"]["ranges"]
         stages[timing["stage"]] += 1
         lectures.append({"lecture_id": lecture_id, "title": lecture.get("title"), "stage": timing["stage"], "links": {"state": links["state"], "differs": links["differs"], "built_at": links.get("built_at")},
-                         "recordings": timing["recordings"]})
+                         "summary": _row_summary(document, links), "recordings": timing["recordings"]})
     return {"course_id": course_id, "allowance": allowance, "resume_command": resume_command, "queue_included": include_queue, "build_command": _build_command(settings, course_id),
             "lectures": lectures,
             "summary": {"lectures": len(lectures), "stages": stages, **{key: totals[key] for key in ("recordings", "recordings_with_generated", "recordings_associated", "covered_ms",
                                                                                                     "unresolved_ms", "duration_ms", "ranges")}},
             "note": "Stages and times as measured. Generated timing is unreviewed; ranges are suggestions; nothing here estimates what remains."}
+
+
+def _row_summary(document: dict | None, links: dict) -> dict[str, int | None]:
+    """``{pages, pages_with_range}`` of one lecture from its stored links alone: the page count of the deck they were built
+    for, and on how many of those pages a shown link lies while the links are current. The learner's own links and
+    rejections are applied in the lecture view, not here; links that are stale or missing give no count."""
+    slides = (document or {}).get("slides")
+    pages = slides.get("page_count") if isinstance(slides, dict) else None
+    if links.get("state") != "current":
+        return {"pages": pages, "pages_with_range": None}
+    named = {page for link in links.get("links") or [] for page in (link.get("support") or {}).get("pages") or []}
+    return {"pages": pages, "pages_with_range": len(named)}
 
 
 def _build_command(settings: Settings, course_id: str) -> str:

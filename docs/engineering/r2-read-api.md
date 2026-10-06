@@ -191,7 +191,7 @@ recorded reason (`no_file`, `no_item`, `stale`).
 
 | Route | Returns |
 |---|---|
-| `GET /api/courses/{c}/timing` | `{course_id, allowance: {ceiling_seconds, used_seconds, remaining_seconds} or null, resume_command, lectures: [{lecture_id, title, stage, recordings: [the same objects as 1.3 plus queue {state, chunks_done, chunks_total, seconds_covered}]}], summary}` |
+| `GET /api/courses/{c}/timing[?queue=false]` | `{course_id, allowance: {ceiling_seconds, used_seconds, remaining_seconds} or null, resume_command, build_command, queue_included, lectures: [{lecture_id, title, stage, links: {state, differs, built_at}, summary: {pages, pages_with_range}, recordings: [the same objects as 1.3 plus queue {state, chunks_done, chunks_total, seconds_covered}]}], summary, note}`. A lecture's `summary` is read from its stored links alone: `pages` is the page count of the deck the links were built for (`null` when nothing was built), `pages_with_range` the pages a shown link names while the links are current (`null` when they are stale or missing); the learner's own links and rejections are applied in the lecture view only. `queue=false` leaves out the transcription queue, the allowance and the resume command (`queue` is `null` on every recording) and then reads no other course. |
 | `POST /api/courses/{c}/lectures/{l}/timing/build` | Rebuilds the lecture's derived timing links from current inputs (app-private file only); returns the lecture's `timing` object |
 | `GET /api/courses/{c}/lectures/{l}/source-map` | The full stored map of the displayed deck, with override history |
 | `POST /api/courses/{c}/lectures/{l}/source-map/overrides` | Body `{op, pages, value?, reason}`; a learner correction as a new immutable revision; returns the new `source_map` block |

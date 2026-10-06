@@ -1042,6 +1042,25 @@ def test_status_lists_every_lecture_and_recording_with_its_stage_and_extrapolate
         tl.status(local, "no-such-course")
 
 
+def test_a_status_row_says_on_how_many_pages_of_the_deck_a_current_range_lies(local, journal, tmp_path):
+    """Study says "ranges on N of M pages" for a lecture without opening it. The row's figures come from the stored links:
+    M is the page count of the deck they were built for, N the pages a shown link names. Stale or missing links state M
+    when it is known and no N; nothing is counted from links that would not be shown."""
+    import_generation(local, journal, tmp_path / "out" / "gen-0001", transcript_lines(local))
+    document = tl.build(local, "be505", "lecture-01", now=lambda: NOW)
+    rows = {row["lecture_id"]: row for row in tl.status(local, "be505", queue=False)["lectures"]}
+    named = {page for link in document["links"] for page in link["support"]["pages"]}
+    assert named and rows["lecture-01"]["summary"] == {"pages": document["slides"]["page_count"], "pages_with_range": len(named)}
+    assert rows["lecture-02"]["summary"] == {"pages": None, "pages_with_range": None} and rows["lecture-03"]["summary"] == {"pages": None, "pages_with_range": None}
+    # the same lecture as its own view counts it (nothing rejected, no link of the learner's own)
+    served = tl.read(local, "be505", "lecture-01", current_inputs=tl.current_inputs(local, "be505", "lecture-01"))
+    assert served["state"] == "current" and {page for link in served["links"] for page in link["support"]["pages"]} == named
+    import_generation(local, journal, tmp_path / "out" / "gen-0002", transcript_lines(local) + ["One more synthetic sentence at the very end."], name="gen-0002", step_ms=2_390,
+                      created_at="2026-10-06T10:00:00Z")
+    stale = {row["lecture_id"]: row for row in tl.status(local, "be505", queue=False)["lectures"]}["lecture-01"]
+    assert stale["links"]["state"] == "stale" and stale["summary"] == {"pages": document["slides"]["page_count"], "pages_with_range": None}
+
+
 def test_the_two_routes_read_the_course_and_rebuild_one_lecture(local, journal, tmp_path):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient

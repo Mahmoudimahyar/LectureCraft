@@ -72,8 +72,8 @@ export function LectureQuestionsPanel({ courseId, lecture, onGoToPage }: { cours
       <section aria-labelledby="lq-all">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h3 id="lq-all" className="ll-label">All lecture questions ({all.length})</h3>
-          <span className="flex gap-3 text-sm"><Link className="text-accent hover:underline" to={`/courses/${courseId}/outline?scope=${encodeURIComponent(`lecture:${lecture.lecture_id}`)}`}>Concept outline</Link>
-            <Link className="text-accent hover:underline" to={`/courses/${courseId}/questions?lecture=${encodeURIComponent(lecture.lecture_id)}`}>Open in the question bank</Link></span>
+          <span className="flex gap-3 text-sm"><Link className="text-accent-text hover:underline" to={`/courses/${courseId}/outline?scope=${encodeURIComponent(`lecture:${lecture.lecture_id}`)}`}>Concept outline</Link>
+            <Link className="text-accent-text hover:underline" to={`/courses/${courseId}/questions?lecture=${encodeURIComponent(lecture.lecture_id)}`}>Open in the question bank</Link></span>
         </div>
         {lecture.questions.gap ? (
           <Callout tone="unassessed" title="No question collection for this lecture">{lecture.questions.gap} Nothing was generated to fill the gap.</Callout>
@@ -147,7 +147,7 @@ export function QuestionBankPage() {
                 const on = filter.collection === c.collection;
                 return (
                   <li key={c.collection}>
-                    <button type="button" aria-pressed={on} onClick={() => set("collection", on ? "" : c.collection)} className={`ll-card flex w-full flex-col gap-0.5 p-3 text-left hover:bg-raised ${on ? "outline outline-2 outline-accent" : ""}`}>
+                    <button type="button" aria-pressed={on} onClick={() => set("collection", on ? "" : c.collection)} className={`ll-card flex w-full flex-col gap-0.5 p-3 text-left hover:bg-pad ${on ? "outline outline-2 outline-accent-text" : ""}`}>
                       <span className="flex items-baseline justify-between gap-2"><span className="font-semibold">{c.collection}</span><span className="tabular-nums">{c.count}</span></span>
                       <span className="text-sm text-muted">
                         {(c.lecture_ids ?? []).length ? (c.lecture_ids ?? []).map((l) => l.replace("-", " ")).join(", ") : "not tied to a lecture unit"}

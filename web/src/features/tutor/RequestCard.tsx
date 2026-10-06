@@ -117,7 +117,7 @@ export function RequestCard({ request, onFollowUp, showContext = true }: { reque
         {showContext && <span className="ll-chip">{request.context.label}</span>}
         <span className="text-muted">{formatWhen(request.createdAt)}</span>
       </header>
-      <p className="whitespace-pre-wrap rounded bg-raised p-2 text-sm" data-testid="learner-text">{request.text}</p>
+      <p className="whitespace-pre-wrap rounded bg-pad p-2 text-sm" data-testid="learner-text">{request.text}</p>
 
       <ul className="flex flex-wrap gap-1.5 text-sm" aria-label="Request status">
         <li><StatusChip tone={request.upload === "upload_failed" ? "danger" : "success"}>Your input: {request.upload === "upload_failed" ? "at risk — copy it" : request.upload === "uploaded" ? "captured" : "kept on this device"}</StatusChip></li>
@@ -131,7 +131,7 @@ export function RequestCard({ request, onFollowUp, showContext = true }: { reque
       {status.isError && <Callout tone="caution" title="Status unavailable">{status.error.message}</Callout>}
 
       {verified?.message && (
-        <section aria-label="Tutor reply" className="border-l-2 border-accent pl-3" data-testid="tutor-reply">
+        <section aria-label="Tutor reply" className="border-l-2 border-accent-text pl-3" data-testid="tutor-reply">
           <p className="ll-label mb-1">Tutor</p>
           <ReplyBody text={verified.message.text} detail={detail} />
           {verified.message.sources.length > 0 && (

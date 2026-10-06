@@ -50,7 +50,7 @@ export function ProgressPage() {
     <div className="ll-page">
       <PageHeader title="Progress" subtitle="What your recorded responses showed — not a score."
         actions={<><Link className="ll-btn" to={`/courses/${courseId}/outline`}>Concept outline</Link><Link className="ll-btn" to="/history">Study history</Link></>} />
-      {data.owner_view_status === "stale" && <Callout tone="caution" className="mb-3" title="The course's own summary view is out of date">Its original attempt records are intact and are what you see here; only the generated summary lags. <Link className="text-accent underline" to="/settings/maintenance">Maintenance</Link></Callout>}
+      {data.owner_view_status === "stale" && <Callout tone="caution" className="mb-3" title="The course's own summary view is out of date">Its original attempt records are intact and are what you see here; only the generated summary lags. <Link className="text-accent-text underline" to="/settings/maintenance">Maintenance</Link></Callout>}
       <ul className="mb-4 flex flex-wrap gap-2" aria-label="Evidence summary">
         <li><StatusChip tone="neutral">{data.recorded_attempts} recorded attempt{data.recorded_attempts === 1 ? "" : "s"}</StatusChip></li>
         <li><StatusChip tone="neutral">{data.assessment_revisions} assessment correction{data.assessment_revisions === 1 ? "" : "s"} (not new attempts)</StatusChip></li>
@@ -138,7 +138,7 @@ export function ProgressPage() {
                               </div>
                               <p className="mt-1">{e.question_prompt}</p>
                               <p className="text-muted">{e.analysis}</p>
-                              <Link className="text-accent underline" to={`/history/${encodeURIComponent(e.attempt_id)}`}>Open the original attempt</Link>
+                              <Link className="text-accent-text underline" to={`/history/${encodeURIComponent(e.attempt_id)}`}>Open the original attempt</Link>
                             </li>
                           ))}
                         </ul>
@@ -194,7 +194,7 @@ export function ConceptDetail() {
     const target = view.nodes[id];
     if (!target) return <span>{id}</span>;
     const href = target.type === "question" ? `/courses/${courseId}/questions/${encodeURIComponent(id)}` : `/courses/${courseId}/concepts/${encodeURIComponent(id)}`;
-    return <Link className="text-accent underline" to={href}>{target.label}</Link>;
+    return <Link className="text-accent-text underline" to={href}>{target.label}</Link>;
   };
   const evidence = node.evidence_by_outcome ?? {};
   return (
@@ -208,7 +208,7 @@ export function ConceptDetail() {
           {Object.keys(evidence).length === 0 ? <p className="text-muted">Not assessed: no attempt has observed this skill.</p> : (
             <ul className="flex flex-wrap gap-2">{Object.entries(evidence).map(([outcome, count]) => <li key={outcome}><StatusChip tone={OUTCOME_LABEL[outcome]?.tone ?? "neutral"}>{count} × {OUTCOME_LABEL[outcome]?.label ?? outcome}</StatusChip></li>)}</ul>
           )}
-          <p className="mt-2 text-sm text-muted">Counts of observations across attempts (a regrade replaces, it does not add). <Link className="text-accent underline" to="/progress">See the attempts in Progress</Link>.</p>
+          <p className="mt-2 text-sm text-muted">Counts of observations across attempts (a regrade replaces, it does not add). <Link className="text-accent-text underline" to="/progress">See the attempts in Progress</Link>.</p>
         </section>
       )}
       {[...group(incoming, "from"), ...group(outgoing, "to")].length === 0 ? <p className="text-muted">No relationship to other items is recorded.</p> : (
@@ -261,7 +261,7 @@ export function HistoryPage() {
           {attempts.length === 0 ? <EmptyState title={data.attempts.length ? "No attempt matches" : "Not assessed"}>{data.attempts.length ? "Clear the filter to see all attempts." : "No attempt is recorded for this course yet."}</EmptyState> : (
             <ul className="flex flex-col gap-3">
               {attempts.map((a) => (
-                <li key={a.attempt_id} id={a.attempt_id} className={`ll-card p-3 ${sessionId === a.attempt_id ? "outline outline-2 outline-accent" : ""}`}>
+                <li key={a.attempt_id} id={a.attempt_id} className={`ll-card p-3 ${sessionId === a.attempt_id ? "outline outline-2 outline-accent-text" : ""}`}>
                   <div className="flex flex-wrap items-center gap-2 text-sm">
                     <span className="font-mono">{a.attempt_id}</span>
                     <StatusChip tone="neutral">{a.mode}</StatusChip>
@@ -303,7 +303,7 @@ export function HistoryPage() {
                   <h2 className="mb-2 font-mono text-sm">{c.run_id}</h2>
                   <ol className="flex flex-col gap-2 text-sm">
                     {c.entries.map((e, i) => (
-                      <li key={i} className={`rounded p-2 ${e.kind === "tutor" ? "border-l-2 border-accent bg-raised" : "border border-line/40"}`}>
+                      <li key={i} className={`rounded p-2 ${e.kind === "tutor" ? "border-l-2 border-accent-text bg-pad" : "border border-line/40"}`}>
                         <span className="ll-label">{e.kind === "tutor" ? "Tutor reply (as delivered)" : e.kind === "submission" ? `Your ${e.interaction?.replace(/_/g, " ")}` : "Your question"} · {formatWhen(e.at)}</span>
                         {e.prompt && <p className="text-muted">Asked: {e.prompt}</p>}
                         <p className="whitespace-pre-wrap">{e.text}</p>

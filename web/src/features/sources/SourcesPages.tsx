@@ -244,7 +244,7 @@ function TextSource({ url, line: wanted }: { url: string; line: number | null })
   return (
     <ol className="ll-card max-h-[70dvh] overflow-auto p-3 text-sm" aria-label="Text source, numbered lines">
       {(text.data ?? "").split(/\r?\n/).map((line, i) => (
-        <li key={i} className={`flex gap-3 ${wanted === i + 1 ? "rounded bg-raised font-medium outline outline-2 outline-focus" : ""}`} aria-current={wanted === i + 1 ? "location" : undefined}
+        <li key={i} className={`flex gap-3 ${wanted === i + 1 ? "rounded bg-tint font-medium outline outline-2 outline-focus" : ""}`} aria-current={wanted === i + 1 ? "location" : undefined}
           ref={wanted === i + 1 ? (el) => el?.scrollIntoView({ block: "center" }) : undefined}>
           <span className="w-10 shrink-0 text-right tabular-nums text-muted">{i + 1}</span><span className="whitespace-pre-wrap">{line}</span>
         </li>

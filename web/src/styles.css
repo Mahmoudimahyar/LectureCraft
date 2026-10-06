@@ -2,7 +2,18 @@
 @import "./styles/tokens.css";
 @import "katex/dist/katex.min.css";
 
-/* Semantic tokens → Tailwind utilities (bg-surface, text-muted, border-line, …). */
+/* Semantic tokens → Tailwind utilities. Every colour, size and radius used in web/src is one of these names; nothing
+   is written as a literal anywhere else (design specification 3.6). The values live in docs/project/design-tokens.json
+   and reach this file through the generated src/styles/tokens.css.
+
+   Colours   bg-bg (work area) · bg-surface (chrome) · bg-raised (raised) · text-ink · text-muted · border-line (a
+             control's boundary, never a container stroke) · border-hairline (grouping only) · bg-accent (a FILL only:
+             the play disc and the one primary button) · bg-accent-hover · text-on-accent · text-accent-text (accent as
+             text and as a mark) · bg-tint / bg-tint-strong (the ground of "where you are") · bg-pad / bg-pad-strong /
+             bg-pad-press (translucent washes) · outline-focus · text-success / -caution / -danger / -unassessed (glyphs).
+   Type      text-micro · text-meta · text-ui · text-read · text-head · text-title · text-display (each with its line height;
+             they step with the window at 900, 1440, 1920 and 2400 px).
+   Radii     rounded-thumb (6) · rounded-row (8) · rounded-control (10) · rounded-region (14). */
 @theme inline {
   --color-bg: var(--ll-background);
   --color-surface: var(--ll-surface);
@@ -17,13 +28,68 @@
   --color-caution: var(--ll-caution);
   --color-danger: var(--ll-danger);
   --color-unassessed: var(--ll-unassessed);
+  --color-hairline: var(--ll-hairline);
+  --color-accent-hover: var(--ll-accent-hover);
+  --color-accent-text: var(--ll-accent-text);
+  --color-tint: var(--ll-tint);
+  --color-tint-strong: var(--ll-tint-strong);
+  --color-pad: var(--ll-pad);
+  --color-pad-strong: var(--ll-pad-strong);
+  --color-pad-press: var(--ll-pad-press);
+
+  --text-micro: var(--ll-fs-micro);
+  --text-micro--line-height: var(--ll-lh-micro);
+  --text-meta: var(--ll-fs-meta);
+  --text-meta--line-height: var(--ll-lh-meta);
+  --text-ui: var(--ll-fs-ui);
+  --text-ui--line-height: var(--ll-lh-ui);
+  --text-read: var(--ll-fs-read);
+  --text-read--line-height: var(--ll-lh-read);
+  --text-head: var(--ll-fs-head);
+  --text-head--line-height: var(--ll-lh-head);
+  --text-title: var(--ll-fs-title);
+  --text-title--line-height: var(--ll-lh-title);
+  --text-display: var(--ll-fs-display);
+  --text-display--line-height: var(--ll-lh-display);
+
+  --radius-thumb: var(--ll-radius-thumb);
+  --radius-row: var(--ll-radius-row);
+  --radius-control: var(--ll-radius-control);
+  --radius-region: var(--ll-radius-region);
+
   --font-sans: var(--ll-font-ui);
+}
+
+/* LEGACY NAMES (theme). Tailwind's own size names, as the pages not yet redrawn write them, are pointed at the roles
+   of the type scale, so those pages keep seven sizes and step with the window like the rest. New code writes the role
+   (text-ui, text-read, …). --radius-ll goes once nothing writes rounded-ll. */
+@theme inline {
+  --text-xs: var(--ll-fs-micro);
+  --text-xs--line-height: var(--ll-lh-micro);
+  --text-sm: var(--ll-fs-ui);
+  --text-sm--line-height: var(--ll-lh-ui);
+  --text-base: var(--ll-fs-read);
+  --text-base--line-height: var(--ll-lh-read);
+  --text-lg: var(--ll-fs-head);
+  --text-lg--line-height: var(--ll-lh-head);
+  --text-xl: var(--ll-fs-title);
+  --text-xl--line-height: var(--ll-lh-title);
+  --text-2xl: var(--ll-fs-display);
+  --text-2xl--line-height: var(--ll-lh-display);
   --radius-ll: var(--ll-radius);
 }
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
-/* "wide": the multi-column layout. Used only when the viewport has room AND the learner has not
-   enlarged text; with large text every screen falls back to the single-column (phone) arrangement. */
+/* "frame": the three-zone workspace frame. From 1180 px, and never once the learner has enlarged text (every width
+   then uses the one-pane arrangement). Media queries are in px on purpose: a rem query ignores the text-size setting. */
+@custom-variant frame {
+  @media (min-width: 1180px) {
+    html:not([data-text-scale="large"]) & {
+      @slot;
+    }
+  }
+}
+/* LEGACY NAME (variant). "wide" (64 rem) is the multi-column arrangement of the screens not yet moved to "frame". */
 @custom-variant wide {
   @media (min-width: 64rem) {
     html:not([data-text-scale="large"]) & {
@@ -32,11 +98,58 @@
   }
 }
 
+/* ---- constants that are not token keys (design specification 3.4, 4.2) ------------------------------------------------ */
+:root,
+[data-theme="light"] {
+  /* Elevation, three levels only: flat (tone and a hairline ring), the source page, pop (menus, popovers, dialogs). */
+  --ll-shadow-source: 0 1px 2px rgb(21 33 58 / 0.07), 0 8px 24px rgb(21 33 58 / 0.06);
+  --ll-shadow-pop: 0 12px 32px rgb(21 33 58 / 0.18);
+  --ll-scrim: rgb(21 33 58 / 0.32);
+  /* Navigation thumbnails: drawn in full in light, dimmed in dark so the slide stays the brightest object. */
+  --ll-thumb-rest: 1;
+}
+:root {
+  /* Shell: header, rail, the band (pager, tabs, pane switch, outline head), the padding inside a context panel. */
+  --ll-hdr-h: 52px;
+  --ll-rail-w: 0px;
+  --ll-band-h: 48px;
+  --ll-panel-pad: 16px;
+}
+[data-theme="dark"] {
+  --ll-shadow-source: 0 0 0 1px rgb(0 0 0 / 0.25);
+  --ll-shadow-pop: 0 12px 32px rgb(0 0 0 / 0.55);
+  --ll-scrim: rgb(0 0 0 / 0.55);
+  /* Provisional: to be tried on real decks before it is fixed. The slide itself is never dimmed. */
+  --ll-thumb-rest: 0.8;
+}
+@media (min-width: 900px) {
+  :root {
+    --ll-hdr-h: 56px;
+    --ll-rail-w: 76px;
+  }
+}
+@media (min-width: 1920px) {
+  :root {
+    --ll-hdr-h: 60px;
+    --ll-rail-w: 84px;
+    --ll-panel-pad: 24px;
+  }
+}
+@media (min-width: 2400px) {
+  :root {
+    --ll-hdr-h: 64px;
+    --ll-band-h: 52px;
+  }
+}
+
+/* ---- base ------------------------------------------------------------------------------------------------------------- */
 html {
   color-scheme: light;
   font-family: var(--ll-font-ui);
   line-height: var(--ll-line-height);
   -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 html[data-theme="dark"] {
   color-scheme: dark;
@@ -45,108 +158,710 @@ body {
   margin: 0;
   background: var(--ll-background);
   color: var(--ll-text);
+  /* Text with no size of its own is reading text. */
+  font-size: var(--ll-fs-read);
   min-height: 100dvh;
 }
 #root {
   min-height: 100dvh;
 }
 
-/* Visible, unobscured focus everywhere (WCAG 2.2 focus appearance); never colour-only state. */
+/* Visible focus everywhere (WCAG 2.2 focus appearance): a 2 px ring, 2 px away, with the control's own radius. */
 :focus-visible {
-  outline: 3px solid var(--ll-focus);
+  outline: 2px solid var(--ll-focus);
   outline-offset: 2px;
-  border-radius: 4px;
 }
 ::selection {
-  background: color-mix(in srgb, var(--ll-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--ll-accent-text) 28%, transparent);
 }
 
-@layer components {
-  .ll-card {
-    background: var(--ll-surface);
-    border: 1px solid color-mix(in srgb, var(--ll-border) 45%, transparent);
-    border-radius: var(--ll-radius);
+@layer base {
+  b,
+  strong {
+    font-weight: var(--ll-weight-strong);
   }
-  .ll-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    min-height: 44px;
-    padding: 0.5rem 1rem;
-    border-radius: var(--ll-radius);
-    border: 1px solid var(--ll-border);
-    background: var(--ll-surface);
-    color: var(--ll-text);
-    font: inherit;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background-color var(--ll-motion-small) ease, border-color var(--ll-motion-small) ease;
-    text-decoration: none;
-  }
-  .ll-btn:hover:not(:disabled) {
-    background: var(--ll-surface-raised);
-  }
-  .ll-btn:disabled,
-  .ll-btn[aria-disabled="true"] {
-    cursor: not-allowed;
-    opacity: 0.6;
-  }
-  .ll-btn-primary {
-    background: var(--ll-accent);
-    border-color: var(--ll-accent);
-    color: var(--ll-on-accent);
-  }
-  .ll-btn-primary:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--ll-accent) 88%, var(--ll-text));
-  }
-  .ll-btn-quiet {
-    border-color: transparent;
-    background: transparent;
-  }
-  .ll-btn-sm {
-    min-height: 36px;
-    padding: 0.25rem 0.75rem;
-    font-weight: 500;
-  }
-  .ll-input {
-    width: 100%;
-    min-height: 44px;
-    padding: 0.5rem 0.75rem;
-    border-radius: var(--ll-radius);
-    border: 1px solid var(--ll-border);
-    background: var(--ll-surface);
-    color: var(--ll-text);
-    font: inherit;
-  }
-  .ll-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
-    padding: 0.25rem 0.625rem;
-    border-radius: 999px;
-    border: 1px solid color-mix(in srgb, var(--ll-border) 60%, transparent);
-    background: var(--ll-surface-raised);
-    color: var(--ll-text);
-    font-size: 0.875rem;
-    line-height: 1.3;
-    /* A chip never forces its row wider than the screen: its text wraps instead. */
+  /* Form controls never force a row wider than the screen (narrow viewports, enlarged text): a long option label is
+     clipped inside its own control instead of pushing the page sideways. In the base layer on purpose: a utility such
+     as max-w-[...] on one control must still win. */
+  label {
     max-width: 100%;
     min-width: 0;
   }
-  .ll-chip > span {
+  select.ll-input,
+  input.ll-input,
+  textarea.ll-input {
+    max-width: 100%;
     min-width: 0;
+  }
+}
+
+/* ---- components (design specification, section 8) ---------------------------------------------------------------------- */
+@layer components {
+  /* Button. Neutral: a pad, no stroke. Primary: the accent fill, one per view. Sizes: 40 (36 small, 44 large, 28 in a
+     line of text). A label may wrap on a narrow screen rather than push the page sideways. */
+  .ll-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--ll-space-2);
+    min-height: 40px;
+    padding: 6px var(--ll-space-4);
+    border: 0;
+    border-radius: var(--ll-radius-control);
+    background: var(--ll-pad);
+    color: var(--ll-text);
+    font: inherit;
+    font-size: var(--ll-fs-ui);
+    line-height: var(--ll-lh-ui);
+    font-weight: var(--ll-weight-strong);
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color var(--ll-motion-small) ease;
+  }
+  .ll-btn > svg {
+    flex: none;
+    width: 18px;
+    height: 18px;
+  }
+  .ll-btn:hover {
+    background: var(--ll-pad-strong);
+  }
+  .ll-btn:active {
+    background: var(--ll-pad-press);
+  }
+  .ll-btn-primary {
+    background: var(--ll-accent);
+    color: var(--ll-on-accent);
+  }
+  .ll-btn-primary:hover,
+  .ll-btn-primary:active {
+    background: var(--ll-accent-hover);
+  }
+  /* Quiet: a bare button for a secondary action beside a neutral one. */
+  .ll-btn-quiet {
+    background: transparent;
+  }
+  .ll-btn-quiet:hover {
+    background: var(--ll-pad);
+  }
+  .ll-btn-quiet:active {
+    background: var(--ll-pad-strong);
+  }
+  .ll-btn-sm {
+    min-height: 36px;
+    padding: 4px var(--ll-space-3);
+  }
+  .ll-btn-lg {
+    min-height: 44px;
+    padding: 8px var(--ll-space-5);
+  }
+  .ll-btn-xs {
+    min-height: 28px;
+    padding: 2px 10px;
+    border-radius: var(--ll-radius-row);
+  }
+  /* Disabled: the pad goes and the weight goes; a hairline ring keeps the shape. Never opacity. The reason is a
+     sentence beside the button. A busy button keeps its fill: it names the action in progress. */
+  .ll-btn:disabled:not([aria-busy="true"]),
+  .ll-btn[aria-disabled="true"] {
+    background: transparent;
+    color: var(--ll-muted-text);
+    font-weight: var(--ll-weight-regular);
+    box-shadow: inset 0 0 0 1px var(--ll-hairline);
+    cursor: not-allowed;
+  }
+  .ll-btn[aria-busy="true"] {
+    cursor: progress;
+  }
+
+  /* Icon button: 36 square (28 small, 44 large), bare. On (aria-pressed): the selection idiom. */
+  .ll-ib {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    gap: 6px;
+    min-width: 36px;
+    height: 36px;
+    padding: 0 var(--ll-space-2);
+    border: 0;
+    border-radius: var(--ll-radius-control);
+    background: transparent;
+    color: var(--ll-text);
+    font: inherit;
+    font-size: var(--ll-fs-ui);
+    line-height: var(--ll-lh-ui);
+    cursor: pointer;
+    transition: background-color var(--ll-motion-small) ease;
+  }
+  .ll-ib > svg {
+    flex: none;
+    width: 20px;
+    height: 20px;
+  }
+  .ll-ib:hover {
+    background: var(--ll-pad);
+  }
+  .ll-ib:active {
+    background: var(--ll-pad-strong);
+  }
+  .ll-ib-sm {
+    min-width: 28px;
+    height: 28px;
+    padding: 0 6px;
+    border-radius: var(--ll-radius-thumb);
+  }
+  .ll-ib-sm > svg {
+    width: 16px;
+    height: 16px;
+  }
+  .ll-ib-lg {
+    min-width: 44px;
+    height: 44px;
+  }
+  .ll-ib-primary {
+    background: var(--ll-accent);
+    color: var(--ll-on-accent);
+  }
+  .ll-ib-primary:hover,
+  .ll-ib-primary:active {
+    background: var(--ll-accent-hover);
+  }
+  /* A disabled icon button: the glyph in the border colour (3:1), no hover, never opacity. */
+  .ll-ib:disabled,
+  .ll-ib[aria-disabled="true"] {
+    background: transparent;
+    color: var(--ll-border);
+    cursor: not-allowed;
+  }
+
+  /* Toolbar text button: 36 high (28 inside the range line), bare, regular weight, an optional leading icon (18) and
+     trailing chevron (16). */
+  .ll-tbtn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 36px;
+    padding: 0 var(--ll-space-3);
+    border: 0;
+    border-radius: var(--ll-radius-control);
+    background: transparent;
+    color: var(--ll-text);
+    font: inherit;
+    font-size: var(--ll-fs-ui);
+    line-height: var(--ll-lh-ui);
+    font-weight: var(--ll-weight-regular);
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color var(--ll-motion-small) ease;
+  }
+  .ll-tbtn > svg {
+    flex: none;
+    width: 16px;
+    height: 16px;
+  }
+  .ll-tbtn > svg:first-child {
+    width: 18px;
+    height: 18px;
+  }
+  .ll-tbtn:hover {
+    background: var(--ll-pad);
+  }
+  .ll-tbtn:active {
+    background: var(--ll-pad-strong);
+  }
+  .ll-tbtn-sm {
+    min-height: 28px;
+    padding: 0 var(--ll-space-2);
+    border-radius: var(--ll-radius-row);
+  }
+  .ll-tbtn:disabled,
+  .ll-tbtn[aria-disabled="true"] {
+    background: transparent;
+    color: var(--ll-muted-text);
+    cursor: not-allowed;
+  }
+
+  /* The one selection idiom on a toggle that is on: tint, accent text, a 1.5 px accent ring. */
+  .ll-ib[aria-pressed="true"],
+  .ll-tbtn[aria-pressed="true"] {
+    background: var(--ll-tint);
+    color: var(--ll-accent-text);
+    font-weight: var(--ll-weight-strong);
+    box-shadow: inset 0 0 0 1.5px var(--ll-accent-text);
+  }
+  .ll-ib[aria-pressed="true"]:hover,
+  .ll-tbtn[aria-pressed="true"]:hover {
+    background: var(--ll-tint-strong);
+  }
+
+  /* On a touch screen a small control keeps its drawn size and answers a larger press (44 px preferred). */
+  /* The press area grows above and below (to 44 px) and at most 2 px sideways, so it never reaches into a neighbour. */
+  @media (pointer: coarse) {
+    .ll-btn::after,
+    .ll-ib::after,
+    .ll-tbtn::after,
+    .ll-seg-item::after {
+      content: "";
+      position: absolute;
+      inset: -2px 0;
+    }
+    .ll-btn-sm::after,
+    .ll-tbtn::after {
+      inset: -4px 0;
+    }
+    .ll-ib::after {
+      inset: -4px -2px;
+    }
+    .ll-seg-item::after {
+      inset: -6px 0;
+    }
+    .ll-btn-xs::after,
+    .ll-tbtn-sm::after {
+      inset: -8px 0;
+    }
+    .ll-ib-sm::after {
+      inset: -8px -2px;
+    }
+    .ll-btn-lg::after,
+    .ll-ib-lg::after {
+      content: none;
+    }
+  }
+
+  /* Link and citation: accent text with a 1 px underline at 45 % that goes solid on hover. */
+  .ll-link {
+    color: var(--ll-accent-text);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+    text-decoration-color: color-mix(in srgb, var(--ll-accent-text) 45%, transparent);
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .ll-link:hover {
+    text-decoration-color: currentColor;
+  }
+  /* What follows a citation ("build 1 of 3", "on screen"). */
+  .ll-qualifier {
+    color: var(--ll-muted-text);
+  }
+
+  /* Segmented control: one pad track; the chosen segment is the selection idiom (tint, accent text, 1.5 px ring). */
+  .ll-seg {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 3px;
+    border-radius: var(--ll-radius-control);
+    background: var(--ll-pad);
+    max-width: 100%;
+  }
+  .ll-seg-item {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 0 var(--ll-space-3);
+    border: 0;
+    border-radius: var(--ll-radius-row);
+    background: transparent;
+    color: var(--ll-text);
+    font: inherit;
+    font-size: var(--ll-fs-ui);
+    line-height: var(--ll-lh-ui);
+    text-align: center;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color var(--ll-motion-small) ease;
+  }
+  .ll-seg-item > svg {
+    flex: none;
+    width: 18px;
+    height: 18px;
+  }
+  .ll-seg-item:hover {
+    background: var(--ll-pad);
+  }
+  .ll-seg-item[aria-checked="true"],
+  .ll-seg-item[data-state="on"] {
+    background: var(--ll-tint);
+    color: var(--ll-accent-text);
+    font-weight: var(--ll-weight-strong);
+    box-shadow: inset 0 0 0 1.5px var(--ll-accent-text);
+  }
+  .ll-seg-item:disabled {
+    color: var(--ll-muted-text);
+    cursor: not-allowed;
+  }
+
+  /* Text tabs: a pad shape behind the label on hover; the chosen tab is accent text, semibold, with a 3 px underline
+     and no tint. A count is a muted figure after the label. */
+  .ll-tabs {
+    display: flex;
+    align-items: stretch;
+    min-width: 0;
+  }
+  .ll-tab {
+    position: relative;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    padding: 0 10px;
+    border: 0;
+    background: transparent;
+    color: var(--ll-text);
+    font: inherit;
+    font-size: var(--ll-fs-ui);
+    line-height: var(--ll-lh-ui);
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .ll-tab::before {
+    content: "";
+    position: absolute;
+    inset: 8px 2px;
+    border-radius: var(--ll-radius-row);
+    background: transparent;
+    transition: background-color var(--ll-motion-small) ease;
+  }
+  .ll-tab > * {
+    position: relative;
+  }
+  .ll-tab:hover::before {
+    background: var(--ll-pad);
+  }
+  .ll-tab[aria-selected="true"],
+  .ll-tab[aria-current],
+  .ll-tab[data-state="active"] {
+    color: var(--ll-accent-text);
+    font-weight: var(--ll-weight-strong);
+  }
+  .ll-tab[aria-selected="true"]::after,
+  .ll-tab[aria-current]::after,
+  .ll-tab[data-state="active"]::after {
+    content: "";
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: -1px;
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+    background: var(--ll-accent-text);
+  }
+  .ll-tab-n {
+    font-weight: var(--ll-weight-regular);
+    color: var(--ll-muted-text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* A section heading that opens (Radix Accordion): head size, a chevron, the name, a muted count. */
+  .ll-sec {
+    display: flex;
+    align-items: center;
+    gap: var(--ll-space-2);
+    width: 100%;
+    padding: var(--ll-space-3) var(--ll-space-2) var(--ll-space-3) 0;
+    border: 0;
+    border-radius: var(--ll-radius-row);
+    background: transparent;
+    color: var(--ll-text);
+    font: inherit;
+    font-size: var(--ll-fs-head);
+    line-height: var(--ll-lh-head);
+    font-weight: var(--ll-weight-strong);
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--ll-motion-small) ease;
+  }
+  .ll-sec:hover {
+    background: var(--ll-pad);
+  }
+  .ll-sec > svg {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    color: var(--ll-muted-text);
+    transition: transform var(--ll-motion-small) ease;
+  }
+  .ll-sec[data-state="open"] > svg,
+  .ll-sec[aria-expanded="true"] > svg {
+    transform: rotate(90deg);
+  }
+  .ll-sec-n {
+    font-weight: var(--ll-weight-regular);
+    color: var(--ll-muted-text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* State label: a ring glyph in the state's colour and neutral words; what stands beside it is muted. Basis label: a
+     square-family glyph and words. Neither is ever a pill. An error: the triangle and plain words. */
+  .ll-state {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 0;
+    font-size: var(--ll-fs-ui);
+    line-height: var(--ll-lh-ui);
+    color: var(--ll-text);
+  }
+  .ll-state > svg {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin-top: calc((var(--ll-lh-ui) - 16px) / 2);
+  }
+  .ll-beside {
+    color: var(--ll-muted-text);
+  }
+  .ll-beside svg {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-right: 4px;
+    vertical-align: -2px;
+  }
+  .ll-basis {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 0;
+    font-size: var(--ll-fs-ui);
+    line-height: var(--ll-lh-ui);
+    color: var(--ll-muted-text);
+  }
+  .ll-basis > svg {
+    flex: none;
+    width: 15px;
+    height: 15px;
+    margin-top: calc((var(--ll-lh-ui) - 15px) / 2);
+    color: var(--ll-muted-text);
+  }
+  .ll-basis-strong {
+    color: var(--ll-text);
+    font-weight: var(--ll-weight-strong);
+  }
+  .ll-err {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 0;
+    font-size: var(--ll-fs-ui);
+    line-height: var(--ll-lh-ui);
+    font-weight: var(--ll-weight-strong);
+    color: var(--ll-text);
+  }
+  .ll-err > svg {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin-top: calc((var(--ll-lh-ui) - 16px) / 2);
+    color: var(--ll-danger);
+  }
+  /* A kind of node: a small filled shape, 12 px, muted; accent text when its row or node is selected. */
+  .ll-kind {
+    flex: none;
+    width: 12px;
+    height: 12px;
+    color: var(--ll-muted-text);
+  }
+  [aria-selected="true"] > .ll-kind,
+  [aria-current] > .ll-kind,
+  .ll-kind[data-selected="true"] {
+    color: var(--ll-accent-text);
+  }
+
+  /* The stale notice: one line on a pad, with the refresh glyph and a link. */
+  .ll-stale {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ll-space-2) var(--ll-space-3);
+    max-width: 68ch;
+    padding: var(--ll-space-2) var(--ll-space-3);
+    border-radius: var(--ll-radius-control);
+    background: var(--ll-pad);
+    font-size: var(--ll-fs-ui);
+    line-height: var(--ll-lh-ui);
+  }
+  .ll-stale > svg {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin-top: calc((var(--ll-lh-ui) - 16px) / 2);
+    color: var(--ll-muted-text);
+  }
+  .ll-stale > span {
+    flex: 1;
+    min-width: 0;
+  }
+  .ll-stale .ll-link {
+    flex: none;
+    border: 0;
+    padding: 0;
+    background: none;
+    font: inherit;
+    font-weight: var(--ll-weight-strong);
+    white-space: nowrap;
+  }
+
+  /* Skeleton: a flat block. It does not pulse or shimmer. */
+  .ll-sk {
+    display: block;
+    border-radius: var(--ll-radius-thumb);
+    background: var(--ll-pad-strong);
+  }
+
+  /* A region: the context panel, the lecture pane on Study, a pane. Tone and a hairline ring. */
+  .ll-region {
+    background: var(--ll-surface);
+    border-radius: var(--ll-radius-region);
+    box-shadow: 0 0 0 1px var(--ll-hairline);
+  }
+  /* Popover and menu: raised, a hairline ring and the pop shadow. A dialog is the same on the region radius. */
+  .ll-pop {
+    background: var(--ll-surface-raised);
+    color: var(--ll-text);
+    border-radius: var(--ll-radius-control);
+    box-shadow: 0 0 0 1px var(--ll-hairline), var(--ll-shadow-pop);
+  }
+  /* One row of a menu or a popover list. */
+  .ll-menu-item {
+    display: flex;
+    align-items: center;
+    gap: var(--ll-space-2);
+    width: 100%;
+    min-height: 36px;
+    padding: 6px var(--ll-space-3);
+    border: 0;
+    border-radius: var(--ll-radius-row);
+    background: transparent;
+    color: var(--ll-text);
+    font: inherit;
+    font-size: var(--ll-fs-ui);
+    line-height: var(--ll-lh-ui);
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .ll-menu-item:hover,
+  .ll-menu-item[data-highlighted] {
+    background: var(--ll-pad);
+    outline: none;
+  }
+  .ll-menu-item[aria-checked="true"],
+  .ll-menu-item[aria-current],
+  .ll-menu-item[data-state="checked"] {
+    color: var(--ll-accent-text);
+    font-weight: var(--ll-weight-strong);
+  }
+
+  /* The one job of a rounded token: something the learner attached and can remove. */
+  .ll-token {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ll-space-1);
+    max-width: 100%;
+    min-width: 0;
+    padding: 2px 4px 2px var(--ll-space-2);
+    border-radius: var(--ll-radius-row);
+    background: var(--ll-pad);
+    font-size: var(--ll-fs-ui);
+    line-height: var(--ll-lh-ui);
     overflow-wrap: anywhere;
   }
-  .ll-label {
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+
+  /* A navigation thumbnail (outline, build strip, Study rows): the holder gives a dimmed page a backing in the dark
+     theme; the page comes back to full strength on hover, on focus and when current. The placeholder is a flat block
+     that never looks like a slide. */
+  .ll-thumb {
+    display: block;
+    flex: none;
+    overflow: hidden;
+    border-radius: var(--ll-radius-thumb);
+    background: var(--ll-background);
+    box-shadow: 0 0 0 1px var(--ll-hairline);
+  }
+  .ll-thumb > img,
+  .ll-thumb > canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    opacity: var(--ll-thumb-rest);
+    transition: opacity var(--ll-motion-small) ease;
+  }
+  a:hover > .ll-thumb > *,
+  button:hover > .ll-thumb > *,
+  a:focus-visible > .ll-thumb > *,
+  button:focus-visible > .ll-thumb > *,
+  [aria-current] > .ll-thumb > *,
+  .ll-thumb[data-current="true"] > * {
+    opacity: 1;
+  }
+  .ll-thumb-ph {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 4 / 3;
+    border-radius: var(--ll-radius-thumb);
+    background: var(--ll-pad-strong);
     color: var(--ll-muted-text);
+    font-size: var(--ll-fs-micro);
+    line-height: var(--ll-lh-micro);
+  }
+
+  /* Field: the one outlined thing on a surface, because it is a control (boundary at 3:1). */
+  .ll-input {
+    width: 100%;
+    min-height: 40px;
+    padding: 8px var(--ll-space-3);
+    border: 1px solid var(--ll-border);
+    border-radius: var(--ll-radius-control);
+    background: var(--ll-surface-raised);
+    color: var(--ll-text);
+    font: inherit;
+    font-size: var(--ll-fs-ui);
+    line-height: var(--ll-lh-ui);
+  }
+  textarea.ll-input {
+    font-size: var(--ll-fs-read);
+    line-height: var(--ll-lh-read);
+  }
+  .ll-input::placeholder {
+    color: var(--ll-muted-text);
+    opacity: 1;
+  }
+  .ll-input:disabled {
+    border-color: var(--ll-hairline);
+    background: transparent;
+    color: var(--ll-muted-text);
+    cursor: not-allowed;
+  }
+  @media (pointer: coarse) {
+    .ll-input {
+      min-height: 44px;
+    }
+  }
+
+  /* Prose (tutor text, descriptions): a bounded measure, never past 68 characters in a panel. */
+  .ll-prose {
+    max-width: 68ch;
   }
   .ll-prose p {
     margin: 0 0 0.75rem;
+  }
+  .ll-prose p:last-child {
+    margin-bottom: 0;
   }
   .ll-prose ul,
   .ll-prose ol {
@@ -155,20 +870,57 @@ body {
     list-style: revert;
   }
   .ll-prose code {
-    background: var(--ll-surface-raised);
+    background: var(--ll-pad);
     padding: 0.1rem 0.3rem;
     border-radius: 4px;
     font-size: 0.9em;
   }
   .ll-prose a {
-    color: var(--ll-accent);
+    color: var(--ll-accent-text);
     text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+    text-decoration-color: color-mix(in srgb, var(--ll-accent-text) 45%, transparent);
   }
-  /* The source canvas keeps original colours on a neutral mat in both themes. */
+  .ll-prose a:hover {
+    text-decoration-color: currentColor;
+  }
+  .ll-prose table {
+    border-collapse: collapse;
+    margin: 0 0 0.75rem;
+    font-size: var(--ll-fs-ui);
+    line-height: var(--ll-lh-ui);
+  }
+  .ll-prose th,
+  .ll-prose td {
+    padding: 6px var(--ll-space-3) 6px 0;
+    border-bottom: 1px solid var(--ll-hairline);
+    text-align: left;
+  }
+  .ll-measure {
+    max-width: 68ch;
+  }
+  /* Figures that change or line up; a unit that must stay on one line. */
+  .ll-num {
+    font-variant-numeric: tabular-nums;
+  }
+  .ll-nb {
+    white-space: nowrap;
+  }
+
+  /* The source page keeps its own colours on a white page in both themes; nothing is drawn on or around it but its
+     own elevation. */
   .ll-source-surface {
     background: #ffffff;
     color-scheme: light;
     forced-color-adjust: none;
+  }
+  .ll-source-page {
+    background: #ffffff;
+    color-scheme: light;
+    forced-color-adjust: none;
+    border-radius: var(--ll-radius-row);
+    box-shadow: var(--ll-shadow-source);
   }
   .ll-pdf-textlayer {
     position: absolute;
@@ -189,8 +941,72 @@ body {
   .ll-pdf-textlayer ::selection {
     background: rgba(22, 92, 199, 0.35);
   }
+
+  /* ==== LEGACY NAMES ===================================================================================================
+     Class names written by the pages that are not redrawn in this pass (and by files still being rewritten). They keep
+     working and take the new look: no stroke on a container, no pill, sentence-case labels. New code does not write
+     them; each goes when nothing in web/src names it.
+     ================================================================================================================== */
+  /* A container: tone and spacing, no stroke. One inside another steps to the raised tone. The transparent border keeps
+     the box size and lets a colour utility (a selected card) still draw an edge. */
+  .ll-card {
+    background: var(--ll-surface);
+    border: 1px solid transparent;
+    border-radius: var(--ll-radius-control);
+  }
+  .ll-card .ll-card {
+    background: var(--ll-surface-raised);
+    box-shadow: 0 0 0 1px var(--ll-hairline);
+  }
+  /* Was a pill. Now a glyph with words; a chip that is a link or a button reads as a link; one that holds a remove
+     button is the removable token. */
+  .ll-chip {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 6px;
+    max-width: 100%;
+    min-width: 0;
+    color: var(--ll-text);
+    font-size: var(--ll-fs-ui);
+    line-height: var(--ll-lh-ui);
+  }
+  .ll-chip > svg {
+    flex: none;
+    margin-top: calc((var(--ll-lh-ui) - 1rem) / 2);
+  }
+  .ll-chip > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  a.ll-chip,
+  button.ll-chip {
+    color: var(--ll-accent-text);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+    text-decoration-color: color-mix(in srgb, var(--ll-accent-text) 45%, transparent);
+    cursor: pointer;
+  }
+  a.ll-chip:hover,
+  button.ll-chip:hover {
+    text-decoration-color: currentColor;
+  }
+  span.ll-chip:has(> button) {
+    align-items: center;
+    padding: 2px 4px 2px var(--ll-space-2);
+    border-radius: var(--ll-radius-row);
+    background: var(--ll-pad);
+  }
+  /* Was an upper-case, letter-spaced label. Now a sentence-case line. */
+  .ll-label {
+    font-size: var(--ll-fs-ui);
+    line-height: var(--ll-lh-ui);
+    font-weight: var(--ll-weight-strong);
+    color: var(--ll-muted-text);
+  }
 }
 
+/* ---- motion and assistive helpers ------------------------------------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -222,24 +1038,36 @@ body {
   border: 0;
 }
 
-/* Compact bottom navigation: six destinations in one row; two rows of three once text is enlarged, so
-   labels stay whole instead of being cut. Content keeps clear of the fixed bar in both cases. */
-.ll-bottom-nav {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+/* ==== LEGACY NAMES (layout) ==============================================================================================
+   The page frame and the CSS-grid lecture workspace of the screens not yet moved to the new shell and to WorkspaceFrame.
+   Kept so every page stays usable while those files are rewritten; delete each rule when nothing in web/src names it.
+   ====================================================================================================================== */
+/* One page column: bounded, centred, never edge to edge (the column of the Study home, section 6). */
+.ll-page {
+  width: 100%;
+  margin-inline: auto;
+  max-width: 1280px;
 }
-.ll-main {
-  padding-bottom: 5.5rem;
+.ll-page-reading {
+  max-width: 56rem;
 }
-[data-text-scale="large"] .ll-bottom-nav {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-[data-text-scale="large"] .ll-main {
-  padding-bottom: 9.5rem;
-}
-@media (min-width: 768px) {
-  .ll-main {
-    padding-bottom: 1.5rem;
+@media (min-width: 1920px) {
+  .ll-page {
+    max-width: 1400px;
   }
+  .ll-page-reading {
+    max-width: 64rem;
+  }
+}
+@media (min-width: 2400px) {
+  .ll-page {
+    max-width: 1760px;
+  }
+}
+.ll-card-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
 }
 
 /* Narrow lecture workspace: five pane tabs in a row; two rows with enlarged text. */
@@ -250,82 +1078,8 @@ body {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-/* Form controls never force a row wider than the screen (narrow viewports, enlarged text):
-   a long option label is clipped inside its own control instead of pushing the page sideways. */
-@layer base {
-  /* In the base layer on purpose: a utility such as max-w-[...] on one control must still win. */
-  label {
-    max-width: 100%;
-    min-width: 0;
-  }
-  select.ll-input,
-  input.ll-input,
-  textarea.ll-input {
-    max-width: 100%;
-    min-width: 0;
-  }
-}
-
-/* ---- Remediation R1: one page frame, three width tiers, a type floor, the lecture workspace ---------------- */
-/* Type floor: body text 16px; on very wide windows the whole scale steps up so text keeps pace with the screen.
-   Percentages (not px) so a browser's own font-size preference still applies. */
-@media (min-width: 1800px) {
-  html:not([data-text-scale="large"]) {
-    font-size: 106.25%;
-  }
-}
-@media (min-width: 2400px) {
-  html:not([data-text-scale="large"]) {
-    font-size: 112.5%;
-  }
-}
-
-/* One shared page frame. Collections use the window; reading pages keep a comfortable column; text keeps a measure. */
-.ll-page {
-  width: 100%;
-  margin-inline: auto;
-  max-width: 72rem;
-}
-.ll-page-reading {
-  max-width: 56rem;
-}
-@media (min-width: 1280px) {
-  .ll-page {
-    max-width: 92rem;
-  }
-  .ll-page-reading {
-    max-width: 64rem;
-  }
-}
-@media (min-width: 1800px) {
-  .ll-page {
-    max-width: none;
-    padding-inline: 1rem;
-  }
-  .ll-page-reading {
-    max-width: 72rem;
-  }
-}
-.ll-measure {
-  max-width: 72ch;
-}
-.ll-card-grid {
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
-}
-
-@layer components {
-  .ll-label {
-    font-size: 0.875rem;
-  }
-}
-
-/* Lecture workspace (direction B): outline · slide stage · one context panel. On wide screens it fills the window
-   under the header, so the slide and the transport are both visible without scrolling the page. */
-.ll-shell-fill {
-  min-height: 100dvh;
-}
+/* Lecture workspace as a CSS grid: outline · slide stage · one context panel. (The rules of the earlier shell,
+   .ll-shell-fill, .ll-shell-body, .ll-main and .ll-bottom-nav, went with it: nothing names them any more.) */
 .ll-workspace {
   display: flex;
   flex-direction: column;
@@ -344,18 +1098,6 @@ body {
   min-height: 12rem;
 }
 @media (min-width: 64rem) {
-  html:not([data-text-scale="large"]) .ll-shell-fill[data-fill="true"] {
-    height: 100dvh;
-    overflow: hidden;
-  }
-  html:not([data-text-scale="large"]) .ll-shell-fill[data-fill="true"] .ll-main {
-    min-height: 0;
-    overflow: hidden;
-    padding-bottom: 1rem;
-  }
-  html:not([data-text-scale="large"]) .ll-shell-fill[data-fill="true"] .ll-shell-body {
-    min-height: 0;
-  }
   html:not([data-text-scale="large"]) .ll-workspace {
     height: 100%;
     min-height: 0;
@@ -400,13 +1142,12 @@ body {
   }
 }
 
-/* One line of chips under the transport on wide screens: a long chip is shortened with an ellipsis instead of adding a row
-   (its full text stays in the page for assistive technology and on hover). Narrow screens wrap as usual. */
+/* One line of what were chips under the transport: a long one is shortened instead of adding a row. */
 .ll-chip-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.25rem 1rem;
 }
 @media (min-width: 64rem) {
   html:not([data-text-scale="large"]) .ll-chip-row {
@@ -428,23 +1169,24 @@ body {
   }
 }
 
-/* The transport: one controller, two compact rows. */
+/* The transport of the player not yet rebuilt: one Media Chrome controller. The played track and the knob are accent
+   text (a mark), the unplayed track is the border colour. */
 .ll-transport media-controller {
   display: block;
   width: 100%;
   background: transparent;
   --media-background-color: transparent;
   --media-control-background: transparent;
-  --media-control-hover-background: var(--ll-surface-raised);
+  --media-control-hover-background: var(--ll-pad);
   --media-control-padding: 6px;
   --media-primary-color: var(--ll-text);
   --media-secondary-color: transparent;
   --media-text-color: var(--ll-text);
-  --media-range-track-background: color-mix(in srgb, var(--ll-border) 55%, transparent);
-  --media-range-bar-color: var(--ll-accent);
-  --media-range-thumb-background: var(--ll-accent);
+  --media-range-track-background: var(--ll-border);
+  --media-range-bar-color: var(--ll-accent-text);
+  --media-range-thumb-background: var(--ll-accent-text);
   --media-font-family: var(--ll-font-ui);
-  --media-font-size: 0.875rem;
+  --media-font-size: var(--ll-fs-ui);
   --media-control-height: 28px;
 }
 .ll-transport media-control-bar {
@@ -458,7 +1200,7 @@ body {
   flex: 1 1 8rem;
   min-width: 6rem;
   height: 2.75rem;
-  accent-color: var(--ll-accent);
+  accent-color: var(--ll-accent-text);
 }
 .ll-transport select.ll-input {
   min-height: 2.25rem;

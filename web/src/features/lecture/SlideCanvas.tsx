@@ -144,7 +144,7 @@ export function SlideCanvas({ url, page, label, onPageCount, hidden, header, con
         <IconButton label={fitLabel} size="sm" onClick={() => setZoom(1)}><Maximize2 aria-hidden className="size-4" /></IconButton>
         <IconButton label="Zoom in" size="sm" onClick={() => step(1)} disabled={zoom === ZOOMS[ZOOMS.length - 1]}><Plus aria-hidden className="size-4" /></IconButton>
       </div>
-      <div ref={frameRef} className={contain ? "ll-slide-frame flex overflow-auto rounded-[var(--ll-radius)] border border-line/50 bg-raised" : "max-h-[72dvh] overflow-auto rounded-[var(--ll-radius)] border border-line/50 bg-raised"}
+      <div ref={frameRef} className={contain ? "ll-slide-frame flex overflow-auto rounded-[var(--ll-radius)] border border-line/50 bg-bg" : "max-h-[72dvh] overflow-auto rounded-[var(--ll-radius)] border border-line/50 bg-bg"}
         data-fit={contain ? "contain" : "width"} data-testid="slide-frame" tabIndex={0} role="group" aria-label={`${label}. Scroll to pan when zoomed.`}>
         {state === "error" ? (
           <div className="p-4"><Callout tone="danger" role="alert" title="This slide could not be shown">{error} The original file is unchanged; nothing was regenerated in its place.</Callout></div>
@@ -191,11 +191,11 @@ export function SlideThumb({ url, page, active, title, onSelect }: { url: string
 
   return (
     <button ref={buttonRef} type="button" onClick={onSelect} aria-current={active ? "true" : undefined} aria-label={`Slide ${page}${title ? `: ${title}` : ""}`}
-      className={`flex w-full items-start gap-2 rounded-[var(--ll-radius)] p-1.5 text-left ${active ? "bg-raised outline outline-2 outline-accent" : "hover:bg-raised"}`}>
-      <span className={`w-6 shrink-0 pt-1 text-right text-sm tabular-nums ${active ? "font-bold text-accent" : "text-muted"}`}>{page}</span>
+      className={`flex w-full items-start gap-2 rounded-[var(--ll-radius)] p-1.5 text-left ${active ? "bg-tint outline outline-2 outline-accent-text" : "hover:bg-pad"}`}>
+      <span className={`w-6 shrink-0 pt-1 text-right text-sm tabular-nums ${active ? "font-bold text-accent-text" : "text-muted"}`}>{page}</span>
       <span className="flex min-w-0 flex-col gap-1">
         <span className="ll-source-surface block overflow-hidden rounded border border-line/50"><canvas ref={canvasRef} className="block" width={132} height={99} aria-hidden /></span>
-        <span className={`truncate text-sm ${active ? "font-semibold text-accent" : "text-muted"}`}>{title ?? `Slide ${page}`}</span>
+        <span className={`truncate text-sm ${active ? "font-semibold text-accent-text" : "text-muted"}`}>{title ?? `Slide ${page}`}</span>
       </span>
     </button>
   );

@@ -42,7 +42,7 @@ function QuestionSources({ courseId, questionId, view }: { courseId: string; que
   return (
     <div className="mt-3 flex flex-col gap-2" data-testid="question-sources">
       <p className="text-sm text-muted" data-testid="question-membership">
-        {view.lecture_ids.length ? <>Belongs to {view.lecture_ids.map((id, i) => <span key={id}>{i ? ", " : ""}<Link className="text-accent underline" to={`/courses/${courseId}/lectures/${id}?panel=questions`}>{id.replace("-", " ")}</Link></span>)} through its collection{view.collection ? ` ${view.collection}` : ""}. </>
+        {view.lecture_ids.length ? <>Belongs to {view.lecture_ids.map((id, i) => <span key={id}>{i ? ", " : ""}<Link className="text-accent-text underline" to={`/courses/${courseId}/lectures/${id}?panel=questions`}>{id.replace("-", " ")}</Link></span>)} through its collection{view.collection ? ` ${view.collection}` : ""}. </>
           : <>Collection {view.collection ?? "none"}: not tied to a lecture unit. </>}
         {anchorSummary(view).text}
       </p>
@@ -254,7 +254,7 @@ export function QuestionPractice() {
           }}>I looked at a solution</Button>
         </div>
         {notice && <p role="status" className="text-sm text-muted">{notice}</p>}
-        {app.pairing.state !== "paired" && <p className="text-sm text-muted">This device is not paired, so nothing can be sent yet. <Link className="text-accent underline" to="/connect">Pair it</Link>.</p>}
+        {app.pairing.state !== "paired" && <p className="text-sm text-muted">This device is not paired, so nothing can be sent yet. <Link className="text-accent-text underline" to="/connect">Pair it</Link>.</p>}
       </section>
 
       <section aria-labelledby="review-h" className="ll-card mb-4 flex flex-col gap-2 p-4">
@@ -274,8 +274,8 @@ export function QuestionPractice() {
               const other = r.from_question === q.question_id ? r.to_question : r.from_question;
               return (
                 <li key={i} className="ll-card p-2">
-                  {r.from_question === q.question_id ? "This question" : <Link className="text-accent underline" to={`/courses/${courseId}/questions/${encodeURIComponent(other)}`}>{other}</Link>} {RELATION_LABEL[r.relation] ?? r.relation}{" "}
-                  {r.to_question === q.question_id ? "this question" : <Link className="text-accent underline" to={`/courses/${courseId}/questions/${encodeURIComponent(other)}`}>{other}</Link>}
+                  {r.from_question === q.question_id ? "This question" : <Link className="text-accent-text underline" to={`/courses/${courseId}/questions/${encodeURIComponent(other)}`}>{other}</Link>} {RELATION_LABEL[r.relation] ?? r.relation}{" "}
+                  {r.to_question === q.question_id ? "this question" : <Link className="text-accent-text underline" to={`/courses/${courseId}/questions/${encodeURIComponent(other)}`}>{other}</Link>}
                   <span className="block text-muted">{r.rationale} A relation between questions gives no automatic credit and is not a statement about a concept.</span>
                 </li>
               );

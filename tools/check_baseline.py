@@ -40,6 +40,70 @@ def contrast(a: str,b: str) -> float:
     return (y+.05)/(x+.05)
 
 
+GROUNDS=('background','surface','surface_raised')
+THEMES=('light','dark')
+HEX=re.compile(r'#[a-fA-F0-9]{6}')
+
+
+def composite(ink: str, percent: float, ground: str) -> str:
+    """The ink at `percent` % alpha over an opaque ground, per sRGB channel, as CSS color-mix(in srgb) gives."""
+    a, b = ([int(c[i:i + 2], 16) for i in (1, 3, 5)] for c in (ink, ground))
+    return "#" + "".join(f"{int(x * percent / 100 + y * (1 - percent / 100) + 0.5):02X}" for x, y in zip(a, b))
+
+
+def resolve(token: dict, theme: str, name: str) -> str:
+    """'tint' is a palette key; 'pad@surface' is the wash 'pad' composited over the ground 'surface'."""
+    palette = token[theme]
+    if "@" not in name:
+        value = palette[name]
+    else:
+        wash, ground = name.split("@", 1)
+        value = composite(palette[token["wash_pct"]["ink"]], token["wash_pct"][theme][wash], palette[ground])
+    if not HEX.fullmatch(value):
+        raise ValueError(f"{theme}: {name} is not an opaque sRGB hex colour")
+    return value
+
+
+def expand_pairs(token: dict) -> list[tuple[str, str, float]]:
+    """Each entry of contrast_pairs is the cross product of its fg and bg lists; 'pad@*' means over each ground."""
+    def grow(names: list[str]) -> list[str]:
+        return [item for n in names for item in ([f"{n[:-1]}{g}" for g in GROUNDS] if n.endswith("@*") else [n])]
+
+    return [(fg, bg, entry["min"]) for entry in token["contrast_pairs"] for fg in grow(entry["fg"]) for bg in grow(entry["bg"])]
+
+
+def declared_pair_ratios(token: dict, contrast_fn) -> list[dict]:
+    return [{"theme": theme, "fg": fg, "bg": bg, "minimum": minimum,
+             "ratio": contrast_fn(resolve(token, theme, fg), resolve(token, theme, bg))}
+            for theme in THEMES for fg, bg, minimum in expand_pairs(token)]
+
+
+def scale_problems(token: dict) -> list[str]:
+    """The declared type scale is complete, whole-pixel, never under 12 px, at most seven sizes at any width,
+    and its reading step is 16-18 px with a line height of at least 1.45 (design-system R2, R2-V7)."""
+    typo, out = token["typography"], []
+    steps = typo["scale_from_px"]
+    if steps != sorted(set(steps)) or steps[0] != 0:
+        out.append("scale_from_px must start at 0 and rise")
+    for role, row in typo["scale_px"].items():
+        for kind in ("size", "line"):
+            if len(row[kind]) != len(steps) or not all(isinstance(v, int) for v in row[kind]):
+                out.append(f"{role}.{kind} needs one whole-pixel value per breakpoint")
+        if min(row["size"]) < 12:
+            out.append(f"{role} goes under 12 px")
+        if any(line < size for size, line in zip(row["size"], row["line"])):
+            out.append(f"{role} has a line height under its size")
+    for index, start in enumerate(steps):
+        # A short row is already reported above; it must not stop the census of the other rows.
+        sizes = {row["size"][index] for row in typo["scale_px"].values() if index < len(row["size"])}
+        if len(sizes) > 7:
+            out.append(f"more than seven sizes from {start} px")
+    read = typo["scale_px"]["read"]
+    if not all(16 <= s <= 18 and line / s >= 1.45 for s, line in zip(read["size"], read["line"])):
+        out.append("read must be 16-18 px with a line height of at least 1.45")
+    return out
+
+
 def relative_links(root: Path) -> tuple[int,list[str]]:
     errors=[];count=0
     for path in root.rglob('*.md'):
@@ -144,6 +208,12 @@ def audit(root:Path=ROOT,check_manifest=False):
                 value=contrast(t[foreground],t[background]);ratios.append({'theme':theme,'fg':foreground,'bg':background,'ratio':value,'minimum':3})
         ratios.append({'theme':theme,'fg':'on_accent','bg':'accent','ratio':contrast(t['on_accent'],t['accent']),'minimum':4.5})
     check('Declared solid theme color pairs meet selected contrast floors',all(x['ratio']>=x['minimum'] for x in ratios),{'pairs':len(ratios),'failed':[x for x in ratios if x['ratio']<x['minimum']]})
+    declared=declared_pair_ratios(token,contrast)
+    floors={(x['theme'],x['fg'],x['bg']):x['minimum'] for x in declared}
+    check('Declared contrast pairs (derived colours and washes) meet their floors',len(floors)==len(declared) and all(x['ratio']>=x['minimum'] for x in declared),{'pairs':len(declared),'failed':[x for x in declared if x['ratio']<x['minimum']]})
+    check('Every version-1 pair is still declared with at least its floor',all(floors.get((x['theme'],x['fg'],x['bg']),0)>=x['minimum'] for x in ratios))
+    check('Light and dark declare the same palette keys',set(token['light'])==set(token['dark']))
+    check('Declared type scale is complete and inside the R2-V7 bounds',not scale_problems(token),scale_problems(token))
     check('Both themes/reduced motion/source fidelity remain',token['default']=='system' and token['motion']['reduced_motion_ms']==0 and defaults['autoplay'] is False)
     links,broken=relative_links(root);check('Local Markdown file targets resolve',not broken,{'checked':links,'broken':broken})
     forbidden=[p.relative_to(root).as_posix() for p in all_files if p.suffix.lower() in {'.ttf','.otf','.woff','.woff2','.exe','.dll','.db','.sqlite','.key','.pem'} or p.name in {'.env','credentials.json'}]

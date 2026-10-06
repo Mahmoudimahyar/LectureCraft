@@ -101,7 +101,7 @@ export function StudyHome() {
                   <h3 className="text-xl font-semibold">{bound ? <Link to={`/courses/${course.course_id}`} onClick={() => app.setCourseId(course.course_id)} className="hover:underline">{course.display_name}</Link> : course.display_name}</h3>
                   <p className="text-sm text-muted">{course.course_id}</p>
                 </div>
-                <BookOpen aria-hidden className="size-6 shrink-0 text-accent" />
+                <BookOpen aria-hidden className="size-6 shrink-0 text-accent-text" />
               </div>
               {!bound ? <Callout tone="danger" title="This course is not bound">{course.problem} Other courses are unaffected.</Callout> : (
                 <>
@@ -109,7 +109,7 @@ export function StudyHome() {
                     <dt className="text-muted">Lecture units</dt><dd>{course.lecture_units}</dd>
                     <dt className="text-muted">Sessions</dt><dd>{course.sessions}</dd>
                     <dt className="text-muted">Questions</dt>
-                    <dd>{course.catalogued_questions ? <Link className="text-accent hover:underline" to={`/courses/${course.course_id}/questions`} onClick={() => app.setCourseId(course.course_id)}>{course.catalogued_questions} in the catalog</Link> : "No question catalog"}</dd>
+                    <dd>{course.catalogued_questions ? <Link className="text-accent-text hover:underline" to={`/courses/${course.course_id}/questions`} onClick={() => app.setCourseId(course.course_id)}>{course.catalogued_questions} in the catalog</Link> : "No question catalog"}</dd>
                     <dt className="text-muted">Recorded evidence</dt><dd><StatusChip tone={course.recorded_attempts ? "neutral" : "unassessed"}>{course.assessed_label}</StatusChip></dd>
                     <dt className="text-muted">Preparation</dt>
                     <dd>{pendingLinks ? `${pendingLinks} with suggested links` : prep.not_processed ? `${prep.not_processed} not prepared yet` : "No pending link review"}</dd>

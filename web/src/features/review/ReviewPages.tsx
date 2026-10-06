@@ -126,7 +126,7 @@ export function ReviewHome() {
       <section aria-labelledby="avail-h">
         <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
           <h2 id="avail-h" className="text-lg font-semibold">Course questions you can add ({data.available_total})</h2>
-          <Link className="text-accent hover:underline" to={`/courses/${courseId}/questions`}>Browse the question bank by lecture and collection</Link>
+          <Link className="text-accent-text hover:underline" to={`/courses/${courseId}/questions`}>Browse the question bank by lecture and collection</Link>
         </div>
         {data.available_questions.length === 0 ? <p className="text-muted">This course has no question catalog to choose from, or every question is already in your list.</p> : (
           <ul className="flex flex-col gap-2">

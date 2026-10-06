@@ -23,7 +23,7 @@ export function SettingsPage() {
       <div className="grid gap-4 md:grid-cols-[13rem_minmax(0,1fr)]">
         <nav aria-label="Settings sections" className="flex gap-1 overflow-x-auto md:flex-col">
           {SECTIONS.map(([id, label]) => (
-            <NavLink key={id} to={`/settings/${id}`} className={({ isActive }) => cn("whitespace-nowrap rounded-[var(--ll-radius)] px-3 py-2 font-medium text-muted", (isActive || (id === "appearance" && section === "appearance")) && "bg-raised text-accent")}>{label}</NavLink>
+            <NavLink key={id} to={`/settings/${id}`} className={({ isActive }) => cn("whitespace-nowrap rounded-[var(--ll-radius)] px-3 py-2 font-medium text-muted", (isActive || (id === "appearance" && section === "appearance")) && "bg-tint text-accent-text")}>{label}</NavLink>
           ))}
         </nav>
         <div className="min-w-0">

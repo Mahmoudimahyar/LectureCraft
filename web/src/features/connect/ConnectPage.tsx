@@ -89,11 +89,11 @@ export function ConnectPage() {
           </Check>
           <Check ok={caps.writer.status === "enabled" ? true : caps.writer.status === "fixture_isolated" ? "partial" : false} title={caps.writer.label}>{caps.writer.detail}</Check>
         </ul>
-        <p className="mt-2 text-sm"><Link className="text-accent underline" to="/settings/ai">Setup details</Link> lists the exact next action for anything not ready — it never asks you to weaken permissions.</p>
+        <p className="mt-2 text-sm"><Link className="text-accent-text underline" to="/settings/ai">Setup details</Link> lists the exact next action for anything not ready — it never asks you to weaken permissions.</p>
       </section>
 
       <section aria-labelledby="pair-heading" className="ll-card p-4">
-        <h2 id="pair-heading" className="mb-2 flex items-center gap-2 text-lg font-semibold"><ShieldCheck aria-hidden className="size-5 text-accent" /> Pair this device</h2>
+        <h2 id="pair-heading" className="mb-2 flex items-center gap-2 text-lg font-semibold"><ShieldCheck aria-hidden className="size-5 text-accent-text" /> Pair this device</h2>
         {!device ? <LoadingState label="Preparing this device's key…" /> : (
           <div className="flex flex-col gap-3">
             <p className="text-sm text-muted">This device made its own signing key. The private key never leaves this browser. Compare this fingerprint with the one shown on the Brain PC before approving.</p>

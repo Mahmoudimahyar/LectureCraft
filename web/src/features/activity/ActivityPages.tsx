@@ -216,7 +216,7 @@ function ResumeConflict({ courseId }: { courseId: string }) {
             <li key={head.checkpoint_id} className="ll-card flex flex-col gap-2 p-3" data-testid="resume-head">
               <h2 className="font-semibold">From device {head.device_id}</h2>
               <p className="text-sm text-muted">{head.cursor.lecture_id}, slide {page} · source version {head.cursor.source.version_id} · {head.cursor.position_ms !== null ? `recording at ${formatMs(head.cursor.position_ms)} (paused)` : "no playback position"} · received with time {formatWhen(head.updated_at)} (device clocks are not used to pick a winner)</p>
-              {head.cursor.draft ? <><p className="ll-label">Draft on that device</p><p className="whitespace-pre-wrap rounded bg-raised p-2 text-sm">{drafts[head.cursor.draft.sha256] ?? "Loading…"}</p></> : <p className="text-sm text-muted">No draft.</p>}
+              {head.cursor.draft ? <><p className="ll-label">Draft on that device</p><p className="whitespace-pre-wrap rounded bg-pad p-2 text-sm">{drafts[head.cursor.draft.sha256] ?? "Loading…"}</p></> : <p className="text-sm text-muted">No draft.</p>}
               <Button variant="primary" busy={busy} onClick={async () => {
                 setBusy(true);
                 setError(null);

@@ -61,10 +61,10 @@ export function SourcesPanel({ courseId, slide, others = [], relatedByConcept = 
           <ul className="flex flex-col gap-1">
             {slide.questions.map((q) => (
               <li key={q.question_id}>
-                <Link to={`/courses/${courseId}/questions/${encodeURIComponent(q.question_id)}`} state={back} className="ll-card flex items-center justify-between gap-2 p-2 hover:bg-raised">
+                <Link to={`/courses/${courseId}/questions/${encodeURIComponent(q.question_id)}`} state={back} className="ll-card flex items-center justify-between gap-2 p-2 hover:bg-pad">
                   <span className="min-w-0"><span className="font-medium">{q.title ?? q.question_id}</span> <span className="text-sm text-muted">{q.question_id}</span>
                     <span className="block text-sm text-muted" data-testid="question-why">{q.why}</span></span>
-                  <span className="text-sm text-accent">Open</span>
+                  <span className="text-sm text-accent-text">Open</span>
                 </Link>
               </li>
             ))}
@@ -107,21 +107,21 @@ export function SourcesPanel({ courseId, slide, others = [], relatedByConcept = 
           <ul className="flex flex-col gap-1">
             {relatedByConcept.slice(0, 8).map((q) => (
               <li key={q.question_id}>
-                <Link to={`/courses/${courseId}/questions/${encodeURIComponent(q.question_id)}`} state={back} className="ll-card flex items-center justify-between gap-2 p-2 hover:bg-raised">
+                <Link to={`/courses/${courseId}/questions/${encodeURIComponent(q.question_id)}`} state={back} className="ll-card flex items-center justify-between gap-2 p-2 hover:bg-pad">
                   <span className="min-w-0"><span className="font-medium">{q.title ?? q.question_id}</span> <span className="text-sm text-muted">{q.question_id}</span></span>
-                  <span className="text-sm text-accent">Open</span>
+                  <span className="text-sm text-accent-text">Open</span>
                 </Link>
               </li>
             ))}
           </ul>
-          {relatedByConcept.length > 8 && onShowLectureQuestions && <p className="mt-1 text-sm"><button type="button" className="text-accent hover:underline" onClick={onShowLectureQuestions}>and {relatedByConcept.length - 8} more in All lecture questions</button></p>}
+          {relatedByConcept.length > 8 && onShowLectureQuestions && <p className="mt-1 text-sm"><button type="button" className="text-accent-text hover:underline" onClick={onShowLectureQuestions}>and {relatedByConcept.length - 8} more in All lecture questions</button></p>}
         </section>
       )}
       <OtherFiles courseId={courseId} others={others} back={back} />
       {slide.concepts.length > 0 && (
         <section aria-labelledby="src-concepts">
           <h3 id="src-concepts" className="ll-label mb-1 flex items-center gap-1"><Network aria-hidden className="size-4" /> On this slide
-            {outlineHref && <Link className="ml-auto text-sm font-normal normal-case tracking-normal text-accent hover:underline" to={outlineHref} state={back}>Concept outline for this slide</Link>}</h3>
+            {outlineHref && <Link className="ml-auto text-sm font-normal normal-case tracking-normal text-accent-text hover:underline" to={outlineHref} state={back}>Concept outline for this slide</Link>}</h3>
           <ul className="flex flex-wrap gap-2">
             {slide.concepts.map((c) => (
               <li key={c.concept_id}><Link className="ll-chip hover:underline" to={`/courses/${courseId}/concepts/${encodeURIComponent(c.concept_id)}`} state={back} title={`Linked through a ${c.basis}`}>{c.label}</Link></li>

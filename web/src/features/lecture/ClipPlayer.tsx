@@ -205,7 +205,7 @@ export const ClipPlayer = forwardRef<ClipPlayerHandle, ClipPlayerProps>(function
           {occurrences.length === 0 && onAddMatch && <Button size="sm" onClick={onAddMatch} aria-label="Link this slide to the recording">Link this slide</Button>}
           {occurrence && onEditMatch && <Button size="sm" variant="quiet" onClick={() => onEditMatch(occurrence)}>Edit match</Button>}
           <span className="ml-auto flex flex-wrap items-center gap-1.5">
-            <IconButton label={`Repeat segment${repeat ? ": on" : ""}`} size="sm" aria-pressed={repeat} onClick={() => setRepeat((r) => !r)} disabled={!clip} className={cn(repeat && "border-accent text-accent")}>
+            <IconButton label={`Repeat segment${repeat ? ": on" : ""}`} size="sm" aria-pressed={repeat} onClick={() => setRepeat((r) => !r)} disabled={!clip} className={cn(repeat && "border-accent-text text-accent-text")}>
               <Repeat aria-hidden className="size-4" />
             </IconButton>
             <MediaMuteButton />

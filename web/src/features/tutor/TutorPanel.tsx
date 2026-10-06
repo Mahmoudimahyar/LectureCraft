@@ -224,7 +224,7 @@ export function TutorPanel({ courseId, lecture, page, slideRef, pinned, onUnpin,
                 {slideQuestions.map((q) => <option key={q.question_id} value={q.question_id}>{q.title ?? q.question_id}</option>)}
               </select>
             </label>
-            <p id="explain-hint" className="rounded bg-raised p-2">{chosenQuestion ? chosenQuestion.prompt : `Explain slide ${draftPage} in your own words. Your full response is retained; without a reviewed rubric it is not graded.`}</p>
+            <p id="explain-hint" className="rounded bg-pad p-2">{chosenQuestion ? chosenQuestion.prompt : `Explain slide ${draftPage} in your own words. Your full response is retained; without a reviewed rubric it is not graded.`}</p>
             <details>
               <summary className="cursor-pointer font-medium">Conditions (self-reported)</summary>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -271,7 +271,7 @@ export function TutorPanel({ courseId, lecture, page, slideRef, pinned, onUnpin,
             {problem.pair && <Link className="ll-btn ll-btn-sm" to="/connect">Pair this device</Link>}
           </>}>{problem.message}</Callout>
         )}
-        {app.pairing.state !== "paired" && !problem && <p className="text-sm text-muted">This device is not paired yet, so sending is off. <Link className="text-accent underline" to="/connect">Pair it</Link> — your draft stays here.</p>}
+        {app.pairing.state !== "paired" && !problem && <p className="text-sm text-muted">This device is not paired yet, so sending is off. <Link className="text-accent-text underline" to="/connect">Pair it</Link> — your draft stays here.</p>}
       </div>
 
       <ResponseCapture open={captureOpen} onClose={() => setCaptureOpen(false)} onPauseLecture={onPauseMedia} initialText={text}

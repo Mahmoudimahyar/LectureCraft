@@ -35,9 +35,9 @@ function Branch({ courseId, scope, row, selected, onSelect }: { courseId: string
   const children = useOutline(courseId, scope, row.instance_id, open && row.has_children);
   return (
     <li role="treeitem" aria-expanded={row.has_children ? open : undefined} aria-selected={selected === row.instance_id} data-kind={row.kind} data-node={row.node_id}>
-      <div className={cn("flex items-start gap-1 rounded-[var(--ll-radius)] px-1 py-1", selected === row.instance_id && "bg-raised outline outline-2 outline-accent")}>
+      <div className={cn("flex items-start gap-1 rounded-[var(--ll-radius)] px-1 py-1", selected === row.instance_id && "bg-tint outline outline-2 outline-accent-text")}>
         {row.has_children ? (
-          <button type="button" className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded hover:bg-raised" aria-label={`${open ? "Collapse" : "Expand"} ${row.label}`} onClick={() => setOpen((o) => !o)}>
+          <button type="button" className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded hover:bg-pad" aria-label={`${open ? "Collapse" : "Expand"} ${row.label}`} onClick={() => setOpen((o) => !o)}>
             {open ? <ChevronDown aria-hidden className="size-4" /> : <ChevronRight aria-hidden className="size-4" />}
           </button>
         ) : <span className="size-7 shrink-0" aria-hidden />}
@@ -83,7 +83,7 @@ function NodeDetail({ courseId, nodeId }: { courseId: string; nodeId: string }) 
                   <span className="font-medium">{s.source_id ?? "source not identified"}</span>{" "}
                   <span className="text-sm text-muted">{s.kind === "transcript_lines" ? `transcript lines ${(s.ranges ?? []).map(([a, b]) => (a === b ? a : `${a}–${b}`)).join(", ")}`
                     : s.ranges ? `pages ${s.ranges.map(([a, b]) => (a === b ? a : `${a}–${b}`)).join(", ")}` : s.locator_text} · {s.basis} · from {s.from}</span>
-                  {s.lecture_id && s.kind === "pages" && s.ranges?.[0] && <Link className="ml-2 text-sm text-accent underline" to={`/courses/${courseId}/lectures/${s.lecture_id}?page=${s.ranges[0][0]}`}>Open slide {s.ranges[0][0]}</Link>}
+                  {s.lecture_id && s.kind === "pages" && s.ranges?.[0] && <Link className="ml-2 text-sm text-accent-text underline" to={`/courses/${courseId}/lectures/${s.lecture_id}?page=${s.ranges[0][0]}`}>Open slide {s.ranges[0][0]}</Link>}
                 </li>
               ))}
             </ul>
@@ -91,12 +91,12 @@ function NodeDetail({ courseId, nodeId }: { courseId: string; nodeId: string }) 
         </TabPanel>
         <TabPanel value="questions" className="pt-3">
           {d.questions.length === 0 ? <p className="text-muted">No catalogued question assesses this node.</p> : <ul className="flex flex-col gap-2">{d.questions.map((q) => <QuestionListItem key={q.question_id} courseId={courseId} row={q} />)}</ul>}
-          {d.questions_total > d.questions.length && <p className="mt-2 text-sm text-muted">Showing {d.questions.length} of {d.questions_total}. <Link className="text-accent underline" to={`/courses/${courseId}/questions`}>Open the question bank</Link></p>}
+          {d.questions_total > d.questions.length && <p className="mt-2 text-sm text-muted">Showing {d.questions.length} of {d.questions_total}. <Link className="text-accent-text underline" to={`/courses/${courseId}/questions`}>Open the question bank</Link></p>}
           {d.links.length > 0 && (
             <div className="mt-3">
               <p className="ll-label mb-1">Relations to other questions</p>
               <ul className="flex flex-col gap-1">
-                {d.links.map((l, i) => <li key={i} className="text-sm"><StatusChip tone="neutral">{RELATION_LABEL[l.relation] ?? l.relation.replace(/_/g, " ")}</StatusChip> {l.direction === "from_this" ? "→" : "←"} <Link className="text-accent underline" to={`/courses/${courseId}/questions/${encodeURIComponent(l.other)}`}>{l.other_label}</Link> <span className="text-muted">({l.other}; no automatic credit)</span></li>)}
+                {d.links.map((l, i) => <li key={i} className="text-sm"><StatusChip tone="neutral">{RELATION_LABEL[l.relation] ?? l.relation.replace(/_/g, " ")}</StatusChip> {l.direction === "from_this" ? "→" : "←"} <Link className="text-accent-text underline" to={`/courses/${courseId}/questions/${encodeURIComponent(l.other)}`}>{l.other_label}</Link> <span className="text-muted">({l.other}; no automatic credit)</span></li>)}
               </ul>
             </div>
           )}

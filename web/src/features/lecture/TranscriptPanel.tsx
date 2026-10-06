@@ -113,11 +113,11 @@ export function TranscriptPanel({ transcripts, slideRanges, positionMs, playing,
           const selected = !!selection && n >= selection.start && n <= selection.end;
           return (
             <li key={n} data-line={n} aria-current={active ? "true" : undefined}
-              className={cn("flex gap-2 rounded px-1.5 py-1", slideLines.has(n) && "border-l-2 border-accent", active && "bg-raised font-medium", selected && "outline outline-2 outline-focus")}>
+              className={cn("flex gap-2 rounded px-1.5 py-1", slideLines.has(n) && "border-l-2 border-accent-text", active && "bg-tint font-medium", selected && "outline outline-2 outline-focus")}>
               <button type="button" className="w-9 shrink-0 text-right text-xs tabular-nums text-muted hover:underline" onClick={(e) => pick(n, e.shiftKey)} aria-label={`Select line ${n}${selected ? " (selected)" : ""}`}>{n}</button>
               <span className="min-w-0 flex-1">{text || <span className="text-muted">(blank line)</span>}</span>
               {timing && (
-                <button type="button" className="shrink-0 text-sm tabular-nums text-accent underline" onClick={() => onSeek(timing.start_ms)}
+                <button type="button" className="shrink-0 text-sm tabular-nums text-accent-text underline" onClick={() => onSeek(timing.start_ms)}
                   aria-label={`Go to ${formatMs(timing.start_ms)} in the recording (${timing.review_state === "confirmed" ? "reviewed" : "suggested"} timing)`}>
                   {formatMs(timing.start_ms)}{timing.review_state !== "confirmed" ? " ?" : ""}
                 </button>
@@ -162,7 +162,7 @@ export function GeneratedTextPanel({ recordings, onSeek }: { recordings: Array<{
                 <ol className="max-h-[14rem] overflow-y-auto">
                   {g.segments.map((s) => (
                     <li key={s.start_ms} className="flex gap-2 px-1 py-0.5">
-                      <button type="button" className="shrink-0 text-sm tabular-nums text-accent underline" onClick={() => onSeek(s.start_ms)} aria-label={`Go to ${formatMs(s.start_ms)} in the recording (generated timing, not reviewed)`}>{formatMs(s.start_ms)}</button>
+                      <button type="button" className="shrink-0 text-sm tabular-nums text-accent-text underline" onClick={() => onSeek(s.start_ms)} aria-label={`Go to ${formatMs(s.start_ms)} in the recording (generated timing, not reviewed)`}>{formatMs(s.start_ms)}</button>
                       <span className="min-w-0 flex-1">{s.text}</span>
                     </li>
                   ))}

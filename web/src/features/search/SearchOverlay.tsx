@@ -62,7 +62,7 @@ export function SearchOverlay() {
               {results.hits.map((hit, i) => (
                 <li key={`${hit.courseId}-${hit.entry.type}-${i}`}>
                   <Link to={hitHref(hit)} state={{ returnTo: location.pathname + location.search, returnLabel: "Return to where you were" }} onClick={close}
-                    className="ll-card flex flex-col gap-1 p-3 hover:bg-raised">
+                    className="ll-card flex flex-col gap-1 p-3 hover:bg-pad">
                     <span className="flex flex-wrap items-center gap-2">
                       <StatusChip tone="accent">{TYPE_LABEL[hit.entry.type]}</StatusChip>
                       <span className="font-medium">{hit.entry.title}</span>

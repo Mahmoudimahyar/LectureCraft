@@ -2151,6 +2151,1543 @@
         "new model or system installs"
       ],
       "check_definitions": "docs/features/*/requirements.md and test-plan.md, sections 'Remediation amendment R1'"
+    },
+    {
+      "change_id": "R2",
+      "recorded": "2026-10-05",
+      "baseline": "0.9.0",
+      "reason": "The learner tested the build of amendment R1 and rejects its visual design; usable slide-to-recording ranges, question-to-slide links and discoverable course/lecture/slide concept maps are still not obtainable. Owner instruction of 2026-10-05 (PROMPTS/EXPERIENCE_REPAIR_V2.md).",
+      "rule": "Carried by existing tasks; task ids, stories, flows, workflows and original release gates are unchanged. The affected requirements are REOPENED as open product failures despite green receipts: prior LOCAL_TESTED results and R1 receipts of the affected tasks do not cover the listed checks, and a passing mechanical test alone closes none of them. Every check is falsifiable by an outcome the learner would notice.",
+      "check_id_form": "R2-<area><n>",
+      "areas": {
+        "V": "visual design",
+        "S": "slide identity and content roles",
+        "T": "timing to player",
+        "Q": "questions to content",
+        "C": "concept maps",
+        "B": "build identity",
+        "E": "experience evidence"
+      },
+      "supersedes_in_R1": [
+        "The R1 'direction B' look (the three-region arrangement is kept; its visual treatment is rejected by the learner).",
+        "R1-U1 clause 'card collections at least 80% of the width': a share of the window is not a success criterion, and neither is a 1152 px cap.",
+        "The four-tab context panel (Tutor, Transcript, This slide, Questions): replaced by Tutor, Questions, Concepts, Transcript, Sources in a resizable panel.",
+        "'No slide named in the course record' as an end state for a question: replaced by explicit anchor states including inferred candidates.",
+        "The concept outline being reachable in ordinary navigation only from Progress: replaced by Concept map in the course header and a Concepts tab in the lecture workspace.",
+        "The single 'no timing for this slide' line: replaced by six distinct states.",
+        "R1 not_in_scope item 'speech recognition runs': offline CPU transcription is in scope within the persisted four-hour allowance.",
+        "Decision D46 (no graph library): replaced by decision D61."
+      ],
+      "revisions": [
+        {
+          "recorded": "2026-10-05",
+          "after": "independent review of the amendment",
+          "check_ids_changed": false,
+          "changes": [
+            "Every check that is not an evidence item has one on-screen verification row in its test plan; a unit, projection or command test alone closes none (decision D73).",
+            "Graph labels (R2-C3) and the type census (R2-V7) are measured as rendered.",
+            "The inferred-anchor contract is the fixed private format ll.inferred-anchors/1 (decision D74).",
+            "The This-slide concept scope says on which build an entry is supported (R2-C2).",
+            "A sixth no-range state, 'not matched yet' (R2-T9, decision D75).",
+            "No relative or window-share criterion in R2-V6 and R2-V8; transport bar and range list told apart (decision D76).",
+            "Every check names stories, flows and workflows, each owned by a task that carries the check; carrying tasks were added where needed."
+          ]
+        }
+      ],
+      "affected_tasks": {
+        "LL005": [
+          "R2-V1",
+          "R2-V3",
+          "R2-V4",
+          "R2-V6",
+          "R2-V7",
+          "R2-V8",
+          "R2-V9",
+          "R2-V10",
+          "R2-B1",
+          "R2-B2",
+          "R2-B3",
+          "R2-E1",
+          "R2-E2"
+        ],
+        "LL006": [
+          "R2-V9"
+        ],
+        "LL009": [
+          "R2-S1",
+          "R2-S2",
+          "R2-Q1",
+          "R2-Q2",
+          "R2-Q3",
+          "R2-Q4",
+          "R2-Q5",
+          "R2-Q6",
+          "R2-Q8",
+          "R2-Q9",
+          "R2-Q10",
+          "R2-C5"
+        ],
+        "LL010": [
+          "R2-V5",
+          "R2-V6",
+          "R2-C1",
+          "R2-B3"
+        ],
+        "LL011": [
+          "R2-V1",
+          "R2-V3",
+          "R2-S1",
+          "R2-S2",
+          "R2-S3",
+          "R2-S4",
+          "R2-S6",
+          "R2-S7",
+          "R2-S8",
+          "R2-S9",
+          "R2-Q1",
+          "R2-Q2",
+          "R2-Q3",
+          "R2-Q4",
+          "R2-Q5",
+          "R2-Q6",
+          "R2-Q7",
+          "R2-Q8"
+        ],
+        "LL012": [
+          "R2-V2",
+          "R2-V9",
+          "R2-S8",
+          "R2-T4",
+          "R2-T8",
+          "R2-T9",
+          "R2-T10",
+          "R2-T11",
+          "R2-E4"
+        ],
+        "LL013": [
+          "R2-S5",
+          "R2-S7",
+          "R2-S11",
+          "R2-T7",
+          "R2-T10",
+          "R2-C11",
+          "R2-E5",
+          "R2-E9"
+        ],
+        "LL015": [
+          "R2-S1",
+          "R2-S2",
+          "R2-S3",
+          "R2-S4",
+          "R2-S5",
+          "R2-S7",
+          "R2-S9",
+          "R2-S10",
+          "R2-S11",
+          "R2-T1",
+          "R2-T2",
+          "R2-T3",
+          "R2-T4",
+          "R2-T5",
+          "R2-T6",
+          "R2-T7",
+          "R2-T8",
+          "R2-T9",
+          "R2-T10",
+          "R2-T12",
+          "R2-T13",
+          "R2-E5",
+          "R2-E6",
+          "R2-E8",
+          "R2-E9"
+        ],
+        "LL016": [
+          "R2-Q2",
+          "R2-C1",
+          "R2-C2",
+          "R2-C3",
+          "R2-C4",
+          "R2-C5",
+          "R2-C6",
+          "R2-C7",
+          "R2-C8",
+          "R2-C9",
+          "R2-C10",
+          "R2-C11",
+          "R2-E7"
+        ],
+        "LL023": [
+          "R2-S8"
+        ],
+        "LL025": [
+          "R2-T6"
+        ],
+        "LL028": [
+          "R2-Q1",
+          "R2-Q3",
+          "R2-Q4",
+          "R2-Q5",
+          "R2-Q6",
+          "R2-Q10",
+          "R2-E7"
+        ],
+        "LL030": [
+          "R2-C7",
+          "R2-C8",
+          "R2-C9",
+          "R2-C10",
+          "R2-E7"
+        ],
+        "LL034": [
+          "R2-V1",
+          "R2-V2",
+          "R2-V3",
+          "R2-V4",
+          "R2-V5",
+          "R2-V6",
+          "R2-V7",
+          "R2-V8",
+          "R2-V9",
+          "R2-V10",
+          "R2-S6",
+          "R2-S8",
+          "R2-T11",
+          "R2-Q6",
+          "R2-Q7",
+          "R2-C1",
+          "R2-C3",
+          "R2-C4",
+          "R2-B1",
+          "R2-B2",
+          "R2-B3",
+          "R2-E1",
+          "R2-E2",
+          "R2-E3",
+          "R2-E4",
+          "R2-E5",
+          "R2-E6",
+          "R2-E7",
+          "R2-E9"
+        ],
+        "LL035": [
+          "R2-T13",
+          "R2-Q9",
+          "R2-E3",
+          "R2-E4",
+          "R2-E8"
+        ],
+        "LL037": [
+          "R2-B1",
+          "R2-B2",
+          "R2-E1",
+          "R2-E9"
+        ]
+      },
+      "checks": {
+        "R2-V1": {
+          "summary": "Lecture workspace: collapsible outline, large original-source canvas (stage at least half of the workspace at default pane sizes on the three desktop sizes), one context panel.",
+          "stories": [
+            "US011",
+            "US012"
+          ],
+          "flows": [
+            "UI06"
+          ],
+          "workflows": [
+            "WF10"
+          ],
+          "tasks": [
+            "LL005",
+            "LL011",
+            "LL034"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-V2": {
+          "summary": "ONE compact media control system on the lecture page whichever tab is open: one play/pause, one timeline, one time readout, with the selected range and scope. The transport bar is at most 128 CSS px tall on desktop; a slide's several ranges are a range list opened from the bar, which never grows it.",
+          "stories": [
+            "US013",
+            "US014"
+          ],
+          "flows": [
+            "UI07"
+          ],
+          "workflows": [
+            "WF10"
+          ],
+          "tasks": [
+            "LL012",
+            "LL034"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-V3": {
+          "summary": "Resizable context panel (drag and keyboard, bounded, width remembered) with five text-labelled tabs in order: Tutor, Questions, Concepts, Transcript, Sources.",
+          "stories": [
+            "US011",
+            "US017",
+            "US037"
+          ],
+          "flows": [
+            "UI06",
+            "UI09",
+            "UI19"
+          ],
+          "workflows": [
+            "WF10"
+          ],
+          "tasks": [
+            "LL005",
+            "LL011",
+            "LL034"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-V4": {
+          "summary": "Narrow screens (390x844, 768x1024): one focused pane at a time from an explicit pane control, transport reachable from every pane, no sideways scroll.",
+          "stories": [
+            "US011",
+            "US055"
+          ],
+          "flows": [
+            "UI06",
+            "UI28"
+          ],
+          "workflows": [
+            "WF10"
+          ],
+          "tasks": [
+            "LL005",
+            "LL034"
+          ],
+          "defined_in": "docs/features/workspace-access/requirements.md"
+        },
+        "R2-V5": {
+          "summary": "Study home leads with Resume, then course and lecture browsing with real titles and thumbnails; no invented progress, dates, facts or charts.",
+          "stories": [
+            "US005",
+            "US006"
+          ],
+          "flows": [
+            "UI03"
+          ],
+          "workflows": [
+            "WF10"
+          ],
+          "tasks": [
+            "LL010",
+            "LL034"
+          ],
+          "defined_in": "docs/features/workspace-access/requirements.md"
+        },
+        "R2-V6": {
+          "summary": "Separate appearance decisions for home (deliberate centred browsing measure) and reading views (laid out for the slide); prose lines at most 80 characters; no width cap and no share of the window is a criterion or is asserted by a test.",
+          "stories": [
+            "US055",
+            "US011"
+          ],
+          "flows": [
+            "UI03",
+            "UI06",
+            "UI28"
+          ],
+          "workflows": [
+            "WF10"
+          ],
+          "tasks": [
+            "LL005",
+            "LL010",
+            "LL034"
+          ],
+          "defined_in": "docs/features/workspace-access/requirements.md"
+        },
+        "R2-V7": {
+          "summary": "Reading text 16-18 px with line height at least 1.45; restrained 12-14 px metadata (at most a tenth of visible characters below 14 px); one declared type and spacing scale, at most seven sizes per screen; sizes measured as rendered; only text inside a source rendering is left out.",
+          "stories": [
+            "US055"
+          ],
+          "flows": [
+            "UI28"
+          ],
+          "workflows": [
+            "WF10"
+          ],
+          "tasks": [
+            "LL005",
+            "LL034"
+          ],
+          "defined_in": "docs/features/workspace-access/requirements.md"
+        },
+        "R2-V8": {
+          "summary": "Reading content in at most one bordered container; pills only for a state, a filter or an actionable source reference; distinct default, hover, focus and selected states, selection not by colour alone; rendered contrast for text, accent, focus ring and selected states; no criterion relative to the R1 build.",
+          "stories": [
+            "US055"
+          ],
+          "flows": [
+            "UI28"
+          ],
+          "workflows": [
+            "WF10"
+          ],
+          "tasks": [
+            "LL005",
+            "LL034"
+          ],
+          "defined_in": "docs/features/workspace-access/requirements.md"
+        },
+        "R2-V9": {
+          "summary": "Slide keeps original colours in both themes; draft, playback position, selected range, slide, tab and panel width survive theme, outline, resize, tab and pane changes; reduced motion honoured.",
+          "stories": [
+            "US055",
+            "US056",
+            "US025",
+            "US026"
+          ],
+          "flows": [
+            "UI28",
+            "UI06",
+            "UI07",
+            "UI13"
+          ],
+          "workflows": [
+            "WF10"
+          ],
+          "tasks": [
+            "LL005",
+            "LL006",
+            "LL012",
+            "LL034"
+          ],
+          "defined_in": "docs/features/workspace-access/requirements.md"
+        },
+        "R2-V10": {
+          "summary": "Acceptance needs BOTH measured checks AND a recorded independent visual critique against the two approved references at 1440x900, 1920x1080, 2560x1440, tablet and phone in both themes; designer-reviewed is not user-approved.",
+          "stories": [
+            "US055",
+            "US056"
+          ],
+          "flows": [
+            "UI28"
+          ],
+          "workflows": [
+            "WF10"
+          ],
+          "tasks": [
+            "LL005",
+            "LL034"
+          ],
+          "defined_in": "docs/features/workspace-access/requirements.md"
+        },
+        "R2-S1": {
+          "summary": "ONE versioned read-side source map per deck version is the only source of slide identity for navigation, transcript, player, questions, Concepts and search.",
+          "stories": [
+            "US011",
+            "US012",
+            "US020"
+          ],
+          "flows": [
+            "UI06",
+            "UI10"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL009",
+            "LL011",
+            "LL015"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-S2": {
+          "summary": "Identity kinds stay distinct: source id/version/hash; physical PDF page index (explicit base) and optional page label; printed slide number only if established; PPTX slide id and ordinal only when a PPTX exists; logical-slide identity with evidence and revision; build variant or region; recording occurrence.",
+          "stories": [
+            "US011",
+            "US017",
+            "US020"
+          ],
+          "flows": [
+            "UI06",
+            "UI09",
+            "UI10"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL009",
+            "LL011",
+            "LL015"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-S3": {
+          "summary": "Build/reveal sequences become one logical slide only on several signals; every build stays addressable; content revealed later is not attributed to an earlier build.",
+          "stories": [
+            "US011",
+            "US012"
+          ],
+          "flows": [
+            "UI06"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL011",
+            "LL015"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-S4": {
+          "summary": "No false merges: look-alike pages are not merged, uncertain pages stay separately addressable, an adjacent repeat is a duplicate and never a build, multi-slide handout pages expose each region, nothing leaves the page inventory.",
+          "stories": [
+            "US011",
+            "US020"
+          ],
+          "flows": [
+            "UI06",
+            "UI10"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL011",
+            "LL015"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-S5": {
+          "summary": "Group, split and role corrections are versioned local annotations that survive rebuilds; old deep links keep opening the same physical page of the same source version.",
+          "stories": [
+            "US019",
+            "US020"
+          ],
+          "flows": [
+            "UI10"
+          ],
+          "workflows": [
+            "WF02",
+            "WF09"
+          ],
+          "tasks": [
+            "LL013",
+            "LL015"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-S6": {
+          "summary": "Visible wording states only what is known: 'PDF page 23 of 91 - build 2 of 3'; 'Slide 17' only when a number is printed on that page or the source map records a PowerPoint match for that page.",
+          "stories": [
+            "US011",
+            "US012"
+          ],
+          "flows": [
+            "UI06"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL011",
+            "LL034"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-S7": {
+          "summary": "Content role of every page (instructional, worked example/question, objectives/summary, structural title/section, administrative, blank, mixed, unknown) classified separately, with evidence and state, and correctable.",
+          "stories": [
+            "US010",
+            "US011"
+          ],
+          "flows": [
+            "UI05",
+            "UI06"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL011",
+            "LL013",
+            "LL015"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-S8": {
+          "summary": "Structural pages get no forced teach-back, generated practice, concept requirement or missing-match warning; they offer Next content and whole-lecture access; supported speech over a title stays discoverable.",
+          "stories": [
+            "US011",
+            "US013",
+            "US017",
+            "US025",
+            "US029"
+          ],
+          "flows": [
+            "UI06",
+            "UI07",
+            "UI09",
+            "UI13",
+            "UI15"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL011",
+            "LL012",
+            "LL023",
+            "LL034"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-S9": {
+          "summary": "Image-only and equation-only pages are never suppressed, skipped or classified structural or blank because their text is sparse.",
+          "stories": [
+            "US011"
+          ],
+          "flows": [
+            "UI06"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL011",
+            "LL015"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-S10": {
+          "summary": "Raw and instructional denominators are reported separately with the counts of the other roles adding up to the page count; re-labelling changes no page's own state and never the raw figure; the instructional figure is always shown beside the raw one with the count of pages outside it and how their roles were established.",
+          "stories": [
+            "US010"
+          ],
+          "flows": [
+            "UI05"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL015"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-S11": {
+          "summary": "A replaced or reordered deck gets a new source-map revision; links and anchors of the old version are flagged for review, never silently retargeted.",
+          "stories": [
+            "US020"
+          ],
+          "flows": [
+            "UI10"
+          ],
+          "workflows": [
+            "WF02",
+            "WF09"
+          ],
+          "tasks": [
+            "LL013",
+            "LL015"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-T1": {
+          "summary": "The existing timing proof is imported through the tested importer (consumer-side adapter; hashes and source/version binding checked; producer untouched; no duplicate recognition) and shown for its own window only.",
+          "stories": [
+            "US010",
+            "US015"
+          ],
+          "flows": [
+            "UI05",
+            "UI08"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL015"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-T2": {
+          "summary": "Resumable offline transcription (one worker, at most four threads, bounded checkpointed chunks) under a four-hour cumulative allowance persisted across restarts and never reset; safe pause with the queue kept; the proposed downstream task bound to the same runner as a prepared, inactive record.",
+          "stories": [
+            "US010"
+          ],
+          "flows": [
+            "UI05"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL015"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-T3": {
+          "summary": "Chunk edges are correct: offsets applied once, overlapping seams de-duplicated, silence and partial chunks handled, no time outside the original recording.",
+          "stories": [
+            "US015"
+          ],
+          "flows": [
+            "UI08"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL015"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-T4": {
+          "summary": "Generated words are kept separate from the original transcript; times reach original lines only through a validated text-alignment mapping; unaligned lines carry no time.",
+          "stories": [
+            "US015",
+            "US016"
+          ],
+          "flows": [
+            "UI08"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL012",
+            "LL015"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-T5": {
+          "summary": "Candidate scoring over time windows and logical slides with a sequence model permitting skips, repeats, backward jumps and unassigned intervals.",
+          "stories": [
+            "US013",
+            "US019"
+          ],
+          "flows": [
+            "UI07",
+            "UI10"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL015"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-T6": {
+          "summary": "The association method is benchmarked against the lexical baseline on the same labelled references with thresholds fixed beforehand; a missing adequate method is stated, not certified.",
+          "stories": [
+            "US019"
+          ],
+          "flows": [
+            "UI10"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL015",
+            "LL025"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-T7": {
+          "summary": "A timing link binds recording version, timebase, start/end, logical slide, optional page/build support, method, evidence and quality state; acoustic, semantic and group-mapping quality are separate; 'displayed' only where video frames were visible and inspected.",
+          "stories": [
+            "US013",
+            "US019"
+          ],
+          "flows": [
+            "UI07",
+            "UI10"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL013",
+            "LL015"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-T8": {
+          "summary": "Disjoint occurrences stay separate links; time is never distributed evenly over slides; group-level links are labelled and not split into per-build ranges.",
+          "stories": [
+            "US013",
+            "US014"
+          ],
+          "flows": [
+            "UI07"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL012",
+            "LL015"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-T9": {
+          "summary": "Six distinct no-range states, each from its own cause: not discussed, audio not processed, not matched yet, ambiguous, recording unavailable, structural page with no range expected; structural pages are still matched.",
+          "stories": [
+            "US010",
+            "US013"
+          ],
+          "flows": [
+            "UI05",
+            "UI07"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL012",
+            "LL015"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-T10": {
+          "summary": "Suggestions are rendered and labelled with their method without confirmation of each; never shown as confirmed; reviewed and manual links survive rebuilds; a suggestion built from superseded inputs is not shown as current; start-end times shown.",
+          "stories": [
+            "US013",
+            "US019"
+          ],
+          "flows": [
+            "UI07",
+            "UI10"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL012",
+            "LL013",
+            "LL015"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-T11": {
+          "summary": "Selecting a match seeks the real player to its start and playback stops at its end unless Repeat or Whole recording is chosen.",
+          "stories": [
+            "US013",
+            "US014"
+          ],
+          "flows": [
+            "UI07"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL012",
+            "LL034"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-T12": {
+          "summary": "Per-course stage, coverage and backlog for every admitted recording and deck, with unresolved causes, and one resumable command; no schedule.",
+          "stories": [
+            "US009",
+            "US010"
+          ],
+          "flows": [
+            "UI05"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL015"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-T13": {
+          "summary": "One complete real lecture is the end-to-end reference, including content beyond the opening; a reference, not a scope limit and not an accuracy claim.",
+          "stories": [
+            "US013",
+            "US015"
+          ],
+          "flows": [
+            "UI07",
+            "UI08"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL015",
+            "LL035"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-Q1": {
+          "summary": "Every catalogued question stays reachable (bank, lecture list, search), including null-prompt questions with their source-opening actions; totals reconcile catalog to rendered list at run time.",
+          "stories": [
+            "US043",
+            "US017"
+          ],
+          "flows": [
+            "UI22",
+            "UI09"
+          ],
+          "workflows": [
+            "WF03"
+          ],
+          "tasks": [
+            "LL009",
+            "LL011",
+            "LL028"
+          ],
+          "defined_in": "docs/features/review/requirements.md"
+        },
+        "R2-Q2": {
+          "summary": "Authoritative criteria, concepts and skills are joined to the page / logical-slide map; reviewed anchors first, matched by physical page.",
+          "stories": [
+            "US017",
+            "US037"
+          ],
+          "flows": [
+            "UI09",
+            "UI19"
+          ],
+          "workflows": [
+            "WF03"
+          ],
+          "tasks": [
+            "LL009",
+            "LL011",
+            "LL016"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-Q3": {
+          "summary": "Separately INFERRED candidate anchors for coarse or unmapped questions in the fixed private format, each with supporting page(s)/region(s), question version, supported criteria and rationale, rendered on the question's card as a suggested link; 'no slide named' is not an end state.",
+          "stories": [
+            "US017"
+          ],
+          "flows": [
+            "UI09"
+          ],
+          "workflows": [
+            "WF03"
+          ],
+          "tasks": [
+            "LL009",
+            "LL011",
+            "LL028"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-Q4": {
+          "summary": "Inference guards: shared vocabulary alone is insufficient; a link names the criteria it supports and never claims the whole answer; nothing inferred from problem-set numbering; no prompt, weight or figure requirement invented; an unchecked candidate says so and a rejected one is never shown as a link.",
+          "stories": [
+            "US017",
+            "US043"
+          ],
+          "flows": [
+            "UI09",
+            "UI22"
+          ],
+          "workflows": [
+            "WF03"
+          ],
+          "tasks": [
+            "LL009",
+            "LL011",
+            "LL028"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-Q5": {
+          "summary": "Exact source maps, agent-inferred associations and concept-related questions are distinct, distinctly labelled kinds; no rebuild promotes one into another.",
+          "stories": [
+            "US017"
+          ],
+          "flows": [
+            "UI09"
+          ],
+          "workflows": [
+            "WF03"
+          ],
+          "tasks": [
+            "LL009",
+            "LL011",
+            "LL028"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-Q6": {
+          "summary": "This slide, Related concepts and All lecture questions with counts equal to their rows and to the catalog; in a build group each row says 'on this build', 'elsewhere in this sequence' or 'group-level'.",
+          "stories": [
+            "US017",
+            "US043"
+          ],
+          "flows": [
+            "UI09",
+            "UI22"
+          ],
+          "workflows": [
+            "WF03"
+          ],
+          "tasks": [
+            "LL009",
+            "LL011",
+            "LL028",
+            "LL034"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-Q7": {
+          "summary": "Clickable source-page/build links on question cards open the exact source version and page and preserve the draft; Back returns.",
+          "stories": [
+            "US017",
+            "US018"
+          ],
+          "flows": [
+            "UI09"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL011",
+            "LL034"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-Q8": {
+          "summary": "Structural pages have no forced This-slide questions; the lecture's questions stay reachable from them.",
+          "stories": [
+            "US017"
+          ],
+          "flows": [
+            "UI09"
+          ],
+          "workflows": [
+            "WF03"
+          ],
+          "tasks": [
+            "LL009",
+            "LL011"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-Q9": {
+          "summary": "The three real examples named in the owner instruction validate privately: reviewed physical-page map honoured, the pilot's page not reused without audit, source-owned wording with justified related slides and no invented requirement.",
+          "stories": [
+            "US017",
+            "US043"
+          ],
+          "flows": [
+            "UI09",
+            "UI22"
+          ],
+          "workflows": [
+            "WF03"
+          ],
+          "tasks": [
+            "LL009",
+            "LL035"
+          ],
+          "defined_in": "docs/features/evidence-alignment/requirements.md"
+        },
+        "R2-Q10": {
+          "summary": "Assessor guidance stays out of every question-only payload and out of inferred-anchor rationales.",
+          "stories": [
+            "US045",
+            "US043"
+          ],
+          "flows": [
+            "UI23",
+            "UI22"
+          ],
+          "workflows": [
+            "WF03"
+          ],
+          "tasks": [
+            "LL009",
+            "LL028"
+          ],
+          "defined_in": "docs/features/review/requirements.md"
+        },
+        "R2-C1": {
+          "summary": "Explicit Concept map access in every course header and a Concepts tab in the lecture workspace, reachable by ordinary navigation from Study.",
+          "stories": [
+            "US037"
+          ],
+          "flows": [
+            "UI19",
+            "UI03"
+          ],
+          "workflows": [
+            "WF03"
+          ],
+          "tasks": [
+            "LL010",
+            "LL016",
+            "LL034"
+          ],
+          "defined_in": "docs/features/progress/requirements.md"
+        },
+        "R2-C2": {
+          "summary": "One scope control - Course, Lecture, This slide - that changes the visible set and states scope and counts; inside a build group each entry says whether it is on this build, elsewhere in the sequence or group-level.",
+          "stories": [
+            "US037",
+            "US038"
+          ],
+          "flows": [
+            "UI19"
+          ],
+          "workflows": [
+            "WF03"
+          ],
+          "tasks": [
+            "LL016"
+          ],
+          "defined_in": "docs/features/progress/requirements.md"
+        },
+        "R2-C3": {
+          "summary": "A readable hierarchy AND a graph neighbourhood view from one layout engine: topic-level grouping, expand on demand, selection retained, labels at least 12 px as rendered after the graph's own zoom; never all nodes at once.",
+          "stories": [
+            "US037"
+          ],
+          "flows": [
+            "UI19"
+          ],
+          "workflows": [
+            "WF03"
+          ],
+          "tasks": [
+            "LL016",
+            "LL034"
+          ],
+          "defined_in": "docs/features/progress/requirements.md"
+        },
+        "R2-C4": {
+          "summary": "A keyboard-usable outline alternative offering the same nodes, relations, expansion, selection and detail as the graph.",
+          "stories": [
+            "US037"
+          ],
+          "flows": [
+            "UI19"
+          ],
+          "workflows": [
+            "WF03"
+          ],
+          "tasks": [
+            "LL016",
+            "LL034"
+          ],
+          "defined_in": "docs/features/progress/requirements.md"
+        },
+        "R2-C5": {
+          "summary": "One typed read model for all three scopes and both presentations; same ids and counts; no second graph store.",
+          "stories": [
+            "US037",
+            "US038"
+          ],
+          "flows": [
+            "UI19"
+          ],
+          "workflows": [
+            "WF03"
+          ],
+          "tasks": [
+            "LL009",
+            "LL016"
+          ],
+          "defined_in": "docs/features/progress/requirements.md"
+        },
+        "R2-C6": {
+          "summary": "Three edge families stay distinct in data and on screen: question to criterion to concept/skill; source; prerequisite/overlap.",
+          "stories": [
+            "US037"
+          ],
+          "flows": [
+            "UI19"
+          ],
+          "workflows": [
+            "WF03"
+          ],
+          "tasks": [
+            "LL016"
+          ],
+          "defined_in": "docs/features/progress/requirements.md"
+        },
+        "R2-C7": {
+          "summary": "Selecting a node opens Sources, Questions and Evidence following actual joins; sources open the exact page/build; missing definitions are explicit gaps.",
+          "stories": [
+            "US038"
+          ],
+          "flows": [
+            "UI19"
+          ],
+          "workflows": [
+            "WF03"
+          ],
+          "tasks": [
+            "LL016",
+            "LL030"
+          ],
+          "defined_in": "docs/features/progress/requirements.md"
+        },
+        "R2-C8": {
+          "summary": "Build grouping never duplicates concepts, questions or performances; counts do not multiply with builds.",
+          "stories": [
+            "US037",
+            "US038"
+          ],
+          "flows": [
+            "UI19"
+          ],
+          "workflows": [
+            "WF03"
+          ],
+          "tasks": [
+            "LL016",
+            "LL030"
+          ],
+          "defined_in": "docs/features/progress/requirements.md"
+        },
+        "R2-C9": {
+          "summary": "Five different evidence states: unknown, not applicable, not separately observed, assisted, independent; prior exposure alone is not assistance.",
+          "stories": [
+            "US038",
+            "US039"
+          ],
+          "flows": [
+            "UI19",
+            "UI20"
+          ],
+          "workflows": [
+            "WF03",
+            "WF10"
+          ],
+          "tasks": [
+            "LL016",
+            "LL030"
+          ],
+          "defined_in": "docs/features/progress/requirements.md"
+        },
+        "R2-C10": {
+          "summary": "No mastery or probability; percentages only with explicit unique denominators and conditions; coarse stays coarse; structural pages have no forced assessed concept branch.",
+          "stories": [
+            "US038",
+            "US040"
+          ],
+          "flows": [
+            "UI19",
+            "UI20"
+          ],
+          "workflows": [
+            "WF03",
+            "WF10"
+          ],
+          "tasks": [
+            "LL016",
+            "LL030"
+          ],
+          "defined_in": "docs/features/progress/requirements.md"
+        },
+        "R2-C11": {
+          "summary": "Revision-based invalidation: a new source, changed build group or changed anchor refreshes only the affected Course/Lecture/Slide views, keeps corrections, alters no attempt; stale views say so.",
+          "stories": [
+            "US038",
+            "US020"
+          ],
+          "flows": [
+            "UI19",
+            "UI10"
+          ],
+          "workflows": [
+            "WF03",
+            "WF09"
+          ],
+          "tasks": [
+            "LL013",
+            "LL016"
+          ],
+          "defined_in": "docs/features/progress/requirements.md"
+        },
+        "R2-B1": {
+          "summary": "The app states its identity as readable text in Settings (commit, loaded asset names, Brain profile and port, per-course preparation generation and source-map revision); the status interface reports the same.",
+          "stories": [
+            "US010"
+          ],
+          "flows": [
+            "UI05"
+          ],
+          "workflows": [
+            "WF10"
+          ],
+          "tasks": [
+            "LL005",
+            "LL034",
+            "LL037"
+          ],
+          "defined_in": "docs/features/workspace-access/requirements.md"
+        },
+        "R2-B2": {
+          "summary": "A stale page is detected and said: loaded assets that do not belong to the served build produce one line with Reload; no silent cache of an old shell.",
+          "stories": [
+            "US055"
+          ],
+          "flows": [
+            "UI28"
+          ],
+          "workflows": [
+            "WF10"
+          ],
+          "tasks": [
+            "LL005",
+            "LL034",
+            "LL037"
+          ],
+          "defined_in": "docs/features/workspace-access/requirements.md"
+        },
+        "R2-B3": {
+          "summary": "The data in view is identified: synthetic sample data says so on Study; an unresolved or empty scope shows an explained state with a way back.",
+          "stories": [
+            "US005",
+            "US010"
+          ],
+          "flows": [
+            "UI03",
+            "UI05"
+          ],
+          "workflows": [
+            "WF10"
+          ],
+          "tasks": [
+            "LL005",
+            "LL010",
+            "LL034"
+          ],
+          "defined_in": "docs/features/workspace-access/requirements.md"
+        },
+        "R2-E1": {
+          "summary": "Evidence item 1: build, profile, asset and generation identity of the exact preview tested, equal to what the page shows; another port is not evidence about the learner's instance.",
+          "stories": [
+            "US010",
+            "US055"
+          ],
+          "flows": [
+            "UI05",
+            "UI28"
+          ],
+          "workflows": [
+            "WF10"
+          ],
+          "tasks": [
+            "LL005",
+            "LL034",
+            "LL037"
+          ],
+          "defined_in": "docs/engineering/quality-and-testing.md"
+        },
+        "R2-E2": {
+          "summary": "Evidence item 2: before/after Study, Lecture and Concept captures in both themes at the desktop sizes and mobile, inspected for real content and reference fidelity.",
+          "stories": [
+            "US005",
+            "US011",
+            "US037",
+            "US055",
+            "US056"
+          ],
+          "flows": [
+            "UI03",
+            "UI06",
+            "UI19",
+            "UI28"
+          ],
+          "workflows": [
+            "WF10"
+          ],
+          "tasks": [
+            "LL005",
+            "LL034"
+          ],
+          "defined_in": "docs/engineering/quality-and-testing.md"
+        },
+        "R2-E3": {
+          "summary": "Evidence item 3: visible end-to-end journey by ordinary navigation: Study, substantive logical slide, actual recording range, relevant question, supporting PDF page/build, connected concept, evidence panel, return with state preserved.",
+          "stories": [
+            "US005",
+            "US006",
+            "US011",
+            "US013",
+            "US017",
+            "US018",
+            "US037",
+            "US038"
+          ],
+          "flows": [
+            "UI03",
+            "UI06",
+            "UI07",
+            "UI09",
+            "UI19",
+            "UI20"
+          ],
+          "workflows": [
+            "WF02",
+            "WF03",
+            "WF10"
+          ],
+          "tasks": [
+            "LL034",
+            "LL035"
+          ],
+          "defined_in": "docs/engineering/quality-and-testing.md"
+        },
+        "R2-E4": {
+          "summary": "Evidence item 4: original-media seeked/currentTime observations at three or more real ranges beyond the opening plus bounded-end and Repeat checks; mechanical only; acoustic QA pending unless someone listened.",
+          "stories": [
+            "US013",
+            "US014"
+          ],
+          "flows": [
+            "UI07"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL012",
+            "LL034",
+            "LL035"
+          ],
+          "defined_in": "docs/engineering/quality-and-testing.md"
+        },
+        "R2-E5": {
+          "summary": "Evidence item 5: logical-slide/page reconciliation table and tests for builds, false merges, numbering offsets, multi-slide handouts, source replacement, manual splits and group-level timing; synthetic cases labelled.",
+          "stories": [
+            "US011",
+            "US012",
+            "US019",
+            "US020"
+          ],
+          "flows": [
+            "UI06",
+            "UI10"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL013",
+            "LL015",
+            "LL034"
+          ],
+          "defined_in": "docs/engineering/quality-and-testing.md"
+        },
+        "R2-E6": {
+          "summary": "Evidence item 6: role-classification negatives (image/equation-only retained; plain cover not assessed; speech over a title discoverable); raw and instructional denominators reported separately.",
+          "stories": [
+            "US011",
+            "US013"
+          ],
+          "flows": [
+            "UI06",
+            "UI07"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL015",
+            "LL034"
+          ],
+          "defined_in": "docs/engineering/quality-and-testing.md"
+        },
+        "R2-E7": {
+          "summary": "Evidence item 7: direct/related/lecture question counts with actual click paths; scoped graph changes; no duplicate or invented learning evidence.",
+          "stories": [
+            "US017",
+            "US037",
+            "US038",
+            "US043"
+          ],
+          "flows": [
+            "UI09",
+            "UI19",
+            "UI22"
+          ],
+          "workflows": [
+            "WF03"
+          ],
+          "tasks": [
+            "LL016",
+            "LL028",
+            "LL030",
+            "LL034"
+          ],
+          "defined_in": "docs/engineering/quality-and-testing.md"
+        },
+        "R2-E8": {
+          "summary": "Evidence item 8: stage coverage for every admitted recording and deck with unresolved causes and measured limitations; generated, agent-reviewed and human-confirmed counted separately.",
+          "stories": [
+            "US009",
+            "US010"
+          ],
+          "flows": [
+            "UI05"
+          ],
+          "workflows": [
+            "WF02"
+          ],
+          "tasks": [
+            "LL015",
+            "LL035"
+          ],
+          "defined_in": "docs/engineering/quality-and-testing.md"
+        },
+        "R2-E9": {
+          "summary": "Evidence item 9: restart, idempotency, stale-input and revision tests, focused regressions, and one final integrated zero-retry run on the final code.",
+          "stories": [
+            "US010",
+            "US019",
+            "US020"
+          ],
+          "flows": [
+            "UI05",
+            "UI10"
+          ],
+          "workflows": [
+            "WF02",
+            "WF09"
+          ],
+          "tasks": [
+            "LL013",
+            "LL015",
+            "LL034",
+            "LL037"
+          ],
+          "defined_in": "docs/engineering/quality-and-testing.md"
+        }
+      },
+      "in_scope": [
+        "repo-local documentation, code and tests",
+        "read-only inspection of configured course sources, catalogs and policies",
+        "import of the existing timing proof through the tested importer",
+        "offline CPU transcription with the verified local runtime: one worker, at most four threads, resumable bounded chunks, four hours cumulative processing wall time persisted across restarts and never reset",
+        "local derived links displayed as attributable suggestions",
+        "real browser tests on an owned loopback instance"
+      ],
+      "not_in_scope": [
+        "native or tutor sends, pilot renewal",
+        "course, catalog, attempt, shared-mapping, grade or planner writes",
+        "schedule activation, public ports, deployment, OAuth, Office automation",
+        "model downloads, GPU or system installs, global environment changes, paid inference",
+        "claims of user aesthetic approval or of validated educational accuracy"
+      ],
+      "check_definitions": "Sections 'Remediation amendment R2' of docs/features/*/requirements.md and test-plan.md, docs/project/design-system.md, docs/project/ui-state-and-interaction-contract.md, docs/engineering/interface-contracts.md, docs/engineering/quality-and-testing.md, docs/project/workflow-catalog.md and docs/project/workflow-acceptance.md"
     }
   ]
 }

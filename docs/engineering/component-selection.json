@@ -129,6 +129,46 @@
       "purpose": "Reusable shared UI states and both themes; never upload private materials into a hosted design service by default.",
       "reference": "REF02",
       "exact_dependency_lock": "LL002 output; NOT_GENERATED in this design package"
+    },
+    {
+      "role": "pptx-parse",
+      "selection": "python-pptx",
+      "purpose": "Parser only, used when a PowerPoint file of a unit exists: slide ids, order, titles, text and the hidden flag for the read-side source map. Renders nothing, writes no deck, automates no Office application; its slide ordinals are never projected onto PDF pages.",
+      "reference": "REF27",
+      "exact_dependency_lock": "Pinned in the repository's own lock files by the task that installs it; this record names no version",
+      "added_by": "Remediation amendment R2 (2026-10-05), decision D62"
+    },
+    {
+      "role": "concept-graph-view",
+      "selection": "@xyflow/react",
+      "purpose": "Node-link presentation of the selected concept's neighbourhood over the existing typed read model; grouped at topic level and expanded on demand. The typed outline remains the keyboard-usable alternative. No hand-built canvas.",
+      "reference": "REF28",
+      "exact_dependency_lock": "Pinned in the repository's own lock files by the task that installs it; this record names no version",
+      "added_by": "Remediation amendment R2 (2026-10-05), decision D61"
+    },
+    {
+      "role": "concept-graph-layout",
+      "selection": "@dagrejs/dagre",
+      "purpose": "The ONE layout engine for the concept graph. ELK replaces it only if a documented compound-layout requirement justifies that; the two are never installed together.",
+      "reference": "REF29",
+      "exact_dependency_lock": "Pinned in the repository's own lock files by the task that installs it; this record names no version",
+      "added_by": "Remediation amendment R2 (2026-10-05), decision D61"
+    }
+  ],
+  "amendments": [
+    {
+      "change_id": "R2",
+      "recorded": "2026-10-05",
+      "added_roles": [
+        "pptx-parse",
+        "concept-graph-view",
+        "concept-graph-layout"
+      ],
+      "notes": [
+        "The conditional entry 'Native accessible nested list/disclosure UI for concept tree ... rich graph layout only after usability evidence justifies it' has met its trigger: the learner tested the outline-only build and could not use it as a concept map. The outline stays as the accessible alternative.",
+        "The conditional entry 'Existing local transcription/helpers first' is the route used by R2: the already verified offline runtime and cached model outside the repository environment are reused under a persisted four-hour allowance. No speech package is added to the repository environment and nothing is downloaded.",
+        "Selection is not compatibility verification: versions, licenses and integrity are established by the lock files and the dependency inventory, not by this record."
+      ]
     }
   ],
   "conditional_processing": [

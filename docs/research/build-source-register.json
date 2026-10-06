@@ -131,6 +131,27 @@
       "id": "REF26",
       "purpose": "Nontext contrast thresholds",
       "url": "https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html"
+    },
+    {
+      "id": "REF27",
+      "purpose": "PowerPoint (.pptx) parsing library: slide identity, order and text; not a renderer",
+      "url": "https://python-pptx.readthedocs.io/en/latest/",
+      "added_by": "Remediation amendment R2 (2026-10-05)",
+      "note": "URL fetched once on 2026-10-05 in the review round of the amendment: it resolves to the library's documentation home, which describes a Python library for creating, reading and updating .pptx files; this project selects it for reading only. Nothing else on the page was verified. The installed version, license and integrity are fixed by the lock files of the task that installs the package."
+    },
+    {
+      "id": "REF28",
+      "purpose": "React node-link graph component (package @xyflow/react)",
+      "url": "https://reactflow.dev/learn",
+      "added_by": "Remediation amendment R2 (2026-10-05)",
+      "note": "URL fetched once on 2026-10-05 in the review round of the amendment: it resolves to the React Flow quick start, which names the package @xyflow/react. Nothing else on the page was verified. The installed version, license and integrity are fixed by the lock files of the task that installs the package."
+    },
+    {
+      "id": "REF29",
+      "purpose": "Directed-graph layout engine (package @dagrejs/dagre)",
+      "url": "https://github.com/dagrejs/dagre/wiki",
+      "added_by": "Remediation amendment R2 (2026-10-05)",
+      "note": "URL fetched once on 2026-10-05 in the review round of the amendment: it resolves to the Dagre wiki, which describes a JavaScript library for laying out directed graphs. Nothing else on the page was verified. The installed version, license and integrity are fixed by the lock files of the task that installs the package."
     }
   ]
 }

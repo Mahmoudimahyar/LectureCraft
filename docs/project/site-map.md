@@ -61,3 +61,28 @@ and [shared behavior](ui-state-and-interaction-contract.md).
 | SC16 | Session wrap-up | page_or_drawer | /study/sessions/:sessionId/summary | Where the user stopped, actual work, pending saves and optional next actions; no automatic calendar changes. |
 | SC17 | Search | overlay_or_page | /search | Scope to current course by default; source, lecture, question and concept results retain types, versions and access. |
 | SC18 | Response capture | component_dialog | Invoked capture component | Typed text, recording controls, transcript correction and attachment review. No audio upload before applicable permission. |
+
+
+## Remediation amendment R2 (2026-10-05)
+
+Second bounded change against baseline 0.9.0 (owner instruction of 2026-10-05, kept as `PROMPTS/EXPERIENCE_REPAIR_V2.md`). Screen ids, routes and the four main destinations are unchanged. Two things in the map above are amended, because the learner could not reach them by ordinary navigation:
+
+```text
+Study
+├── Resume (first) / All courses
+└── Course
+    ├── Concept map                      (new entry in every course header; scope Course)
+    ├── All lecture units + related dated sessions
+    └── Lecture workspace
+        ├── Collapsible lecture outline (logical slides · builds · regions)
+        ├── Slide canvas with its identity line / Focus
+        ├── ONE media control system (ranges · Repeat · Whole recording)
+        └── Resizable context panel
+            ├── Tutor: Quick answer · Understand · Explain back
+            ├── Questions: This slide · Related concepts · All lecture questions
+            ├── Concepts: Course · Lecture · This slide (outline and graph)
+            ├── Transcript: course transcript · generated speech text
+            └── Sources: files of the unit · versions · preparation
+```
+
+SC04's context panel is Tutor / Questions / Concepts / Transcript / Sources (it was Tutor / Transcript / Sources in 0.8 and Tutor / Transcript / This slide / Questions in R1). SC10 (Concept detail) is additionally reached from **Concept map** in a course header and from the **Concepts** tab; no address has to be typed. SC13 (Settings) also shows the build and data identity. Checks: R2-V3, R2-V5, R2-C1, R2-C2, R2-B1, defined in the feature packets under `docs/features/`.

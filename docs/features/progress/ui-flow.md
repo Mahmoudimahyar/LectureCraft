@@ -173,3 +173,27 @@ Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-
 **UI19 — See how ideas connect.** Entry points: Progress ("Concept outline"), a lecture's outline, and the This-slide tab. The outline opens at topic level for the chosen scope (course, lecture, slide); expanding a node loads its children. A selected node shows Sources, Questions and Evidence. The earlier single-node page remains as the detail view.
 
 **UI20 / UI21 — gaps and history.** Status wording now carries the recorded condition (unaided, with assistance, after prior exposure, conditions unknown). A facet summary groups recorded observations by facet and condition and lists what is not separately observed.
+
+
+## Remediation amendment R2 (2026-10-05)
+
+Second bounded change against baseline 0.9.0, recorded after the learner tested the build of amendment R1 and rejected it (owner instruction of 2026-10-05, kept as `PROMPTS/EXPERIENCE_REPAIR_V2.md`). Flow, story, workflow and screen ids and the step tables above are unchanged. Earlier text, including the R1 notes above, is kept as history; where these notes and older text differ, these notes govern the listed behaviour only. Checks are defined in the [requirements](requirements.md); states in the [shared contract](../../project/ui-state-and-interaction-contract.md).
+
+**Superseded R1 note.** R1 listed the entry points of UI19 as Progress ("Concept outline"), a lecture's outline and the This-slide tab. Those remain possible but are no longer sufficient: the learner did not find the views there. R2 adds the two ordinary entry points below and a graph presentation beside the outline.
+
+**UI19 — Explore a typed concept tree (R2-C1 – R2-C8, R2-C11).**
+- Trigger, extended: **Concept map** in a course header (Study home and the course lecture list), the **Concepts** tab of the lecture workspace, a concept chip, or Concepts from Progress. None requires a typed address.
+- Step 1: the view opens in the scope it was entered from — Course from the course header, Lecture or This slide from the lecture — and one control switches between Course, Lecture and This slide. The heading states the scope and its counts.
+- Step 2: the hierarchy opens at topic level and expands on demand; the graph shows the selected node with its neighbours, using distinct line styles and a legend for assessment, source and prerequisite/overlap relations. Outline and graph share one selection.
+- Step 3: selecting a node opens Sources, Questions and Evidence. Evidence separates related questions from recorded performances and uses the five states of R2-C9.
+- Step 4: a source opens its exact page or build in the lecture; a question opens its card; nothing is credited by navigating.
+- Step 5: returning restores the slide, the tab, the draft and the playback position.
+- Added alternatives: in a build group each concept and question appears once and says whether its support is on this build, elsewhere in this sequence or group-level; the graph's labels stay at least 12 px as rendered in the default view; on a structural page the This-slide scope says the page is structural and offers the lecture scope instead of an empty branch; a view older than its inputs says so and offers Refresh.
+
+**UI20 — Review learning gaps and choose study priorities (R2-C9, R2-C10).**
+- Step 1 and 2: a gap states which of the five evidence states applies to each supporting record. Prior exposure is shown as prior exposure, not as assistance. No mastery label and no probability appear; a percentage is shown only with its explicit unique denominator and conditions, and unknown is never drawn as zero.
+- Step 3: filters never mix assisted with independent records.
+
+**UI21 — Inspect conversation and attempt history (R2-C8, R2-C9).**
+- Step 2: an attempt shows its recorded conditions in the same five-state wording used in the concept views; a performance is listed once however many builds its slide has.
+- Step 4: a source reference opens the page of the historical source version through the source map, or reports that those bytes are unavailable.

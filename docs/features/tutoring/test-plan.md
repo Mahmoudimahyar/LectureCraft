@@ -47,3 +47,13 @@ Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-
 | R1-P1–P4 | Unit tests on synthetic policy files and a synthetic projection: inclusion, exclusion with reason, stale hash, missing required area, restriction that cannot be excluded, applicability by course and action. Consumer test through the labelled local double: the prompt and the context receipt list the clauses. Private read-only build against the current real files, recorded as ids, spans and hashes only. |
 | R1-P5 | Parser tests for segments (downgrade, malformed, absent); component check of the marker. |
 | R1-P6 | No live call; the pilot ledger file's hash is recorded before and after the run. |
+
+
+## Remediation amendment R2 (2026-10-05)
+
+Second bounded change against baseline 0.9.0 (owner instruction of 2026-10-05, kept as `PROMPTS/EXPERIENCE_REPAIR_V2.md`). No tutoring behaviour is reopened and no check sends to a model or the tutor.
+
+| Check | How it is verified |
+|---|---|
+| R2-S8 (Tutor tab) | Browser test on a fixture lecture with a structural page: the Tutor tab shows no explain-back prompt and no generated practice for that page, while a typed question can still be drafted; on the next content page the ordinary choices are back. |
+| R2-V9 (composer) | Covered by the preservation test of the [workspace-access test plan](../workspace-access/test-plan.md): the draft and its context chip are compared before and after each change. |

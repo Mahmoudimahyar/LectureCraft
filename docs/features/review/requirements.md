@@ -76,3 +76,15 @@ Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-
 | R1-Q1b | Lists load incrementally with the true total shown; search and filters operate on the whole collection; no list is silently cut (US043). |
 | R1-Q4 | A question without catalog wording keeps its identity and its source-opening actions (US043, US045). |
 | R1-Q6 | Assessor guidance is joined by the owner's entry id with revision applicability checked; conflicting, duplicate and unknown entries are reported as errors; guidance never reaches question-only views, search or the learner's context (US045). |
+
+
+## Remediation amendment R2 (2026-10-05)
+
+Second bounded change against baseline 0.9.0, recorded after the learner tested the build of amendment R1 and rejected it (owner instruction of 2026-10-05, kept as `PROMPTS/EXPERIENCE_REPAIR_V2.md`). Story, flow, workflow and task ids are unchanged and the original release requirements stay in force. Earlier text, including the R1 section above, is kept as history; where this section and older text differ, this section governs the listed behaviour only.
+
+Linking questions to the content they test is REOPENED as an open product failure despite green receipts. Earlier LOCAL_TESTED results and R1 receipts of the affected tasks do not cover the checks named `R2-…`. R1-Q1, R1-Q1b, R1-Q4 and R1-Q6 stay in force. R2-Q2 to R2-Q9 (anchors, inferred candidates, the three lecture lists, links, the validated examples) are defined in the [evidence-alignment packet](../evidence-alignment/requirements.md) and apply to every list of questions in Review as well.
+
+| Check | Requirement (stories · flow) | The learner would notice a failure as |
+|---|---|---|
+| R2-Q1 | Every catalogued question stays reachable — in the bank, in its lecture's list and by search — including questions whose wording is not in the catalog, which keep their source-opening actions. No question is removed because it has no slide or no audio. Totals are reconciled catalog → projection → API → rendered list at run time (US043, US017 · UI22, UI09). | A catalogued question that cannot be found, a rendered total that differs from the catalog's, or a question without wording that lost Open original. |
+| R2-Q10 | Assessor guidance stays out of every question-only payload, and an inferred anchor exposes no guidance: its rationale names criteria or subparts by identity and label, never by the expected answer (US045, US043 · UI23, UI22). | An answer, a rubric sentence or a marking note visible on a question card, in a suggested link's rationale, in search or in the concept views before an attempt. |

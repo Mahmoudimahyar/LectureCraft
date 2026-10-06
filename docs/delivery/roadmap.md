@@ -82,3 +82,37 @@ Remediation work is carried by the existing tasks; no task id is added or renumb
 | LL028 | question bank and lecture question scopes; originals and renditions | R1-Q1b, R1-Q2, R1-Q4 |
 | LL030 | evidence conditions, facets, coverage records | R1-F1–R1-F4 |
 | LL034 | geometry, computed-style and reflow checks at five viewports | R1-U1–R1-U7 |
+
+
+## Remediation amendment R2 (2026-10-05)
+
+Second bounded change against baseline 0.9.0, recorded after the learner tested the build of amendment R1 and rejected it (owner instruction of 2026-10-05, kept as `PROMPTS/EXPERIENCE_REPAIR_V2.md`). Story, flow, workflow and task ids are unchanged and the original release requirements stay in force; where this section and older text differ, this section governs the listed behaviour only.
+
+Four outcomes are REOPENED as open product failures despite green task receipts: the visual design, slide-to-recording ranges, question-to-slide links and discoverable course, lecture and slide concept maps. Slide identity and content roles, build identity and whole-experience evidence are added because the first four cannot be judged without them. Earlier LOCAL_TESTED results and the R1 receipts of the affected tasks do not cover the checks named `R2-...` below, and a passing mechanical test alone closes none of them.
+
+The work is carried by the existing tasks; no task id is added or renumbered and the 38 task records above are unchanged. The machine-readable record is the second entry of `remediation_changes` in [backlog.json](backlog.json). Check ids have the form `R2-<area><n>`: V visual, S slide identity and roles, T timing to player, Q questions to content, C concept maps, B build identity, E experience evidence.
+
+| Existing task | R2 scope | New checks |
+|---|---|---|
+| LL005 | shell and reading/browsing appearance, resizable five-tab context panel, type and spacing scale, states and contrast, build identity in Settings, fixes from the visual critique | R2-V1, R2-V3, R2-V4, R2-V6–R2-V10, R2-B1–R2-B3, R2-E1, R2-E2 |
+| LL006 | draft and pinned context kept through theme, pane, tab and resize changes | R2-V9 |
+| LL009 | one read-side source map, identity kinds kept distinct, every question reachable, criteria/concept/skill join, reader of the fixed inferred-anchor file and its guards, question kinds and counts in the read model | R2-S1, R2-S2, R2-Q1–R2-Q6, R2-Q8–R2-Q10, R2-C5 |
+| LL010 | Study home (Resume, course and lecture browsing), Concept map in the course header, data identity | R2-V5, R2-V6, R2-C1, R2-B3 |
+| LL011 | large source canvas, identity wording, builds, duplicates and regions in the outline, roles and structural pages, question lists with suggested links and source-page links | R2-V1, R2-V3, R2-S1–R2-S4, R2-S6–R2-S9, R2-Q1–R2-Q8 |
+| LL012 | ONE compact media control system (transport bar and range list), ranges with times, six no-range states, seek and stop at the range end | R2-V2, R2-V9, R2-S8, R2-T4, R2-T8–R2-T11, R2-E4 |
+| LL013 | versioned local overrides (group, split, region, role), preserved links, three separate link qualities, revision-based invalidation, revision tests | R2-S5, R2-S7, R2-S11, R2-T7, R2-T10, R2-C11, R2-E5, R2-E9 |
+| LL015 | source-map build, roles and denominators, proof import, offline transcription under the persisted allowance and the prepared downstream binding, text alignment, sequence association, coverage and resumable command, one complete real lecture | R2-S1–R2-S5, R2-S7, R2-S9–R2-S11, R2-T1–R2-T10, R2-T12, R2-T13, R2-E5, R2-E6, R2-E8, R2-E9 |
+| LL016 | Concepts tab and scopes with per-build labels, hierarchy and graph neighbourhood over one read model, edge families, node detail and evidence wording, no duplication by builds | R2-Q2, R2-C1–R2-C11, R2-E7 |
+| LL023 | no forced teach-back or generated practice on structural pages | R2-S8 |
+| LL025 | benchmark of the association method against the lexical baseline | R2-T6 |
+| LL028 | question bank and lecture lists with anchor states and counts; partial wording of suggested links; guidance kept out | R2-Q1, R2-Q3–R2-Q6, R2-Q10, R2-E7 |
+| LL030 | five evidence states, no mastery or probability, explicit unique denominators | R2-C7–R2-C10, R2-E7 |
+| LL034 | measured visual checks and the recorded independent critique at five sizes in both themes; the cross-cutting browser rows listed here; end-to-end journey; final zero-retry run | R2-V1–R2-V10, R2-S6, R2-S8, R2-T11, R2-Q6, R2-Q7, R2-C1, R2-C3, R2-C4, R2-B1–R2-B3, R2-E1–R2-E7, R2-E9 |
+| LL035 | local, read-only part only: one complete real lecture as reference, the three named real questions, real-media seek observations, all-course stage coverage | R2-T13, R2-Q9, R2-E3, R2-E4, R2-E8 |
+| LL037 | identity of the exact preview tested; final integrated run evidence | R2-B1, R2-B2, R2-E1, R2-E9 |
+
+Every check names existing stories, flows and workflows, and each of them is owned by at least one task that carries the check. A carrying task includes the on-screen verification row of its checks (its own browser test, in the feature test plans); a check is not covered by a unit, projection or command test alone. LL034 additionally carries the cross-cutting browser rows listed in its line.
+
+The R2 checks carried by LL025, LL035 and LL037 are their local parts. The live gates of those tasks (evaluation runs with reviewed labels, live tutoring-to-save, protected delivery) are untouched and uncleared. R2 includes offline CPU transcription within a persisted four-hour allowance; it includes no native send, no course write, no schedule, no download and no paid inference.
+
+Where each check is defined: visual direction in the [design system](../project/design-system.md); states and wording in the [shared contract](../project/ui-state-and-interaction-contract.md); requirement tables and test plans in the feature packets under `docs/features/`; data shapes in the [interface contracts](../engineering/interface-contracts.md); WF02 and WF03 in the [workflow catalog](../project/workflow-catalog.md) and [workflow acceptance](../project/workflow-acceptance.md); the nine evidence cases in [quality and testing](../engineering/quality-and-testing.md); decisions D57 onward in [decisions and deviations](../implementation/decisions-and-deviations.md).

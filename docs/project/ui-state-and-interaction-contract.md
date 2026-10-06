@@ -169,3 +169,92 @@ The displayed deck of a unit is chosen from the course index's source kind and e
 
 ### Tutor replies
 When the tutor itemizes support, added explanation is marked quietly and course-supported text is left unmarked. No uncertainty phrase is added to supported statements.
+
+
+## Remediation amendment R2 (2026-10-05)
+
+Second bounded change against baseline 0.9.0, recorded after the learner tested the build of amendment R1 and rejected it (owner instruction of 2026-10-05, kept as `PROMPTS/EXPERIENCE_REPAIR_V2.md`). Story, flow, workflow and task ids are unchanged and the original release requirements stay in force. Earlier text, including the R1 section above, is kept as history; where this section and older text differ, this section governs the listed behaviour only. The behaviours below are OPEN product failures: earlier LOCAL_TESTED results and R1 receipts do not cover the checks named `R2-…`. Direction and measures are in the [design system](design-system.md); data shapes in the [interface contracts](../engineering/interface-contracts.md).
+
+### What R2 supersedes in R1, and why
+- **"One panel, four tabs: Tutor, Transcript, This slide, Questions."** Superseded by the five destinations below. The learner could not find the concept views or the sources from the lecture, and "This slide" hid three different things behind one label.
+- **"A question with no exact anchor is listed here with 'no slide named in the course record'."** That sentence is no longer an end state. The question stays listed, and it now carries one of the anchor states below; "no slide named" alone told the learner nothing they could act on.
+- **The R1 no-timed-match line** ("Whole recording · no timing for this slide") used one sentence for every cause. Superseded by the six states below.
+- **Concept access.** The 0.8 sentence "The concept tree lives under relevant source/progress context, not as an obligatory full-screen graph" stays true in that no graph is obligatory; R1's placement of the outline as a page under Progress is superseded as the *only* ordinary way in, because the learner did not discover it there.
+
+### Lecture context panel (R2-V3, R2-V9)
+- One panel, five text-labelled tabs in this order: **Tutor**, **Questions**, **Concepts**, **Transcript**, **Sources**. Each is reachable with one visible control at every desktop size; none is moved into an overflow menu. Facts about the selected slide that R1 kept in "This slide" now appear where they belong: its identity line at the canvas, its recording ranges at the transport, and a **This slide** scope inside Questions and inside Concepts.
+- The panel is resizable: a draggable edge that is also a focusable separator (arrow keys change the width in steps, Home/End go to the bounds, the current value is announced). Bounds keep the stage at no less than 40% of the workspace width. The width is remembered per device and restored after reload.
+- Resizing, collapsing the outline, switching tabs, changing theme and changing the focused pane on a narrow screen never unmount the media element, never clear or re-point a draft, and never lose the transcript or list scroll position.
+- Narrow screens: one focused pane at a time (Slide, Tutor, Questions, Concepts, Transcript, Sources) from an explicit pane control; the transport stays reachable from every pane (R2-V4).
+
+### Slide identity line (R2-S2, R2-S3, R2-S6)
+The canvas states what is known, in this form and nothing stronger:
+
+| Known | Shown |
+|---|---|
+| Physical page only | `PDF page 23 of 91` |
+| Page belongs to a build sequence | `PDF page 23 of 91 · build 2 of 3` |
+| Page repeats the page before it and adds nothing | `PDF page 24 of 91 · duplicate of page 23` (never "build") |
+| A printed number is established on this page itself | the above plus `Slide 17`, with "printed on the page" as its basis on request |
+| The source map holds a recorded match between this page and a slide of the unit's PowerPoint file | the above plus `Slide 17 (PowerPoint)`, with the basis and state of the match on request |
+| Both exist and differ | both, each named by its kind |
+| A PowerPoint file exists in the unit but no match is recorded for this page | nothing is added |
+| Several slides on one handout page | `PDF page 5 of 12 · slide region 2 of 4` |
+| Grouping uncertain | the page alone, with "grouping not established" in the details |
+
+"Slide N" is never derived from the page index, and a recorded match is never ordinal equality: that a PowerPoint file has a seventeenth slide says nothing about PDF page 17. A PDF-only inferred group never shows a PowerPoint number. A PDF page label, when the file has one, is shown as a label and never used as the index. Previous/next move through pages; within a build sequence the control says so, and **Next content** jumps to the next page whose role is not structural.
+
+### Content role of a page (R2-S7, R2-S8, R2-S9)
+Each page shows one role — instructional, worked example or question, objectives or summary, structural (title or section), administrative, blank, mixed, unknown — with how it was established (generated, agent-reviewed, human-confirmed) and a control to correct it. "Structural page" below and in the checks means a page whose role is structural, administrative or blank; objectives, summary and unknown-role pages behave as ordinary content. On a structural page the workspace shows no prompt to explain back, no generated practice, no "no questions for this slide", no "no matching recording" and no empty concept branch; it offers **Next content** and the whole-lecture lists instead. A page that is only a figure or an equation is never treated as structural or blank because its text is sparse. Speech that is supported over a title page stays listed there, labelled as discussion of the topic and not as evidence of what was displayed.
+
+### Recording ranges at the transport (R2-V2, R2-T7 – R2-T11)
+- Two elements. The **transport bar** carries the controls and ONE line for the selected range: start–end times, what it is, and "range i of k" with previous/next when the slide has several. The **range list** shows every range of the selected slide as a row and opens from the bar as a disclosure over the stage; opening it never grows the bar (at most 128 CSS px on desktop), shrinks the slide, scrolls the page or adds a second player, and it is usable from the keyboard.
+- Each row of the range list: start–end times, the recording, what it is (**suggestion** with its method, **reviewed**, or **entered by you**), and whether it applies to this page or to the whole build group. Ranges are shown without the learner having to confirm each one. A suggestion is never worded or styled as confirmed, and a suggestion built from superseded inputs (an older transcription, text alignment, grouping or method version) is not shown as current.
+- Separate visits are separate rows. Nothing is drawn between them, and no range is produced by dividing the recording among slides.
+- Three independent qualities are available on request and never merged into one figure: timestamp quality (acoustic), association quality (is this talk about this slide), and group-mapping quality (is this page correctly grouped).
+- A range says that a slide was **discussed** during it. It says the slide was **shown** only where video frames of that recording were visible and inspected for that interval.
+- Selecting a row moves the one player to its start and plays to its end, then stops. **Repeat** loops the range; **Whole recording** removes the bounds. Both are explicit and visible.
+- When there is no range, exactly one of six lines is shown, each with at most one action and each produced by its own cause:
+
+| State | Meaning | Action offered |
+|---|---|---|
+| Not discussed (searched) | the whole recording was processed and matched, and no talk about this slide was found | Open whole recording |
+| Audio not processed yet | this recording has no timing yet; or only the stated part of it has, and nothing for this slide was found in that part | Open whole recording |
+| Not matched yet | the recording has timing, but slide matching has not run on it with the current inputs; the cause is stated — not run yet, inputs changed since it ran, or no adequate matching method is available | Open whole recording |
+| Ambiguous | several candidates, none good enough to show as the range | Show candidates |
+| Recording unavailable | no recording exists or it cannot be read | none (the reason is stated) |
+| Structural page | no recording range is expected for a title, section, administrative or blank page, and none was found | Next content |
+
+A structural page is matched like any other page. When talk over it is supported, that range is shown (labelled as discussion of the topic) and the structural line is not.
+
+### Transcript tab (R2-T3, R2-T4)
+The course transcript and the generated speech text are two labelled things. A line of the course transcript shows a time only when a validated text-alignment mapping supports it; other lines show none. Selecting a timed line seeks the one player. Generated text states the window it covers and "generated, not reviewed".
+
+### Question scopes and anchor states (R2-Q3, R2-Q5 – R2-Q8)
+The Questions tab has three lists, each with its count in the heading: **This slide**, **Related concepts**, **All lecture questions**. The count equals the rows listed; All lecture questions equals the catalogued total of the lecture. Every row carries one basis label:
+
+| Label | Meaning |
+|---|---|
+| Exact | a reviewed anchor of the course record names this page |
+| Stated | the course record names this page; its page basis is not reviewed |
+| Suggested link | an inferred candidate anchor: its supporting page or region as a link, "supports n of m criteria" with the criteria named (or the part of the prompt, where no criteria are catalogued), its rationale, and either "not yet checked" or "checked by a second pass" |
+| Concept-related | reached through a shared concept or a question relation; not a claim about this slide |
+| Inspected, no supporting page found | candidates were proposed for this question and the checking pass rejected them all; its reason is stated |
+| No suggested link | no candidate is recorded for this question, with the recorded reason: none produced for this course yet, none recorded for this question, or made for an earlier version. The line does not say whether the question was examined, because the record does not |
+
+A suggested link is rendered on the question's card wherever the card appears; data that exists only in a file is not a link. Every suggested link says which criteria it supports and whether that is in part; none says that a slide teaches the whole answer, also when all criteria are listed. A candidate the checking pass rejected is never shown as a link. A suggested link offers **Accept** and **Reject**: either is the learner's own local, versioned record — an accepted link reads "confirmed by you", a rejected one is no longer shown as a link and stays in the history — and regenerating the suggestions does not undo it. "Checked by a second pass" is agent work and is never worded as confirmed. In a build group each row says whether its support is **on this build**, **elsewhere in this sequence** (naming the build) or **group-level**. A source-page or build link on a question card opens that exact page of that exact source version and keeps the draft; Back returns. A structural page shows no forced This-slide list and still offers All lecture questions.
+
+### Concepts (R2-C1 – R2-C11)
+- Two ordinary ways in besides Progress: **Concept map** in every course header, and the **Concepts** tab of the lecture workspace.
+- One scope control: **Course · Lecture · This slide**. The heading states the scope and how many concepts, skills and questions it holds. Inside a build group, This slide lists each entry once and says where its support is — **on this build**, **elsewhere in this sequence** (naming the build) or **group-level** — exactly as the Questions tab does; something first shown on a later build is never presented as shown on an earlier one.
+- Two presentations of the same model with one shared selection: a hierarchy/outline (the keyboard-usable alternative; always available) and a graph of the selected node's neighbourhood. The graph opens grouped at topic level and expands on demand; it never draws every node at once. Its labels are at least 12 CSS px as rendered in the default view, after the graph's own zoom; the default view does not shrink below that to fit more, and what does not fit is reached by panning.
+- A view built from older inputs than the current ones says so in one line and offers Refresh (R2-C11).
+- Three edge families are told apart by label and line style, with a legend: assessment (question → criterion → concept or skill), source (taught or supported on a page), and prerequisite/overlap between concepts or questions.
+- Selecting a node opens **Sources**, **Questions** and **Evidence** for it.
+- Evidence wording uses five different states and never collapses them: **Unknown**, **Not applicable**, **Not separately observed**, **Assisted** (with the kind of assistance), **Independent**. Prior exposure alone is shown as prior exposure, not as assistance. No mastery label, no probability. A percentage appears only beside its explicit unique denominator and conditions; unknown is never drawn as zero.
+
+### Build and data identity (R2-B1 – R2-B3)
+Settings shows, as text the learner can read and copy: application build (commit and the names of the loaded script and style assets), the profile and port of the Brain it is talking to, and for each course the preparation generation and source-map revision in use. When the loaded page does not belong to the build the Brain now serves, one line says so and offers Reload. When the profile is not the learner's real courses, the Study page says once, in words, that it is showing synthetic sample data. A scope that resolves to nothing (an unknown course, lecture, page or an empty scope parameter) shows an explained state with a way back, never a blank panel.
+
+### Test viewports
+The candidate list of the 0.8 text is extended for these checks to 1440×900, 1920×1080, 2560×1440, 768×1024 and 390×844, each in Light and Dark.

@@ -126,3 +126,15 @@ Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-
 | R1-P4 | Rule areas that must be representable: mode and pacing, direct help, optional diagnostics, assistant-error and speech-recognition uncertainty, alternatives, assistance, source versus added clarification, owner save. |
 | R1-P5 | A citation attached to a reply is not support for every sentence. Replies may itemize support per segment; a segment claiming course support without a valid supplied source is shown as added explanation. No ritual uncertainty wording (US021, US023). |
 | R1-P6 | The spent pilot thread and ledger are never reused; no check in this amendment sends to a model. |
+
+
+## Remediation amendment R2 (2026-10-05)
+
+Second bounded change against baseline 0.9.0 (owner instruction of 2026-10-05, kept as `PROMPTS/EXPERIENCE_REPAIR_V2.md`). Story, flow, workflow and task ids are unchanged. R2 reopens no native tutoring grant and adds no tutoring requirement of its own: no check of this amendment sends to a model or to the tutor, the spent pilot stays spent (R1-P6), and R1-P1 to R1-P5 stay in force. Two checks defined in other packets touch the Tutor tab and are listed here so that the tutoring tasks carry them:
+
+| Check | Where defined | What it means for the Tutor tab (stories · flow) |
+|---|---|---|
+| R2-S8 | [evidence-alignment](../evidence-alignment/requirements.md) | On a structural page (title or section) the Tutor tab stays usable for a question the learner chooses to ask, but shows no prompt or requirement to explain the page back and offers no generated practice for it (US025, US029 · UI13, UI15). The learner would notice a failure as being asked to "explain this slide" on a cover page. |
+| R2-V9 | [workspace-access](../workspace-access/requirements.md) | A draft in the composer, with its pinned source context, survives a theme change, an outline collapse, a panel resize, a tab change and a pane change (US025, US026 · UI13). The learner would notice a failure as typed text or its context chip disappearing. |
+
+Tutor is the first of the five context tabs (R2-V3); its three interaction choices and their meaning are unchanged.

@@ -341,3 +341,24 @@ independently of the canonical record. These flows replace older feature UI pros
 
 **Related existing planned cases:** AC38, AC49, AC64, AC73. These remain NOT_RUN and are not replaced by the new UI cases.
 
+
+## Remediation amendment R2 (2026-10-05)
+
+Second bounded change against baseline 0.9.0, recorded after the learner tested the build of amendment R1 and rejected it (owner instruction of 2026-10-05, kept as `PROMPTS/EXPERIENCE_REPAIR_V2.md`). Flow, story, workflow and screen ids and the step tables above are unchanged; where these notes and older text differ, these notes govern the listed behaviour only. Checks are defined in the [requirements](requirements.md); the direction in the [design system](../../project/design-system.md).
+
+**UI03 — Choose a course, lecture or resume point (R2-V5, R2-V6, R2-C1, R2-B3).**
+- Step 1: Study leads with Resume — the real course, lecture and page last opened, with one primary action — and then lists the configured courses for browsing. When nothing was opened yet it says so and browsing leads. No invented progress, dates or charts; every number is a real total.
+- Step 2: a course header carries **Concept map** beside its lecture list and question bank entry. Lectures are browsed with their real titles and, where a deck exists, a thumbnail of its real first page.
+- Step 4: Continue opens the page that was last open, identified by its physical page of its source version.
+- Added alternative: a profile that is not the learner's real courses says once that it shows synthetic sample data; an unknown course or lecture shows an explained state with a way back.
+
+**UI05 — Add materials and inspect preparation coverage (R2-T1, R2-T2, R2-T9, R2-T12, R2-S7, R2-S10, R2-B1).**
+- Step 3: preparation details show, per course, every admitted recording and deck with its stage — inventoried, transcribed (with the covered window), text-aligned, slide-linked, reviewed — its counts and the cause of anything unresolved. Decks show raw and instructional page denominators as two labelled figures, always together, with the counts of excluded and uncertain roles and how those roles were established; the counts add up to the page count, and nothing is called complete on the instructional figure alone.
+- Step 3, continued: local transcription shows processing time used and remaining under the persisted allowance, what is queued and why a run paused. Each generated transcription names the runner that produced it (tool, model, settings identity); the prepared downstream binding, once it exists, is listed as prepared, not active, with the same identity. Generated, agent-reviewed and human-confirmed are three different labels.
+- Step 5: the work is continued by one resumable command; the app creates no schedule, and the page never implies that a paused queue is finished.
+
+**UI28 — Choose light, dark or system appearance (R2-V7 – R2-V10, R2-B2).**
+- Step 2 and after: switching theme keeps the draft, the playback position, the selected range, slide and tab and the panel width; the slide's own colours are identical in both themes.
+- Both themes follow the approved references: light neutral surfaces, dark graphite surfaces, one restrained accent, reading text of 16–18 px.
+- Settings also shows the build and data identity as text; when the open page is older than the build being served, one line says so and offers Reload.
+

@@ -39,3 +39,24 @@ Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-
 | R1-Q1, R1-Q1b | Projection and API tests on the fixture catalog (extended with a collection that names no slide, a question without wording and a lecture without a collection); browser test of the bank (totals, load more, search, filter). Private read-only parity run: catalog → adapter → API → collection → rendered list, counts taken from the catalog at run time. |
 | R1-Q4 | Projection test and browser test of the original/rendition actions. |
 | R1-Q6 | Unit tests: id join, version mismatch, dual-identifier conflict, duplicate, unknown id; payload tests proving no guidance field in question, review, search or lecture views. Private count on the real maps. |
+
+
+## Remediation amendment R2 (2026-10-05)
+
+Second bounded change against baseline 0.9.0 (owner instruction of 2026-10-05, kept as `PROMPTS/EXPERIENCE_REPAIR_V2.md`). Story, flow, workflow, case and task ids are unchanged; the mapped scenarios above keep their meaning and status. The `R2-…` checks are defined in the [requirements](requirements.md) and, for R2-Q2 to R2-Q9, in the [evidence-alignment test plan](../evidence-alignment/test-plan.md).
+
+### Logic and failure tests (necessary, never sufficient)
+
+| Check | How the logic is verified |
+|---|---|
+| R2-Q1 | Projection and API tests on the fixture catalog (a question with no slide, one with no audio, one without wording, one in a collection of a lecture without a deck): each is present in the bank, in its lecture list and in search. |
+| R2-Q10 | Payload tests: question, lecture-question, search, concept and inferred-anchor payloads contain no guidance field and no guidance text of the fixture (searched by a marker string planted in the fixture guidance). Unit test: an inferred-anchor item whose rationale reproduces guidance text of its question is refused. |
+
+### On-screen verification — required for every check
+
+A check is covered only when BOTH its logic row above and its on-screen row below have passing evidence on the same build. Every row is a browser observation by ordinary navigation from Study on the fixture profile (labelled synthetic); "private" parts are run once on the real profile and reported as counts only.
+
+| Check | What is observed on screen |
+|---|---|
+| R2-Q1 | Browser: each of the four fixture questions above is found in the question bank, in its lecture's All lecture questions list and by search; the question without wording still offers Open original; the rendered totals equal the API totals. Private read-only reconciliation on the real catalogs: catalog → projection → API → rendered count, each taken at run time and reported side by side; a difference fails. |
+| R2-Q10 | Browser: the marker string planted in the fixture guidance is absent from the rendered text of question cards, suggested-link rationales, search results and the concept views before an attempt, and present only where disclosure is permitted after one. |

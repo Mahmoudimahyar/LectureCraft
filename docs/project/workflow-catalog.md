@@ -1019,3 +1019,45 @@ The memory IDs refer to [the fit register](memory-workflow-fit.md). Existing sou
 - Erase learning history as cleanup
 
 **Reported evidence:** P05 Q064-Q066/Q095-Q101; P06 A3/B3/B4.
+
+## Remediation amendment R2 (2026-10-05) — WF02 and WF03
+
+Second bounded change against baseline 0.9.0, recorded after the learner tested the build of amendment R1 and rejected it (owner instruction of 2026-10-05, kept as `PROMPTS/EXPERIENCE_REPAIR_V2.md`). Workflow ids, owners, triggers and the sections above are unchanged, and the machine-readable catalog is byte-preserved. Where this section and older text differ, this section governs the listed behaviour only. The outcomes of WF02 and WF03 are REOPENED as open product failures despite green receipts: the learner cannot obtain usable slide-to-recording ranges, question-to-slide links or discoverable concept maps. The `R2-…` checks are defined in the feature packets; data shapes in the [interface contracts](../engineering/interface-contracts.md).
+
+**Boundary for this amendment (both workflows).** Everything R2 adds is read-side and local: derived records live in the app's private state. The "Published writes" listed above for WF02 and WF03 (course-side caches, exports, proposals and catalog changes) are NOT performed by R2; they stay behind their owners and gates. Local derived links are displayed as attributable suggestions and are never silently canonical or human-confirmed. No schedule, no native send and no paid inference is part of it.
+
+### WF02 — Prepare renditions and align evidence (amended)
+
+**Current, restated.** Reviewed slide-to-transcript-line maps exist for part of one course. All original transcripts are untimed. A real timing proof for a short window of one recording exists outside the app. The lexical line matcher exists and is the baseline, not the result.
+
+Processing rounds, as amended (the numbers refer to "Each processing round" above):
+
+1. *Round 1 — renditions and identity (R2-S1 – R2-S11).* Besides page text and renditions, build ONE versioned read-side source map per deck version: physical pages with explicit base, page labels, printed numbers only if established, PowerPoint identity only when a PowerPoint file exists, logical slides with builds and handout regions, and a content role per page. Group only on several signals; when uncertain, one page is one slide; an adjacent repeat that adds nothing is a duplicate, not a build. Apply the learner's versioned overrides on every build. Use embedded text, layout and bounded visual inspection; do not recognise text on every page when embedded text and images suffice.
+2. *Round 2 — media identity.* Unchanged; additionally the recording's source id, version and content hash are bound into every later record.
+3. *Round 3 — timing (R2-T1 – R2-T4).* First import and consume the existing timing proof through the tested importer, with hashes and source binding checked and no second recognition of its window. Then transcribe missing coverage offline with the verified local runtime under the persisted four-hour allowance: one worker, at most four threads, bounded resumable chunks. Generated words stay separate from the original transcript; times reach original lines only through the validated text-alignment mapping.
+4. *Round 4 — association (R2-T5 – R2-T9).* Score candidates over time windows and logical slides from page content, known transcript-line maps, supported terms and concepts, neighbouring windows and sequence evidence, with a sequence model that permits skips, repeats, backward jumps and unassigned intervals; benchmark it against the lexical baseline. Disjoint occurrences stay separate; time is never spread over slides; group-level links are labelled. Structural pages are candidates like any other page. Evidence from video frames is used only where frames were actually visible and inspected; otherwise a link says "discussed", never "displayed".
+5. *Round 5 — validation.* Unchanged; additionally a link's three qualities (timestamps, association, group mapping) are validated and reported separately, every slide without a link receives one of six explicit states (including "not matched yet" for a recording that has timing but no association result under the current inputs), and a suggestion built from superseded inputs is not served as current.
+6. *Rounds 6 and 7 — corrections and durability (R2-S5, R2-T10).* Reviewed and manual links and overrides are preserved through every rebuild and outrank suggestions. Suggestions are rendered, labelled with their method, without a confirmation step for each.
+
+Added to **Success criteria**: every admitted recording and deck of every configured course has a published stage, coverage and backlog entry with its unresolved cause (R2-T12); one complete real lecture works end to end in the ordinary lecture view, beyond its opening (R2-T13); selecting a range moves the real player and stops at its end (R2-T11). Generated, agent-reviewed and human-confirmed are reported as three different states. Each of these is observed in the ordinary interface, not only in a file or a command's output. Once real consumption is demonstrated, the existing proposed downstream task is bound to the SAME runner as a prepared, inactive record (R2-T2).
+
+Added to **Waiting or blocked conditions**: allowance ceiling reached; stop requested; resource failure; recording bytes changed during processing; no adequate association method available with the existing tools (stated as that precise gap).
+
+Added to **Prohibited behavior**: reset or edit the processing allowance; download a model or install a tool; treat the short proof as a timed lecture; divide a recording's duration among slides; merge separate visits into one range; mark a suggestion human-confirmed or quality-qualified without that evidence; loosen a matching threshold after reading held-out answers; activate a schedule.
+
+### WF03 — Extend owned catalogs and project concept trees (amended)
+
+**Current, restated.** A typed outline over the existing catalogs exists (R1). The learner could not reach it by ordinary navigation and it is not connected to pages, builds or question anchors.
+
+Processing rounds, as amended:
+
+1. *Round 1 — resolve existing ids.* Unchanged.
+2. *Round 2 — proposals, read side only (R2-Q2 – R2-Q5).* Join the authoritative criteria, concepts and skills of each question to the source map; use reviewed anchors first. For coarse or unmapped questions infer candidate anchors separately, each with its supporting pages or regions, question version, supported criteria or subparts and rationale. Shared vocabulary alone is insufficient; nothing is inferred from problem-set numbering; a partial link is labelled partial and no link is worded as the whole answer. These candidates are local attributable suggestions in the fixed private file of the course (`ll.inferred-anchors/1`), produced in one pass and checked in a second whose verdict (upheld, narrowed, rejected) is recorded; they are not catalog proposals to the owner, and nothing is written to a catalog.
+3. *Round 3 — relation semantics (R2-C6).* Unchanged; additionally the projection keeps three edge families distinct: assessment, source, and prerequisite/overlap.
+4. *Round 4 — projections (R2-C2, R2-C5, R2-C8).* One typed read model serves Course, Lecture and This slide and both presentations (hierarchy and graph neighbourhood). Inside a build group the slide scope lists each entry once and keeps the member pages that support it, so that the view can say "on this build", "elsewhere in this sequence" or "group-level"; build grouping never duplicates concepts, questions or performances, and nothing first shown on a later build is presented as shown on an earlier one.
+5. *Round 5 — publication.* Not performed by R2.
+6. *Round 6 — views and freshness (R2-C1, R2-C3, R2-C4, R2-C7, R2-C9 – R2-C11).* Views are reachable from the course header and from the lecture's Concepts tab; node selection opens Sources, Questions and Evidence; evidence uses five distinct states; views are invalidated by the revisions of their inputs and rebuilt through the existing preparation queue.
+
+Added to **Success criteria**: every catalogued question is reachable and carries an anchor state (exact, stated, suggested link, concept-related, inspected with no supporting page found, or no suggested link with its recorded reason), and a suggested link is rendered on the question's card; This slide, Related concepts and All lecture questions reconcile with the catalog at run time (R2-Q1, R2-Q6); a structural page forces no question and no assessed concept branch (R2-Q8, R2-C10).
+
+Added to **Prohibited behavior**: present an inferred anchor as the course's mapping; claim that one slide teaches a whole multi-part answer from a partial link; invent a prompt, grading weight or figure requirement; expose assessor guidance through a rationale; show mastery, a probability or a percentage without its explicit unique denominator; treat prior exposure as assistance; build a second graph authority.

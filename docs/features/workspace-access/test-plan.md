@@ -51,3 +51,35 @@ Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-
 | R1-U7 | Browser test: type a draft, start playback, switch theme, collapse the outline, switch tabs; draft, position and slide pixels unchanged. |
 
 The learner's own browser zoom was not measured and is not required for these checks.
+
+
+## Remediation amendment R2 (2026-10-05)
+
+Second bounded change against baseline 0.9.0 (owner instruction of 2026-10-05, kept as `PROMPTS/EXPERIENCE_REPAIR_V2.md`). Story, flow, workflow, case and task ids are unchanged; the mapped scenarios above keep their meaning and status. The `R2-…` checks are defined in the [requirements](requirements.md). R1's rows for R1-U1 and R1-U6 are superseded where they assert a share of the window or the R1 Study content; a test that asserts "at least 80% of the width" or a fixed 1152 px cap as success is removed, not loosened.
+
+### Logic and failure tests (necessary, never sufficient)
+
+| Check | How the logic is verified |
+|---|---|
+| R2-V4 – R2-V10 | No logic-only test closes these; see the on-screen table. Component tests where they exist (pane control state, remembered width and outline state, reduced-motion flag) support the on-screen rows and replace none of them. |
+| R2-B1, R2-B2 | Unit test of the identity payload (commit, asset names, profile, port, per-course generation and map revision). Unit test of the stale comparison: loaded asset names that differ from the reported ones produce the stale state; equal names do not. |
+| R2-B3 | Unit test of scope resolution: an unknown course, lecture or page and an empty scope parameter each resolve to an explained state, not to an error or an empty payload. |
+
+### On-screen verification — required for every check
+
+A check is covered only when its on-screen row below has passing evidence, together with its logic row where one exists, on the same build. Every row is a browser observation on the built preview whose identity is recorded (R2-B1), on the fixture profile (labelled synthetic), by ordinary navigation from Study unless the row says otherwise.
+
+| Check | What is observed on screen |
+|---|---|
+| R2-V4 | Browser at 390×844 and 768×1024 in both themes: exactly one pane is visible; each of the six panes is reachable from the pane control; play/pause is operable from every pane; the document's scroll width equals the viewport width. |
+| R2-V5 | Browser on Study, with and without a resume point: the first content block is Resume (or its explained absence), then courses and lectures; every number equals the API's total; no progress bar, percentage, date or chart element is present unless the fixture recorded the fact it shows; thumbnails are rendered from the fixture's first page or are absent. |
+| R2-V6 | Browser on Study and on a lecture at 1440×900, 1920×1080 and 2560×1440: no rendered line of running prose is longer than 80 characters; on Study the left and right margins of the content column are equal within a few pixels and the page does not scroll sideways; on the lecture page the slide is fitted to its stage (R1-U2) and R2-V1 holds. No width cap and no share of the window is asserted for either view. Whether the home margins and the reading layout read as deliberate at each size is an item of the critique (R2-V10), not a pixel assertion. |
+| R2-V7 | Browser census of the app's own visible text on the Study, Lecture and Concept screens in both themes, with every size measured as rendered — the computed font size multiplied by any scale a transform or a graph zoom applies to it: reading text is 16–18 px with a line height of at least 1.45; at most a tenth of the characters is below 14 px; nothing is below 12 px; the distinct sizes are values of the declared scale and number at most seven. Left out, and nothing else: text inside a source rendering (the slide's own page image with its selectable text layer, and embedded original figures), which keeps the source's typography. The identity line, the transport, the outline, the panel and the graph labels are counted. While the token source declares no type scale and no spacing scale, the scale clause cannot be evaluated and the check stays open. |
+| R2-V8 | Browser census on the same screens: the greatest depth of nested bordered containers around reading content is one; every pill-styled element is an interactive filter, a state label of the shared contract or a link to a source reference, and a count or plain fact styled as a pill fails; the computed styles of the default, hover, focus-visible and selected states differ for tabs, outline entries, range rows and buttons, and the selected state has a cue that is not colour. Rendered contrast in both themes, by accessibility scan plus sampled pairs, in addition to the token pairs: text against its background at least 4.5:1 (3:1 for large text); the focus ring, the accent on its surface and every selected-state indicator at least 3:1 against what they adjoin. The numbers of bordered containers and of pills are recorded for the critique as information; they are not a pass criterion and are compared with no earlier build. |
+| R2-V9 | Browser: type a draft, start playback inside a selected range, then switch theme, collapse the outline, resize the panel, change tab and (narrow) change pane; the draft, `currentTime`, selected range, slide, tab and panel width are unchanged and the slide's pixels are identical in both themes. With reduced motion, no transition or animation has a non-zero duration. |
+| R2-V10 | The measured browser rows above, plus the critique record: thirty captures (three screens × five sizes × two themes) of the preview whose identity is recorded under R2-B1, with real content kept privately; a separate reviewer pass comparing them with both reference images; a findings table with a disposition per finding. The record states "designer-reviewed" at most. Absence of the record, a reviewer identical to the implementing pass, or a claim of user approval fails the check. |
+| R2-B1 | Browser: Settings shows the commit, the names of the loaded script and style assets, the profile and port, and per course the preparation generation and source-map revision, as selectable text; the values equal those of the status interface and the names of the files the page actually loaded. The identity is copied into the evidence of R2-E1. |
+| R2-B2 | Browser: with a page open, the preview is switched to another build; the open page shows the one stale line with Reload; after Reload the line is gone and Settings shows the new identity; no service worker is registered. |
+| R2-B3 | Browser on the fixture profile: Study says once, in words, that it shows synthetic sample data; each unresolved scope shows an explained state with a way back and no blank panel. Only for these unresolved cases the test opens an address directly, because a link that no longer resolves is the case under test. |
+
+The critique is a judgement and is reported as one. Measurements show that a criterion was met on the captured build; they do not show that the learner likes it.

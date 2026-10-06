@@ -262,3 +262,42 @@ Bounded change against baseline 0.9.0 after the owner-reported failures of 2026-
 **UI06 / UI07 / UI08 / UI09 — arrangement.** The steps of these flows are unchanged. Their surface is now: outline (left, collapsible) · slide stage with the single transport beneath · one context panel with tabs Tutor, Transcript, This slide, Questions. "Open linked questions" (UI09) starts from the **This slide** and **Questions** tabs; each entry shows its basis and opens the question, and a question without catalog wording offers Open original and, where verified, a display rendition.
 
 **UI07 — no timed link.** The transport shows "Whole recording · no timing for this slide" with "Link this slide" as the single action (when linking is permitted) and a details disclosure. Generated speech text, when imported, appears in the Transcript tab under its own heading with its covered window and "generated, not reviewed".
+
+
+## Remediation amendment R2 (2026-10-05)
+
+Second bounded change against baseline 0.9.0, recorded after the learner tested the build of amendment R1 and rejected it (owner instruction of 2026-10-05, kept as `PROMPTS/EXPERIENCE_REPAIR_V2.md`). Flow, story, workflow and screen ids and the step tables above are unchanged. Earlier text, including the R1 notes above, is kept as history; where these notes and older text differ, these notes govern the listed behaviour only. Checks are defined in the [requirements](requirements.md); states in the [shared contract](../../project/ui-state-and-interaction-contract.md).
+
+**Superseded R1 notes.** The R1 arrangement note named four tabs (Tutor, Transcript, This slide, Questions); R2 names five (Tutor, Questions, Concepts, Transcript, Sources) and a resizable panel. The R1 "no timed link" note used one line for every cause; R2 distinguishes six. "Link this slide" remains available as a manual action and is no longer the only way a range can appear.
+
+**UI06 — Study a slide and control the workspace (R2-V1, R2-V3, R2-S1 – R2-S4, R2-S6 – R2-S9).**
+- Step 1: the canvas identifies the deck version and states the slide identity as known — "PDF page N of M", with "· build i of k" inside a build sequence and "Slide n" only when grounded. The outline shows logical slides; a build sequence is one entry that expands to its builds, an adjacent repeat is marked "duplicate of page N" and never as a build, a handout page expands to its regions, and every physical page is reachable.
+- Step 2: collapsing the outline or entering Focus enlarges the slide; the one transport stays reachable.
+- Step 3: the context panel has five tabs and can be resized by drag or keyboard; the slide position, the draft, the playback position and the selected range are preserved.
+- Added alternative: on a structural page (title or section) the workspace offers **Next content** and whole-lecture access, and shows no prompt to explain back, no generated practice and no missing-match warning. A figure-only or equation-only page is ordinary content.
+- Added alternative: the page's content role and how it was established are shown in the slide details and can be corrected there.
+
+**UI07 — Play the slide-specific recording (R2-V2, R2-T5, R2-T7 – R2-T11, R2-T13).**
+- Step 1: the transport bar shows the selected range of the slide in one line (start–end, its kind, and "range i of k" with previous/next); the range list, opened from the bar over the stage, shows every range as a row with start–end times, its kind (suggestion with method, reviewed, entered by you) and whether it belongs to this page or to the whole build group. Suggestions are shown without a confirmation step and are never worded as confirmed; a range says "discussed", and "shown" only where video frames were inspected.
+- Step 2: selecting a range moves the one player to its start.
+- Step 4: playback stops at the end of the range; Repeat and Whole recording are the two explicit ways to change that.
+- Step 5: separate visits are separate rows; nothing between them is played.
+- Replaced failure path: with no range, exactly one of six lines is shown — not discussed (searched), audio not processed yet, not matched yet (with its cause), ambiguous (show candidates), recording unavailable, structural page (no range expected). A structural page with supported talk shows that range instead.
+
+**UI08 — Read and navigate the transcript (R2-T1, R2-T3, R2-T4).**
+- Step 1: the course transcript and the generated speech text are separate, labelled parts; the generated part states its covered window.
+- Step 2 and 4: a course-transcript line shows a time and seeks the player only when the validated text-alignment mapping supports that line; other lines keep their line reference and show no time.
+- The imported timing proof appears here for its own window and nowhere as a timed lecture.
+
+**UI09 — Open linked questions, textbook passages and figures (R2-Q2 – R2-Q9, R2-S8).**
+- Trigger: the **Questions** tab, with three lists and their counts — This slide, Related concepts, All lecture questions.
+- Step 1: every row states its basis (exact, stated, suggested link, concept-related, inspected with no supporting page found, or no suggested link with its recorded reason). A suggested link is shown on the card itself with its supporting page or region, "supports n of m criteria", its rationale and whether a second pass has checked it; a partial link says it is partial; Accept and Reject record the learner's own decision. In a build group a row says "on this build", "elsewhere in this sequence" or "group-level".
+- Step 2: a question without catalogued wording keeps Open original (R1-Q4 stays).
+- Step 5: a source-page or build link on a card opens that page of that source version; the draft, the panel and the playback position are kept, and Back returns to the card.
+- Added alternative: a structural page shows no forced This-slide list; All lecture questions stays available.
+
+**UI10 — Correct a link or reconcile a source revision (R2-S5, R2-S11, R2-T6, R2-T7, R2-T10).**
+- Step 1: Edit match also shows the method, the evidence and the three separate qualities of the link (timestamps, association, group mapping).
+- Step 3: besides time corrections, the learner can group pages into one logical slide, split a group, mark a handout region and correct a page's content role. Each is a new local revision naming its predecessor; nothing is written to the course.
+- Step 5: after any rebuild the accepted correction is still in force and outranks a regenerated suggestion.
+- Added alternative: when the deck's bytes change, links and anchors made for the earlier version are listed for review with that version; none moves to the page that now has the same number. A deep link made earlier opens the page it was made for or says which version it belonged to.

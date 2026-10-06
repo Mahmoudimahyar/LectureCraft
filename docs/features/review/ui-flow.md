@@ -127,3 +127,15 @@ independently of the canonical record. These flows replace older feature UI pros
 
 **Related existing planned cases:** AC24, AC27, AC28, AC40, AC67, AC68. These remain NOT_RUN and are not replaced by the new UI cases.
 
+
+## Remediation amendment R2 (2026-10-05)
+
+Second bounded change against baseline 0.9.0, recorded after the learner tested the build of amendment R1 and rejected it (owner instruction of 2026-10-05, kept as `PROMPTS/EXPERIENCE_REPAIR_V2.md`). Flow, story, workflow and screen ids and the step tables above are unchanged; where these notes and older text differ, these notes govern the listed behaviour only. Checks are defined in the [requirements](requirements.md) and the [evidence-alignment requirements](../evidence-alignment/requirements.md).
+
+**UI22 — Create or select meaningful review items (R2-Q1, R2-Q3 – R2-Q7, R2-Q10).**
+- Step 1 ("Open related/saved questions"): from a lecture the existing questions are offered in three lists with counts — This slide, Related concepts, All lecture questions — and from Review in the question bank. Every catalogued question is in one of them, with or without a slide, audio or catalogued wording.
+- Step 1, continued: each question states how it is tied to content — exact, stated, suggested link, concept-related, inspected with no supporting page found, or no suggested link with its recorded reason. A suggested link names its supporting page or region, the criteria it supports ("n of m") and why, and says whether a second pass has checked it; it is never worded as the course's own mapping or as the whole answer.
+- Step 2: choosing an existing item keeps its source-page links. Opening one shows that page of that source version and returning restores the selection and any draft.
+- Step 3: answer guidance stays behind the permitted-disclosure step; neither a list row nor a suggested link's rationale reveals it.
+- Unchanged: Save only versus Add to review, and no schedule or attempt from selecting or linking.
+

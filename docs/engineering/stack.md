@@ -34,3 +34,16 @@ Reuse the current installed academic helpers and local transcription tools befor
 
 The dated [native documentation recheck](../research/native-documentation-recheck-2026-10-04.md)
 keeps installed-runtime observations separate from evolving public documentation.
+
+
+## Remediation amendment R2 (2026-10-05)
+
+Second bounded change against baseline 0.9.0 (owner instruction of 2026-10-05, kept as `PROMPTS/EXPERIENCE_REPAIR_V2.md`). The selections above are unchanged. Three maintained components are added for the reopened requirements; they are recorded in [component-selection.json](component-selection.json) and the [source register](../research/build-source-register.json), and their decisions are D61 and D62 in [decisions and deviations](../implementation/decisions-and-deviations.md). Exact versions, licenses and integrity are established by the repository's lock files and dependency inventory when they are installed, not by this table.
+
+| Component | Selection | Why / boundary |
+|---|---|---|
+| pptx-parse | python-pptx | Slide ids, order, titles, text and hidden flag of a PowerPoint source, only when one exists, for the read-side source map. Not a renderer, no deck writes, no Office automation; ordinals are never mapped onto PDF pages by position. [REF27](../research/build-source-register.json) |
+| concept-graph-view | @xyflow/react | Node-link view of a concept's neighbourhood over the existing typed read model; the typed outline stays as the keyboard-usable alternative. [REF28](../research/build-source-register.json) |
+| concept-graph-layout | @dagrejs/dagre | The one layout engine. ELK only with a documented compound-layout requirement, never both. [REF29](../research/build-source-register.json) |
+
+Still deliberately not added: a second layout engine, a hand-built canvas, a second animation or styling system, any speech package in the repository environment, any hosted transcription. Offline transcription under R2 reuses the already verified local runtime and cached model outside the repository environment, within a persisted four-hour allowance; nothing is downloaded.

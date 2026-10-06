@@ -10,6 +10,7 @@ import copy
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -156,8 +157,9 @@ def test_an_accepted_item_keeps_exactly_the_contract_fields_and_gets_a_stable_su
     loaded = read(settings, document([item()]))
     assert loaded["file"] == {"state": "ok", "produced_at": "2026-10-05T10:00:00Z", "sha256": loaded["file"]["sha256"], "question_index_matches": True, "producer": "claude-session", "reason": None}
     (accepted,) = loaded["items"]
-    assert set(accepted) == {"suggestion_id", "question_id", "question_version", "lecture_id", "source_id", "source_sha256", "pages", "regions", "criteria", "per_page", "coverage", "rationale", "state",
-                             "verifier"}
+    assert set(accepted) == {"suggestion_id", "question_id", "question_version", "question_sha256", "lecture_id", "source_id", "source_sha256", "pages", "regions", "criteria", "per_page", "coverage",
+                             "rationale", "state", "verifier"}
+    assert accepted["question_sha256"] is None  # D80: optional; this producer recorded no digest of the question
     assert accepted["pages"] == [4, 5] and accepted["criteria"] == ["SYN-L01-Q01.C01", "SYN-L01-Q01.C02"] and accepted["verifier"] == {"verdict": None, "note": None}
     assert accepted["per_page"] is None  # the producer said nothing page by page, so nothing is said here
     assert accepted["suggestion_id"] == ia.suggestion_id("SYN-L01-Q01", 2, DECK_SHA, [4, 5]) and accepted["suggestion_id"].startswith("ia-")
@@ -375,8 +377,8 @@ def test_no_candidate_records_are_read_with_the_same_care(settings):
     ]
     loaded = read(settings, document([], no_candidate=records))
     assert loaded["no_candidate"] == [
-        {"question_id": "SYN-PS01-Q01", "question_version": 1, "why": "The material was spoken; no page of the deck shows it.", "verifier": {"confirmed": True, "note": "Checked all pages."}},
-        {"question_id": "SYN-L01-Q02", "question_version": 1, "why": "Nothing found.", "verifier": {"confirmed": False, "note": None}}]
+        {"question_id": "SYN-PS01-Q01", "question_version": 1, "question_sha256": None, "why": "The material was spoken; no page of the deck shows it.", "verifier": {"confirmed": True, "note": "Checked all pages."}},
+        {"question_id": "SYN-L01-Q02", "question_version": 1, "question_sha256": None, "why": "Nothing found.", "verifier": {"confirmed": False, "note": None}}]
     assert loaded["by_question"]["SYN-PS01-Q01"]["no_candidate"]["verifier"]["confirmed"] is True
     assert loaded["stale_no_candidate"] == [{"question_id": "SYN-L01-Q01", "question_version": 1, "stale_reason": "question_version_differs"}]
     assert loaded["refused"]["counts"] == {"unknown_question": 1, "empty_why": 1, "reproduces_guidance": 1, "outside_vocabulary": 1}
@@ -929,3 +931,55 @@ def test_a_confirmation_the_checking_pass_later_contradicted_can_still_be_change
     assert changed.status_code == 200 and (changed.json()["decision"], changed.json()["revision"]) == ("rejected", 2)
     assert post(kept, "confirmed").status_code == 404
     assert post(kept, "cleared").json()["revision"] == 3
+
+
+# ---- D80: a changed catalog does not hide the suggestions of questions that did not change ---------------------------------
+def test_the_question_digest_follows_the_wording_the_version_and_the_criteria_and_nothing_else():
+    index = make_index()
+    question = index["questions"]["SYN-L01-Q01"]
+    digest = ia.question_digest(question)
+    assert re.fullmatch(r"[0-9a-f]{64}", digest) and ia.question_digest(dict(question, title="Another title", number=7, collection="L09")) == digest
+    assert ia.question_digest(dict(question, prompt="Synthetic prompt one, reworded.")) != digest
+    assert ia.question_digest(dict(question, version=3)) != digest
+    assert ia.question_digest(dict(question, criteria=question["criteria"][:2])) != digest
+    reworded = [dict(question["criteria"][0], observable="Another observable."), *question["criteria"][1:]]
+    assert ia.question_digest(dict(question, criteria=reworded)) != digest
+
+
+def test_in_a_file_made_for_an_earlier_catalog_an_item_whose_own_question_is_unchanged_stays_a_current_link(settings):
+    """The owner adds a question to the catalog: the index digest changes, the questions the suggestions are about do not."""
+    index = make_index()
+    same = ia.question_digest(index["questions"]["SYN-L01-Q01"])
+    older = document([item(question_sha256=same), item(pages=[9], question_sha256=same, state="agent_reviewed", verifier={"verdict": "upheld", "note": "Seen on the page."}),
+                      item(pages=[7])],
+                     question_index_sha256="9" * 64,
+                     no_candidate=[{"question_id": "SYN-PS01-Q01", "question_version": 1, "why": "Spoken only.", "verifier": {"confirmed": True, "note": None},
+                                    "question_sha256": ia.question_digest(index["questions"]["SYN-PS01-Q01"])}])
+    loaded = read(settings, older)
+    assert loaded["file"]["state"] == "made_for_earlier_catalog" and loaded["file"]["question_index_matches"] is False
+    assert [i["pages"] for i in loaded["items"]] == [[4, 5], [9]], "both items whose question is unchanged are current links"
+    assert [(s["pages"], s["stale_reason"]) for s in loaded["stale"]] == [([7], "earlier_catalog")], "an item that records no digest cannot be shown to be unchanged"
+    assert [n["question_id"] for n in loaded["no_candidate"]] == ["SYN-PS01-Q01"] and loaded["stale_no_candidate"] == []
+    assert loaded["checked_per_question"] == 3
+    assert ia.readback(loaded, index=index)["checked_per_question"] == 3, "the readback says how many entries were kept by their own digest"
+
+
+def test_an_item_whose_question_changed_since_it_was_made_is_stale_whatever_the_file_says(settings):
+    changed = make_index()
+    recorded = ia.question_digest(changed["questions"]["SYN-L01-Q01"])
+    changed["questions"]["SYN-L01-Q01"] = dict(changed["questions"]["SYN-L01-Q01"], prompt="Synthetic prompt one, now asking something else.")
+    for index_sha in (INDEX_SHA, "9" * 64):  # the file names the current index, or an earlier one: the question itself decides
+        loaded = read(settings, document([item(question_sha256=recorded)], question_index_sha256=index_sha), index=changed)
+        assert loaded["items"] == [] and [(s["pages"], s["stale_reason"]) for s in loaded["stale"]] == [([4, 5], "question_changed")]
+    refused = read(settings, document([item(question_sha256="not-a-digest")]))
+    assert refused["refused"]["counts"] == {"invalid_field": 1}
+
+
+def test_strict_store_takes_a_document_for_an_earlier_catalog_when_its_questions_are_unchanged_and_keeps_the_digest(settings):
+    index = make_index()
+    same = ia.question_digest(index["questions"]["SYN-L01-Q01"])
+    older = document([item(question_sha256=same), item(pages=[9], question_sha256=same)], question_index_sha256="9" * 64)
+    stored = ia.store(settings, COURSE, older, **context())
+    assert (stored["status"], stored["file_state"], stored["accepted"], stored["stale"]) == ("stored", "made_for_earlier_catalog", 2, 0)
+    written = json.loads((settings.state_dir / "inferred-anchors" / f"{COURSE}.json").read_text(encoding="utf-8"))
+    assert [i["question_sha256"] for i in written["items"]] == [same, same], "the digest is part of what is kept"

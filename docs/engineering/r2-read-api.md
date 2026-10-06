@@ -182,6 +182,11 @@ recorded reason (`no_file`, `no_item`, `stale`).
   `{state: "ambiguous", number, candidates, note}` when several sessions carry the number (nothing is offered). Every range of a
   lecture whose session link is suggested rests on that suggestion and the screen says so.
 
+- **Suggestions and a changed catalog (D80).** Items and `no_candidate` records may carry `question_sha256`. `GET …/inferred-anchors`
+  keeps `file.state: "made_for_earlier_catalog"` when the file names another question index and adds `checked_per_question`: the
+  number of entries kept because their own question digest still matches. Stale reasons are `question_version_differs`,
+  `question_changed`, `source_bytes_differ`, `source_unavailable`, `earlier_catalog` (no digest recorded) and `catalog_unavailable`.
+
 ## 2. Other routes
 
 | Route | Returns |

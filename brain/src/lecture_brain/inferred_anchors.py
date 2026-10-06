@@ -47,11 +47,12 @@ STATES = ("agent_inferred", "agent_reviewed")
 VERDICTS = ("upheld", "narrowed", "rejected")
 DECISIONS = ("confirmed", "rejected", "cleared")
 FILE_FIELDS = ("contract", "course_id", "produced_at", "producer", "question_index_sha256", "items", "no_candidate")
-ITEM_FIELDS = ("question_id", "question_version", "lecture_id", "source_id", "source_sha256", "pages", "regions", "criteria", "per_page", "coverage", "rationale", "state", "verifier")
+ITEM_FIELDS = ("question_id", "question_version", "question_sha256", "lecture_id", "source_id", "source_sha256", "pages", "regions", "criteria", "per_page", "coverage", "rationale", "state",
+               "verifier")
 PER_PAGE_FIELDS = ("page", "supports")  # optional per item: which of ITS criteria each of ITS pages supports (ids only; r2-read-api.md 1.4)
-NO_CANDIDATE_FIELDS = ("question_id", "question_version", "why", "verifier")
+NO_CANDIDATE_FIELDS = ("question_id", "question_version", "question_sha256", "why", "verifier")
 SNAPSHOT_FIELDS = ("question_id", "question_version", "lecture_id", "source_id", "source_sha256", "pages")
-_REQUIRED = tuple(f for f in ITEM_FIELDS if f not in {"regions", "verifier", "per_page"})  # the nullable fields may be left out
+_REQUIRED = tuple(f for f in ITEM_FIELDS if f not in {"regions", "verifier", "per_page", "question_sha256"})  # the nullable fields may be left out
 REPRODUCTION_RUN = 8       # this many consecutive words of protected text inside a rationale is a reproduction, not shared vocabulary
 REPRODUCTION_SHORTEST = 5  # protected text shorter than this cannot be told from ordinary wording and is not checked
 MAX_REFUSED_DETAIL = 200
@@ -101,6 +102,16 @@ def anchors_path(settings: Settings, course_id: str) -> Path:
 
 def _decisions_dir(settings: Settings, course_id: str) -> Path:
     return _inside_state(settings, settings.state_dir / AREA / "decisions" / _course(settings, course_id))
+
+
+def question_digest(question: dict) -> str:
+    """What a suggestion about a question depends on, as one digest: the catalogued version, the wording, and each
+    criterion's id, observable, concept and skill. A producer records it per item as ``question_sha256``; the reader
+    compares it with the question as catalogued today (D80). A title, a number or the collection do not enter it, and
+    neither does any OTHER question: the owner adding a question to the catalog changes no digest."""
+    criteria = [[k.get("criterion_id"), k.get("observable"), k.get("concept_id"), k.get("skill_id")] for k in question.get("criteria") or [] if isinstance(k, dict)]
+    canonical = json.dumps({"version": question.get("version"), "prompt": question.get("prompt"), "criteria": criteria}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return c.sha256_hex(canonical.encode("utf-8"))
 
 
 def suggestion_id(question_id: str, question_version: Any, source_sha256: str, pages: list[int]) -> str:
@@ -317,9 +328,12 @@ class _Reader:
             raise _Refuse("verdict_without_review")
         regions = self._regions(raw.get("regions"), pages)
         per_page = self._per_page(raw.get("per_page"), pages, criteria)
+        recorded = raw.get("question_sha256")
+        if recorded is not None and (not isinstance(recorded, str) or not _SHA256.fullmatch(recorded)):
+            raise _Refuse("invalid_field", "question_sha256")
 
         entry = {"suggestion_id": suggestion_id(raw["question_id"], raw["question_version"], raw["source_sha256"], pages),
-                 "question_id": raw["question_id"], "question_version": raw["question_version"], "lecture_id": raw["lecture_id"], "source_id": raw["source_id"],
+                 "question_id": raw["question_id"], "question_version": raw["question_version"], "question_sha256": recorded, "lecture_id": raw["lecture_id"], "source_id": raw["source_id"],
                  "source_sha256": raw["source_sha256"], "pages": sorted(pages), "regions": regions, "criteria": list(criteria), "per_page": per_page, "coverage": raw["coverage"],
                  "rationale": raw["rationale"], "state": raw["state"], "verifier": {"verdict": verdict, "note": note}}
         if self.index is None:  # no catalog was read: nothing below can be compared, and nothing is called unknown or made for an earlier catalog
@@ -335,10 +349,14 @@ class _Reader:
             named = _id_or(raw["source_id"])
             raise _Refuse("source_not_a_deck_of_lecture", f"{named} is not a deck of {raw['lecture_id']}" if named and _id_or(raw["lecture_id"]) else "the named source is not a deck of the named lecture")
         # Stale comes before the rules that belong to the current version: criteria of another version and pages of other bytes cannot be checked today.
-        if earlier_catalog:
-            return "stale", entry, "earlier_catalog"
         if question.get("version") is not None and str(raw["question_version"]) != str(question["version"]):
             return "stale", entry, "question_version_differs"
+        # D80: the question itself decides. A recorded digest that still matches keeps the item current although the
+        # catalog around it changed; one that differs makes it stale whatever index the file names.
+        if recorded is not None and recorded != question_digest(question):
+            return "stale", entry, "question_changed"
+        if earlier_catalog and recorded is None:
+            return "stale", entry, "earlier_catalog"  # nothing recorded shows that this question is the one the item was made for
         current = self._deck_sha(deck)
         if current is None:
             return "stale", entry, "source_unavailable"
@@ -420,16 +438,22 @@ class _Reader:
             raise _Refuse("outside_vocabulary", "verifier.confirmed")
         if note is not None and not isinstance(note, str):
             raise _Refuse("invalid_field", "verifier.note")
-        entry = {"question_id": raw["question_id"], "question_version": raw["question_version"], "why": raw["why"], "verifier": {"confirmed": confirmed, "note": note}}
+        recorded = raw.get("question_sha256")
+        if recorded is not None and (not isinstance(recorded, str) or not _SHA256.fullmatch(recorded)):
+            raise _Refuse("invalid_field", "question_sha256")
+        entry = {"question_id": raw["question_id"], "question_version": raw["question_version"], "question_sha256": recorded, "why": raw["why"],
+                 "verifier": {"confirmed": confirmed, "note": note}}
         if self.index is None:
             return "stale", entry, "catalog_unavailable"
         question = self.questions.get(raw["question_id"])
         if question is None:
             raise _Refuse("unknown_question")
-        if earlier_catalog:
-            return "stale", entry, "earlier_catalog"
         if question.get("version") is not None and str(raw["question_version"]) != str(question["version"]):
             return "stale", entry, "question_version_differs"
+        if recorded is not None and recorded != question_digest(question):
+            return "stale", entry, "question_changed"
+        if earlier_catalog and recorded is None:
+            return "stale", entry, "earlier_catalog"
         self._no_reproduction(question, [("why", raw["why"]), ("verifier.note", note)])
         return "accepted", entry, None
 
@@ -541,6 +565,9 @@ def _classify(raw: Any, course_id: str, reader: _Reader) -> dict[str, Any]:
     for entry in refused:
         if entry["question_id"] in reader.questions:
             bucket(entry["question_id"])["refused"] += 1
+    if out["file"]["state"] == "made_for_earlier_catalog":
+        # D80: entries kept although the catalog around them changed, each because its own question digest still matches
+        out["checked_per_question"] = len(out["items"]) + len(out["rejected_by_verifier"]) + len(out["no_candidate"])
     return out
 
 
@@ -607,7 +634,10 @@ def store(settings: Settings, course_id: str, document: Any, *, strict: bool = T
         raise InferredAnchorError(checked["file"]["reason"], "the document is not a suggestions file of this course", checked["refused"])
     if strict and checked["refused"]["counts"]:
         raise InferredAnchorError("refused_items", "the reader would refuse entries of this document; nothing was written", checked["refused"])
-    if strict and checked["file"]["state"] != "ok":  # made for another question index, or no index could be read: none of it could be a current link
+    current_entries = len(checked["items"]) + len(checked["rejected_by_verifier"]) + len(checked["no_candidate"])
+    if strict and (checked["file"]["state"] == "catalog_unavailable" or (checked["file"]["state"] != "ok" and not current_entries)):
+        # no index could be read, or the document was made for another index and none of its entries shows (by its
+        # recorded question digest, D80) that its question is unchanged: none of it could be a current link
         raise InferredAnchorError(checked["file"]["state"], "the document was not checked against the course's current question index, so it replaces nothing; nothing was written")
 
     def pure(entry: Any, fields: tuple[str, ...]) -> Any:
@@ -828,6 +858,7 @@ def readback(document: dict, *, index: dict | None, decisions: dict[str, dict] |
              "lecture_id": snapshot.get("lecture_id"), "source_id": snapshot.get("source_id"), "pages": snapshot.get("pages")})
     return {"course_id": document["course_id"], "contract": CONTRACT, "reader": READER_VERSION,
             "file": {k: document["file"][k] for k in ("state", "produced_at", "sha256", "question_index_matches")}, "file_reason": document["file"]["reason"],
+            "checked_per_question": document.get("checked_per_question", 0),
             "accepted": len(document["items"]), "refused": dict(document["refused"]["counts"]), "stale": len(document["stale"]), "rejected_by_verifier": len(document["rejected_by_verifier"]),
             "by_collection": [rows[k] for k in sorted(rows)],
             "no_candidate": len(document["no_candidate"]), "stale_by_reason": dict(Counter(i["stale_reason"] for i in [*document["stale"], *document["stale_no_candidate"]])),

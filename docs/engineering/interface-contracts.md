@@ -307,6 +307,12 @@ What a question shows. The four kinds of tie — `exact` and `stated` (the cours
 - **Inspected, no supporting page found** — every item for this question version was `rejected`; the verifier's note is the reason.
 - **No suggested link** — there is no item for this question version, with the recorded reason: no suggestions file exists for the course; the file holds no item for the question; or its items are stale. The fixed format has no record of a question that was examined without any candidate, so this line makes no statement about whether the question was examined, and nothing may word it as inspected or as uninspected.
 
+**Amended 2026-10-06 (D80).** The whole-file rule above ("the whole file is listed as made for an earlier catalog" and every item
+stale) is replaced: an entry that records `question_sha256` is judged by its own question. It is current while that digest equals
+the digest of the question as catalogued today, and stale (`question_changed`) when it differs, whichever question index the file
+names. Only an entry without a recorded digest, in a file made for another index, is stale for that reason alone. The file is still
+reported as made for an earlier catalog.
+
 ### Concept read model additions (R2-C5 – R2-C11)
 - Edges carry a `family` — `assessment` (question → criterion → concept or skill), `source` (a page or logical slide teaches or supports a node; with the anchor kind above) or `structure` (prerequisite, overlap, containment with the owner's label) — besides the owner's relation label and provenance.
 - Scopes are filters of one model: `course`, `lecture:<id>`, `slide:<lecture>:<page>`. The slide scope of a page inside a build group lists what is supported anywhere in its logical slide, each entry once by canonical id (R2-C8), and every entry carries `support_pages`: the member pages on which its support is recorded. The view words each entry relative to the selected page — **on this build**, **elsewhere in this sequence** (naming the build), or **group-level** when the support was recorded for the group and not for a page. An entry supported only on a later build is never presented as shown on an earlier one (R2-S3). Questions use the same three labels (R2-Q6).

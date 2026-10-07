@@ -1033,14 +1033,17 @@ def _as_range(link: dict, index: int, total: int) -> dict[str, Any]:
             "annotation_id": None}
 
 
-def _annotation_range(occurrence: dict, page: int) -> dict[str, Any]:
-    """A range from an ``ll.annotation/1`` record of the view (page → media). The record is not changed."""
+def _annotation_range(occurrence: dict, page: int, audio_only: frozenset[str] = frozenset()) -> dict[str, Any]:
+    """A range from an ``ll.annotation/1`` record of the view (page → media). The record is not changed.
+    ``audio_only``: the ids of the view's recordings known to be sound without pictures."""
     record = occurrence.get("record") or {}
     target = occurrence.get("source") or record.get("to") or {}
     basis, confirmed = occurrence.get("basis") or record.get("basis"), (occurrence.get("review_state") or record.get("review_state")) == "confirmed"
     relation = occurrence.get("relation") or record.get("relation") or "discussed_during"
     if relation == "displayed_during" and basis == "transcript_only":
         relation = "discussed_during"  # made from text and cue times alone: nobody looked at frames, so nothing says the page was shown
+    if relation == "displayed_during" and target.get("source_id") in audio_only:
+        relation = "discussed_during"  # a recording without pictures cannot show a page, whoever made the link
     origin = "reviewed_source_map" if basis == "reviewed_source_map" else "manual" if confirmed or basis == "manual_review" else "pipeline"
     return {"range_id": f"an-{occurrence.get('annotation_id')}-r{occurrence.get('revision')}", "recording": {key: target.get(key) for key in ("source_id", "version_id", "sha256")},
             "timebase": "original_source_start", "start_ms": occurrence["start_ms"], "end_ms": occurrence["end_ms"], "relation": relation, "occurrence_index": 1, "occurrences_total": 1,
@@ -1158,6 +1161,7 @@ def enrich(view: dict, *, source_map: dict | None, links: dict | None, generated
     recordings = view.get("recordings") or []
     readable = [r for r in recordings if r.get("state") in _READABLE]
     unreadable = {r["source_id"] for r in recordings if r.get("state") not in _READABLE}
+    audio_only = frozenset(r["source_id"] for r in recordings if str(r.get("media_type") or "").startswith("audio/"))
     associations = _associations(view, links, generated)
     rejected = [{"page": r["from"]["locator"].get("page"), "recording": r["to"]["source_id"], "start_ms": r["to"]["locator"]["start_ms"], "end_ms": r["to"]["locator"]["end_ms"],
                  "annotation_id": r.get("annotation_id")}
@@ -1211,7 +1215,7 @@ def enrich(view: dict, *, source_map: dict | None, links: dict | None, generated
         for occurrence in row.get("occurrences") or []:
             if occurrence.get("start_ms") is None or occurrence.get("end_ms") is None or occurrence["end_ms"] <= occurrence["start_ms"]:
                 continue
-            item = _annotation_range(occurrence, page)
+            item = _annotation_range(occurrence, page, audio_only)
             if not readable or item["recording"].get("source_id") in unreadable:  # nothing can be sought in it: the record stays, the page says so, no range is offered
                 kept_without_recording.append({"annotation_id": item["annotation_id"], "recording_source_id": item["recording"].get("source_id"), "start_ms": item["start_ms"],
                                                "end_ms": item["end_ms"], "review_state": item["review_state"]})

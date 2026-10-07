@@ -698,6 +698,20 @@ def test_a_recorded_display_claim_made_from_text_alone_is_shown_as_discussion():
     assert ranges["ann-syn-seen"]["relation"] == "displayed_during" and ranges["ann-syn-seen"]["review_state"] == "human_confirmed"
 
 
+@pytest.mark.parametrize("media_type,relation", [("audio/mp4", "discussed_during"), ("audio/wav", "discussed_during"), ("video/mp4", "displayed_during"), (None, "displayed_during")])
+def test_a_link_to_an_audio_recording_never_says_the_page_was_shown(media_type, relation):
+    """A recording without pictures cannot show a page. A link a person made to it is kept as recorded, and its range is
+    served as discussion; on a video (or where the kind of file is not known) the recorded relation stands."""
+    mine = annotation("ann-syn-own", 8, 120_000, 126_000, basis="manual_review", relation="displayed_during")
+    the_view = view()
+    if media_type is not None:
+        the_view["recordings"][0]["media_type"] = media_type
+    the_view["slides"][7]["occurrences"] = [listed(mine)]
+    (served,) = [r for r in slide(enriched(the_view=the_view), 8)["ranges"] if r["annotation_id"] == "ann-syn-own"]
+    assert served["relation"] == relation and served["origin"] == "manual" and served["review_state"] == "human_confirmed"
+    assert mine["relation"] == "displayed_during", "the record itself is not changed"
+
+
 def test_a_section_link_appears_on_every_page_the_course_names_with_section_scope():
     result = enriched(material(pairings=[pairing([5, 7, 8], [LINE_OF["oven"]])]))
     for page in (5, 7, 8):

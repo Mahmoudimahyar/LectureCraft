@@ -131,6 +131,8 @@ def test_a_question_page_carries_the_questions_own_links_also_when_it_belongs_to
     (suggested,) = [t for t in view["ties"] if t["tie"] == "agent_inferred"]
     assert (suggested["lecture_id"], suggested["source_id"], suggested["pages"], suggested["granularity"]) == ("lecture-01", "src-lecture-01-slides", [2], "page")
     assert suggested["on_displayed_deck"] is False and suggested["logical_slide_ids"] == [] and suggested["learner_decision"] is None and view["no_link"] is None
+    # the pages are pages of that lecture's own slides: the page can open them in the lecture, not as a bare file
+    assert suggested["on_lecture_deck"] is True and all(t["on_lecture_deck"] is False for t in view["ties"] if t is not suggested)
     assert suggested["criteria_supported"] == 1 and suggested["criteria_total"] == len(question["criteria"])
     # the same tie the slide shows, by the same identity
     lecture = client.get(f"/api/courses/{COURSE}/lectures/lecture-01").json()

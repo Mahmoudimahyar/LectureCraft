@@ -10,7 +10,7 @@ import {
   invalidatedBy, queryKeys, useConceptGraph, useCourseTiming, useInferredAnchors, useServedIdentity, useSourceMap, useSourceMapOverride, useSuggestionDecision, useTimingBuild,
 } from "@/lib/queries";
 import {
-  NBSP, clampToRange, clockLabel, conceptGraphErrorCode, durationLabel, graphLayoutInput, identityOf, intervalBounds, isStale, isStructuralPage, lectureQuestionCounts, logicalSlides, questionDivisionSentence, questionOwnLinks,
+  NBSP, clampToRange, clockLabel, conceptGraphErrorCode, durationLabel, graphLayoutInput, identityOf, intervalBounds, isStale, isStructuralPage, lectureQuestionCounts, logicalSlides, questionDivisionSentence, questionOwnLinks, tieOpensInLecture,
   nextContentPage, nextStop, noRangeDetail, noRangeSentence, pageRef, pagesRef, questionsForPage, rangeOrdinalLabel, rangesForPage, sourceMapPageProblems, stopAtEnd, supportOrdinals, timeSpanLabel, toMs, whereLine,
   withinRange,
 } from "@/lib/r2";
@@ -323,6 +323,14 @@ describe("questionOwnLinks", () => {
     expect(questionOwnLinks({ ties: [suggestion], no_link: null }, undefined)).toEqual({ ties: [suggestion], noLink: null });
     // the question's own statement stands before the row of whatever lecture the page happened to read
     expect(questionOwnLinks({ ties: [], no_link: { state: "no_suggestion", reason: "no_item" } }, row)).toEqual({ ties: [], noLink: { state: "no_suggestion", reason: "no_item" } });
+  });
+
+  it("a tie on the slides of its lecture opens in the lecture, whether or not a deck is on screen", () => {
+    expect(tieOpensInLecture({ ...suggestion, on_displayed_deck: true })).toBe(true);
+    expect(tieOpensInLecture({ ...suggestion, on_displayed_deck: false, on_lecture_deck: true })).toBe(true);   // the question's own page
+    expect(tieOpensInLecture({ ...suggestion, on_displayed_deck: false, on_lecture_deck: false })).toBe(false);  // a question sheet
+    expect(tieOpensInLecture({ ...suggestion, on_displayed_deck: false })).toBe(false);
+    expect(tieOpensInLecture({ ...suggestion, on_displayed_deck: false, on_lecture_deck: true, lecture_id: null })).toBe(false);
   });
 
   it("falls back to the lecture row for a Brain that states none, and knows nothing when there is neither", () => {

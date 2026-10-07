@@ -1077,6 +1077,8 @@ interface LectureTieCommon {
   transcript_lines?: LineRange[];
   /** True when the pages are pages of the deck the lecture is shown with. */
   on_displayed_deck: boolean;
+  /** Only on the ties of a question view (no deck is on screen there): the pages are pages of the slides of `lecture_id`. */
+  on_lecture_deck?: boolean;
   granularity?: TieGranularity;
   from?: TieFrom;
   catalog_field?: CatalogField | null;

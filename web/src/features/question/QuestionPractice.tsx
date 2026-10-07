@@ -19,7 +19,7 @@ import {
   unlistedLabel,
 } from "@/lib/labels";
 import { useCourse, useLecture, useQuestion, useReview } from "@/lib/queries";
-import { questionOwnLinks } from "@/lib/r2";
+import { questionOwnLinks, tieOpensInLecture } from "@/lib/r2";
 import { NotPairedError, reviewItemPayload, type Conditions } from "@/lib/requests";
 import type { EvidenceObject, LectureQuestionTie, QuestionAnchor, QuestionFile, QuestionRecord, QuestionRow, QuestionView } from "@/lib/types";
 import { observationsByAttempt, useNodeDetail } from "@/features/progress/ProgressPages";
@@ -84,14 +84,14 @@ function TieLine({ courseId, questionId, tie }: { courseId: string; questionId: 
   if (tie.tie === "agent_inferred") {
     sentence = (
       <>
-        {pages.length > 0 && <><PageLinks courseId={courseId} questionId={questionId} pages={pages} lectureId={tie.lecture_id} sourceId={tie.source_id} onDeck={tie.on_displayed_deck} />. </>}
+        {pages.length > 0 && <><PageLinks courseId={courseId} questionId={questionId} pages={pages} lectureId={tie.lecture_id} sourceId={tie.source_id} onDeck={tieOpensInLecture(tie)} />. </>}
         {supportSentence(tie)}{tie.verdict === "narrowed" ? ` ${NARROWED_SENTENCE}` : ""}{tie.rationale ? <> Why: {tie.rationale}</> : null}
       </>
     );
   } else if (tie.granularity === "section") {
     sentence = sectionTieSentence(tie.section);
   } else {
-    sentence = <CourseAnchorSentence courseId={courseId} questionId={questionId} basis={tie.tie} pages={pages} lines={tie.transcript_lines ?? []} lectureId={tie.lecture_id} sourceId={tie.source_id} onDeck={tie.on_displayed_deck} />;
+    sentence = <CourseAnchorSentence courseId={courseId} questionId={questionId} basis={tie.tie} pages={pages} lines={tie.transcript_lines ?? []} lectureId={tie.lecture_id} sourceId={tie.source_id} onDeck={tieOpensInLecture(tie)} />;
   }
   return <li><BasisLabel tie={tie} sentence={sentence} /></li>;
 }

@@ -480,6 +480,9 @@ class Projector:
             except Exception:  # noqa: BLE001 - an unreadable study note costs the section ties, not the page
                 sections = None
             found = question_ties.ties_for(question_id, bank=bank, index=index, inferred=inferred, decisions=inferred_anchors.decisions(self.settings, course_id), section_ties=sections)
+            decks = {lecture["lecture_id"]: (primary_deck(lecture) or {}).get("source_id") for lecture in inventory["lectures"]}
+            for tie in (found or {}).get("ties") or []:  # pages of that lecture's own slides open in the lecture; a page of another file opens as a file
+                tie["on_lecture_deck"] = bool(tie.get("lecture_id")) and tie.get("source_id") is not None and decks.get(tie["lecture_id"]) == tie["source_id"]
         except Exception:  # noqa: BLE001 - a damaged private file of this step never breaks reading the question
             found = None
         return found or {"ties": None, "no_link": None, "suggestion_history": None}

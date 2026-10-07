@@ -258,6 +258,11 @@ export function questionOwnLinks(view: { ties?: QuestionRow["ties"] | null; no_l
   return { ties: row?.ties, noLink: row?.no_link ?? null };
 }
 
+/** Whether a tie's pages open in the lecture workspace: pages of the deck on screen, or (on the question's own page, where no deck is on screen) of the slides of the tie's lecture. */
+export function tieOpensInLecture(tie: { on_displayed_deck?: boolean | null; on_lecture_deck?: boolean | null; lecture_id?: string | null }): boolean {
+  return tie.on_displayed_deck === true || (tie.on_lecture_deck === true && !!tie.lecture_id);
+}
+
 /** How the questions of a lecture divide (result of `lectureQuestionCounts`); the three parts add up to `all`. */
 export interface LectureQuestionCounts {
   /** Rows of All lecture questions. courseAnchor + agentInferred + withoutLink = all. */

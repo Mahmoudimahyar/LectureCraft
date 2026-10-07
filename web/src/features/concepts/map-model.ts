@@ -258,11 +258,14 @@ function topicLevel(graph: ConceptGraphView, nodes: LayoutNode[], edges: LayoutE
   const cards: MapNodeModel[] = nodes.filter((node) => node.kind === "topic").map((node) => {
     const held = concepts?.get(node.id);
     const counts = nodeCountsLabel(node.data?.counts);
+    const skills = node.data?.counts?.skills ?? 0;
+    // A catalog of skills without concepts (four of the five real courses): the card offers what the topic holds, never "0 concepts".
+    const open = !concepts ? "Show its concepts" : held ? `Show ${countLabel(held, "concept")}` : skills > 0 ? `Show ${countLabel(skills, "skill")}` : "Show what it holds";
     return {
       id: node.id, type: "topic-card", rank: "topic", kind: "topic", label: node.label,
-      second: [held !== undefined ? countLabel(held, "concept") : concepts ? countLabel(0, "concept") : null, counts].filter((part): part is string => !!part).join(", ") || null,
+      second: [held ? countLabel(held, "concept") : null, counts].filter((part): part is string => !!part).join(", ") || null,
       where: null, supportPages: [], evidence: null, tie: null, inScope: node.inScope, selected: false,
-      action: { kind: "open", label: concepts ? `Show ${countLabel(held ?? 0, "concept")}` : "Show its concepts" }, data: node.data,
+      action: { kind: "open", label: open }, data: node.data,
     };
   });
   // What the catalog files under no topic: a concept no topic includes, and a skill that has neither a concept nor a topic.

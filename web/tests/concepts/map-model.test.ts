@@ -120,6 +120,26 @@ describe("topic level: nothing is selected", () => {
     expect(plain(model.nodes[1]!.action?.label)).toBe("Show 1 concept");
   });
 
+  it("a topic of a course whose catalog holds skills and no concepts offers its skills, not \"0 concepts\"", () => {
+    // four of the five real courses: topics include skills directly, and there is no concept catalog
+    const skillsOnly = {
+      ...sampleConceptGraphCourse,
+      nodes: sampleConceptGraphCourse.nodes.filter((node) => node.kind === "topic").map((node) => ({ ...node, counts: { skills: 7, questions: 0 } })),
+      edges: [],
+      totals: { ...sampleConceptGraphCourse.totals, concept: 0, skill: 14, question: 0, criterion: 0 },
+    };
+    const cards = buildMapModel(skillsOnly).nodes;
+    expect(cards.length).toBeGreaterThan(0);
+    for (const card of cards) {
+      expect(plain(card.action?.label)).toBe("Show 7 skills");
+      expect(plain(card.second)).not.toMatch(/0 concepts/);
+      expect(plain(card.second)).toMatch(/7 skills/);
+    }
+    // a topic that holds neither says so with the general action and no zero
+    const empty = buildMapModel({ ...skillsOnly, nodes: skillsOnly.nodes.map((node) => ({ ...node, counts: { skills: 0, questions: 0 } })) }).nodes;
+    expect(plain(empty[0]!.action?.label)).toBe("Show what it holds");
+  });
+
   it("counts a topic's concepts from the outline's own lines, and claims nothing when the graph was cut", () => {
     expect(topicConceptCounts(sampleConceptGraphCourse)?.get("t-sample-a")).toBe(2);
     expect(topicConceptCounts({ ...sampleConceptGraphCourse, truncated: true, dropped: 5 })).toBeNull();

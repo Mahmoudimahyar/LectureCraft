@@ -181,6 +181,8 @@ export class RangePlayer {
     if (!media || !range) return;
     const now = toMs(media.currentTime);
     const target = clampToRange(range, now);
+    // Such a seek moves the position as a seek of the bar does: away from the end, "stopped at the end" no longer holds.
+    if (this.stopped && Math.abs(target - range.end_ms) >= SEEK_SLACK_MS) this.stopped = false;
     if (Math.abs(target - now) >= SEEK_SLACK_MS) this.go(target);
   }
   /** The element knows its recording now: a position asked for earlier is applied. */

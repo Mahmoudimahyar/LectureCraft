@@ -339,7 +339,12 @@ export function ConceptExplorer() {
     if (selected && focusNode && focusNode.in_scope === false) select(null);
   }, [selected, focusNode, select]);
 
-  const unknownScope = base.isError && conceptGraphErrorCode(base.error) === "unknown_scope" ? `${base.error?.message ?? "This scope does not exist"}. The course scope lists everything.` : null;
+  // A `scope` parameter that is no scope at all (empty, or a word that is none of the three) is said, with the way to
+  // the course scope, instead of being read as the course scope without a word (R2-B3).
+  const askedScope = params.get("scope");
+  const notAScope = askedScope !== null && scope.kind === "course" && askedScope !== "course";
+  const unknownScope = notAScope ? `${askedScope.trim() ? `“${askedScope}” is not a scope` : "The address names an empty scope"}. The course scope lists everything.`
+    : base.isError && conceptGraphErrorCode(base.error) === "unknown_scope" ? `${base.error?.message ?? "This scope does not exist"}. The course scope lists everything.` : null;
   const totals = base.data?.totals ?? null;
   const emptySlide = scope.kind === "slide" && !!totals && totals.concept + totals.skill + totals.question + totals.topic === 0;
   const lectureTitle = course.data?.lectures.find((entry) => entry.lecture_id === scope.lectureId)?.title ?? lecture?.title ?? null;

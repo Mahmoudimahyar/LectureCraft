@@ -329,7 +329,8 @@ export function Shell() {
                 <DropdownMenu.Trigger className="ll-ib" aria-label="Menu: search, appearance, sections" title="Menu"><Ellipsis aria-hidden /></DropdownMenu.Trigger>
                 <DropdownMenu.Portal>
                   <DropdownMenu.Content align="end" sideOffset={6} className={MENU}>
-                    <DropdownMenu.Item className="ll-menu-item" onSelect={() => app.setSearchOpen(true)}><Search aria-hidden className="size-[18px]" />{searchLabel}</DropdownMenu.Item>
+                    {/* Search opens once the menu has closed and focus is back on its button: the query field then takes focus, and closing the dialog returns it to the Menu button and not to nothing. */}
+                    <DropdownMenu.Item className="ll-menu-item" onSelect={() => window.setTimeout(() => app.setSearchOpen(true), 80)}><Search aria-hidden className="size-[18px]" />{searchLabel}</DropdownMenu.Item>
                     {mapEntry && <DropdownMenu.Item asChild className="ll-menu-item"><Link to={mapEntry.href} state={mapEntry.state}><Network aria-hidden className="size-[18px]" />{R2_ACTION.concept_map}</Link></DropdownMenu.Item>}
                     <DropdownMenu.Separator className="my-1 h-px bg-hairline" />
                     <DropdownMenu.Label className={MENU_LABEL}>Appearance</DropdownMenu.Label>

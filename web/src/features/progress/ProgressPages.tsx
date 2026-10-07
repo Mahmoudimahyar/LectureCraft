@@ -262,7 +262,8 @@ export function ProgressPage() {
                       <h3 className="font-semibold">{row.label}</h3>
                       <p className="text-ui text-muted">{row.ability ?? "skill"} · {row.episodes} evidence episode{row.episodes === 1 ? "" : "s"}{row.unaided_demonstrated ? ` · ${row.unaided_demonstrated} unaided demonstration${row.unaided_demonstrated === 1 ? "" : "s"}` : ""}</p>
                     </div>
-                    <SkillState evidence={rowEvidence(row, evidenceOf)} className="flex-none" />
+                    {/* Not `flex-none`: on a narrow window with enlarged text the state is wider than the row and must wrap inside it, not push the page sideways. */}
+                    <SkillState evidence={rowEvidence(row, evidenceOf)} className="min-w-0 max-w-full" />
                   </div>
                   <div className="mt-2 flex flex-col gap-1">
                     <EvidenceLine row={row} />

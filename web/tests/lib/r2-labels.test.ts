@@ -668,6 +668,8 @@ describe("design specification 9.6 and 9.7: question ties", () => {
     expect(pageSupportCount({ criteria_supported_here: null, criteria_supported: 2, support_pages: [4] }, 4)).toBe(2);
     expect(pageSupportCount({ criteria_supported: 2, support_pages: [4, 5] }, 4)).toBeNull(); // not recorded per page: the sentence is left out
     expect(pageSupportCount({ criteria_supported: 2, support_pages: [5] }, 4)).toBeNull();
+    // Build 1 of a group whose support is on builds 2 and 3: the Brain's count is that of those member pages, never of the page on screen (R2-Q6).
+    expect(pageSupportCount({ criteria_supported_here: 2, criteria_supported: 2, support_pages: [5, 6] }, 4)).toBeNull();
     expect(pageSupportSentence(1, 4)).toBe(`This page supports ${nbsp("1 of 4")}.`);
     expect(pageSupportSentence(null, 4)).toBeNull();
   });

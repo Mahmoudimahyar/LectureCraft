@@ -519,7 +519,7 @@ export function ConceptMap({ courseId, scope, scopeKind, selected, onSelect, onS
       )}
       {model && model.nodes.length > 0 && (
       <div className="mt-2 flex min-h-11 flex-none flex-wrap items-center gap-x-4 gap-y-1 border-t border-hairline py-1 text-ui text-muted" data-testid="map-key">
-        <p className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-0.5" aria-label="Key to the lines">
+        <p role="group" className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-0.5" aria-label="Key to the lines">
           {(model?.legend ?? []).map((kind) => <span key={kind} className="inline-flex items-center gap-2 whitespace-nowrap" title={EDGE_LEGEND[kind].meaning} data-legend={kind}><Sample kind={kind} />{KEY_WORDS[kind]}</span>)}
           {model?.outOfScope && <span className="inline-flex items-center gap-2 whitespace-nowrap"><i aria-hidden className="h-3 w-[22px] rounded-[3px] outline-dashed outline-[1.5px] -outline-offset-[1.5px] outline-line" />Outside this scope</span>}
         </p>

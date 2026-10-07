@@ -25,8 +25,8 @@ import { X } from "lucide-react";
 import { useApp } from "@/app/state";
 import { FRAME_SPECS, SEPARATOR_PX, WorkspaceFrame, contextDefaultPx, frameGroupWidth, outlineDefaultPx, stageBlockWidth, useWorkspaceFrame } from "@/app/WorkspaceFrame";
 import { ErrorGlyph } from "@/components/glyphs";
-import { Button, Callout, cn, Dialog, ErrorState, Field, IconButton, LoadingState, Segmented, formatMs } from "@/components/ui";
-import { apiGet, contentUrl, r2Paths } from "@/lib/api";
+import { Button, Callout, cn, Dialog, EmptyState, ErrorState, Field, IconButton, LoadingState, Segmented, formatMs } from "@/components/ui";
+import { ApiError, apiGet, contentUrl, r2Paths } from "@/lib/api";
 import { isoNow, newId } from "@/lib/bundle";
 import type { SourceRef } from "@/lib/db";
 import { getOrCreateDevice, nextSequence } from "@/lib/device";
@@ -330,6 +330,17 @@ export function LectureWorkspace() {
   const onPage = useCallback((next: number) => update({ page: String(next), line: null }), [update]);
 
   if (lectureQuery.isLoading) return <div className="p-6"><LoadingState label="Opening lecture…" /></div>;
+  // An address that names no lecture of the course (or no course) is an explained state with a way back, not a load
+  // that failed and can be tried again (R2-B3).
+  if (lectureQuery.error instanceof ApiError && lectureQuery.error.status === 404) {
+    return (
+      <div className="p-6" data-testid="lecture-unresolved">
+        <EmptyState title="No lecture is recorded under this address" action={<Link className="ll-btn" to={`/courses/${encodeURIComponent(courseId)}`}>Back to the lectures of this course</Link>}>
+          {lectureQuery.error.detail}: “{lectureId}” in “{courseId}”. Your records are not affected.
+        </EmptyState>
+      </div>
+    );
+  }
   if (lectureQuery.isError || !lecture) return <div className="p-6"><ErrorState error={lectureQuery.error} retry={() => void lectureQuery.refetch()} /></div>;
 
   return (
@@ -401,8 +412,20 @@ function LectureComposition({ update, deckChoice, focus, focusLine, panelParam, 
     return () => window.removeEventListener("keydown", onKey);
   }, [page, total, goTo]);
 
+  // A page the file does not have (a saved link into a deck that has changed since) is said, not silently replaced by
+  // another page (R2-B3): the page shown is named, the address is corrected, and the first page is one press away.
+  const askedPage = new URLSearchParams(location.search).get("page");
+  useEffect(() => {
+    if (!askedPage || total < 1) return;
+    const asked = Number(askedPage);
+    if (Number.isInteger(asked) && asked >= 1 && asked <= total) return;
+    tell(`“${askedPage}” is not a page of this file, which has ${total} ${total === 1 ? "page" : "pages"}. Page ${page} is shown.`, { label: "Go to page 1", run: () => goTo(1) });
+    update({ page: String(page) }, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [askedPage, total]);
+
   // A converted file is labelled as such: once when it is opened, and for as long as it is shown under Sources.
-  const renditionNote = lecture.display.kind === "rendition_pdf" ? `Static PDF rendition, not the original file. ${lecture.display.note ?? ""}`.trim() : null;
+  const renditionNote =lecture.display.kind === "rendition_pdf" ? `Static PDF rendition, not the original file. ${lecture.display.note ?? ""}`.trim() : null;
   useEffect(() => {
     if (renditionNote) setNotice({ text: renditionNote });
     // eslint-disable-next-line react-hooks/exhaustive-deps

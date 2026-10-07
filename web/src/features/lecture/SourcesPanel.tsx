@@ -188,7 +188,7 @@ export function SourcesPanel({ courseId, slide, others = [], lecture: lecturePro
               <SourceRow key={transcript.source_id} icon={<AlignLeft />} title="Course transcript" to={sourceHref(transcript.source_id)} back={back}>
                 <span data-testid="source-transcript">
                   {offeredByFileName && <Offered kind="transcript" filename={transcript.filename} evidence={evidence} />}
-                  {countLabel(transcript.lines.length, "line")}. {transcript.timing === "annotated" ? "Original text; a line has a time where a link gives one." : "Original text, without times."} {transcript.filename}
+                  {countLabel(transcript.lines.length, "line")}. {transcript.timing === "annotated" ? "Original text; a line has a time where a link gives one." : "Original text, without times."} {transcript.filename}{transcript.version_id ? ` · version ${transcript.version_id}` : ""}
                 </span>
               </SourceRow>
             ))}

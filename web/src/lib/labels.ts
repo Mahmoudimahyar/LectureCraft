@@ -549,8 +549,12 @@ export const pageSupportSentence = (here: number | null | undefined, total: numb
 /**
  * How many criteria the page on screen supports: the Brain's count per page when it sent one; otherwise the tie's own
  * count when the tie's support is this page alone; otherwise null (the sentence is left out). Never the tie's count divided.
+ * Null also when the page on screen is not one of the tie's support pages: for a tie whose support is elsewhere in the
+ * sequence the Brain's count is that of the member pages it names, and "this page supports" would claim it for a build
+ * that does not show it yet (R2-Q6).
  */
 export function pageSupportCount(tie: { criteria_supported_here?: number | null; criteria_supported: number | null; support_pages: readonly number[] }, page: number): number | null {
+  if (!tie.support_pages.includes(page)) return null;
   if (typeof tie.criteria_supported_here === "number") return tie.criteria_supported_here;
   return tie.support_pages.length === 1 && tie.support_pages[0] === page && typeof tie.criteria_supported === "number" ? tie.criteria_supported : null;
 }

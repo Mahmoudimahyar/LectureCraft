@@ -672,9 +672,10 @@ export function Transport({ lecture, page, slide, selection, onSelect, playerRef
   const open = () => {
     if (mode === "idle") setOpened(lectureKey);
   };
+  // On a touch screen wider than 900 px the 40 px disc answers a 44 px press, like every other small control (styles.css).
   const disc = (
     <button type="button" onClick={() => { open(); clip.toggle(); }} aria-label={playLabel(clip.playing, bounds)} title={playLabel(clip.playing, bounds)} data-testid="play-toggle"
-      className="mr-1.5 grid size-10 flex-none cursor-pointer place-items-center rounded-full border-0 bg-accent text-on-accent transition-colors duration-[var(--ll-motion-small)] hover:bg-accent-hover max-[899px]:size-11 min-[1920px]:size-11">
+      className="relative mr-1.5 grid size-10 flex-none cursor-pointer place-items-center rounded-full border-0 bg-accent text-on-accent transition-colors duration-[var(--ll-motion-small)] hover:bg-accent-hover max-[899px]:size-11 min-[1920px]:size-11 [@media(pointer:coarse)]:after:absolute [@media(pointer:coarse)]:after:-inset-0.5 [@media(pointer:coarse)]:after:content-['']">
       {clip.playing ? <Pause aria-hidden className="size-5" fill="currentColor" strokeWidth={0} /> : <Play aria-hidden className="size-5 translate-x-px" fill="currentColor" strokeWidth={1.5} />}
     </button>
   );

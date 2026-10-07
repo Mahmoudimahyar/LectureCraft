@@ -460,7 +460,29 @@ class Projector:
                 **{k: link[k] for k in ("lecture_ids", "membership", "anchors", "anchor_state", "slide_anchor", "locator_text", "qualifiers", "unparsed", "original", "display_rendition",
                                         "related_copy", "criteria_authorship", "source_note", "number")},
                 "relationships": [r for r in index["relationships"] if question_id in (r["from_question"], r["to_question"])],
-                "evidence": sorted(evidence, key=lambda e: e["recorded_at"], reverse=True), "answer_guidance": "restricted"}
+                "evidence": sorted(evidence, key=lambda e: e["recorded_at"], reverse=True), "answer_guidance": "restricted",
+                **self._own_ties(course_id, question_id, catalogs)}
+
+    def _own_ties(self, course_id: str, question_id: str, catalogs: dict) -> dict[str, Any]:
+        """The question's own links for its page (R2): ``ties``, ``no_link`` and ``suggestion_history`` as the lecture lists
+        state them, whatever lecture (or none) its collection belongs to. All three are ``None`` when they cannot be
+        read; the page then falls back to the catalog's anchors and never shows a broken view."""
+        try:
+            binding = self.settings.course(course_id)
+            inventory = build_inventory(binding)
+            index = catalogs["questions"]
+            bank = self._bank(course_id, catalogs)
+            inferred = inferred_anchors.load(self.settings, course_id, index=index, inventory=inventory, deck_sha256_of=lambda item: self._bytes_sha(course_id, item),
+                                             guidance_text_of=inferred_anchors.guidance_reader(binding.root, index))
+            try:
+                maps = study_maps.read_study_maps(binding.root, inventory, sha_of=lambda path: file_sha256(path, self._hashes))
+                sections = study_maps.section_ties(maps, bank)
+            except Exception:  # noqa: BLE001 - an unreadable study note costs the section ties, not the page
+                sections = None
+            found = question_ties.ties_for(question_id, bank=bank, index=index, inferred=inferred, decisions=inferred_anchors.decisions(self.settings, course_id), section_ties=sections)
+        except Exception:  # noqa: BLE001 - a damaged private file of this step never breaks reading the question
+            found = None
+        return found or {"ties": None, "no_link": None, "suggestion_history": None}
 
     # ---- concept structure (projection of owner catalogs) ----------------------------------------
     def concepts_view(self, course_id: str) -> dict[str, Any]:

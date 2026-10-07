@@ -10,7 +10,7 @@ import {
   invalidatedBy, queryKeys, useConceptGraph, useCourseTiming, useInferredAnchors, useServedIdentity, useSourceMap, useSourceMapOverride, useSuggestionDecision, useTimingBuild,
 } from "@/lib/queries";
 import {
-  NBSP, clampToRange, clockLabel, conceptGraphErrorCode, durationLabel, graphLayoutInput, identityOf, intervalBounds, isStale, isStructuralPage, lectureQuestionCounts, logicalSlides, questionDivisionSentence,
+  NBSP, clampToRange, clockLabel, conceptGraphErrorCode, durationLabel, graphLayoutInput, identityOf, intervalBounds, isStale, isStructuralPage, lectureQuestionCounts, logicalSlides, questionDivisionSentence, questionOwnLinks,
   nextContentPage, nextStop, noRangeDetail, noRangeSentence, pageRef, pagesRef, questionsForPage, rangeOrdinalLabel, rangesForPage, sourceMapPageProblems, stopAtEnd, supportOrdinals, timeSpanLabel, toMs, whereLine,
   withinRange,
 } from "@/lib/r2";
@@ -311,6 +311,25 @@ describe("questionsForPage", () => {
     expect(questionsForPage(sampleLectureViewWithoutR2, 4).counts.allLecture).toBe(8);
     expect(questionsForPage(sampleLectureView, 99).known).toBe(false);
     expect(questionsForPage(undefined, 1).counts.allLecture).toBe(0);
+  });
+});
+
+describe("questionOwnLinks", () => {
+  const row = sampleLectureView.questions.all.find((entry) => (entry.ties ?? []).some((tie) => tie.tie === "agent_inferred"))!;
+  const suggestion = row.ties!.find((tie) => tie.tie === "agent_inferred")!;
+
+  it("lists the question view's own ties, also for a question that is in no lecture's list", () => {
+    // a problem-set question: no lecture, so no lecture row; its suggested slide pages are stated by the question view itself
+    expect(questionOwnLinks({ ties: [suggestion], no_link: null }, undefined)).toEqual({ ties: [suggestion], noLink: null });
+    // the question's own statement stands before the row of whatever lecture the page happened to read
+    expect(questionOwnLinks({ ties: [], no_link: { state: "no_suggestion", reason: "no_item" } }, row)).toEqual({ ties: [], noLink: { state: "no_suggestion", reason: "no_item" } });
+  });
+
+  it("falls back to the lecture row for a Brain that states none, and knows nothing when there is neither", () => {
+    expect(questionOwnLinks({ ties: null, no_link: null }, row)).toEqual({ ties: row.ties, noLink: row.no_link ?? null });
+    expect(questionOwnLinks({}, row).ties).toBe(row.ties);
+    expect(questionOwnLinks({}, undefined)).toEqual({ ties: undefined, noLink: null });
+    expect(questionOwnLinks(null, undefined)).toEqual({ ties: undefined, noLink: null });
   });
 });
 

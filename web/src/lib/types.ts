@@ -378,6 +378,9 @@ export interface LectureView {
 export interface QuestionView {
   course_id: string;
   question_id: string;
+  /** R2: the question's own links, as the lecture lists state them and with no deck on screen; null or absent from a Brain that states none. */
+  ties?: QuestionRow["ties"] | null;
+  no_link?: QuestionRow["no_link"] | null;
   title: string | null;
   /** The question's wording, or — when the course index holds none — a pointer to the original page (never invented wording). */
   prompt: string;

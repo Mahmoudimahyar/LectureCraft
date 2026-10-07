@@ -19,6 +19,7 @@ import {
   unlistedLabel,
 } from "@/lib/labels";
 import { useCourse, useLecture, useQuestion, useReview } from "@/lib/queries";
+import { questionOwnLinks } from "@/lib/r2";
 import { NotPairedError, reviewItemPayload, type Conditions } from "@/lib/requests";
 import type { EvidenceObject, LectureQuestionTie, QuestionAnchor, QuestionFile, QuestionRecord, QuestionRow, QuestionView } from "@/lib/types";
 import { observationsByAttempt, useNodeDetail } from "@/features/progress/ProgressPages";
@@ -128,7 +129,7 @@ function QuestionSources({ courseId, questionId, view, row }: { courseId: string
       setChecking(false);
     }
   };
-  const ties = row?.ties;
+  const { ties, noLink } = questionOwnLinks(view, row);
   const lecture = view.lecture_ids[0];
   return (
     <div className="mt-4 flex flex-col gap-3" data-testid="question-sources">
@@ -141,8 +142,8 @@ function QuestionSources({ courseId, questionId, view, row }: { courseId: string
         {ties ? (
           <ul className="ll-measure mt-1 flex flex-col gap-1.5">
             {ties.map((tie, index) => <TieLine key={index} courseId={courseId} questionId={questionId} tie={tie} />)}
-            {row?.no_link && <li className="text-ui"><span className="font-semibold">{NO_LINK_LINE[row.no_link.state]?.label ?? unlistedLabel(String(row.no_link.state))}.</span> <span className="text-muted">{noLinkSentence(row.no_link)}</span></li>}
-            {ties.length === 0 && !row?.no_link && <li className="text-ui text-muted">The lecture states no link for this question.</li>}
+            {noLink && <li className="text-ui"><span className="font-semibold">{NO_LINK_LINE[noLink.state]?.label ?? unlistedLabel(String(noLink.state))}.</span> <span className="text-muted">{noLinkSentence(noLink)}</span></li>}
+            {ties.length === 0 && !noLink && <li className="text-ui text-muted">{lecture ? "The lecture states no link for this question." : "No link to a slide is stated for this question."}</li>}
           </ul>
         ) : view.anchors.length > 0 ? (
           <ul className="ll-measure mt-1 flex flex-col gap-1.5">{view.anchors.map((anchor, index) => <AnchorLine key={index} courseId={courseId} questionId={questionId} anchor={anchor} />)}</ul>

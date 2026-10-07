@@ -109,6 +109,43 @@ def test_a_stored_suggestion_shows_as_a_suggested_tie_and_a_learner_decision_is_
     assert not [tie for slide in after["slides"] for tie in slide["question_ties"] if tie["tie"] == "agent_inferred"], "a rejected suggestion is no longer shown as a link"
 
 
+def test_a_question_page_carries_the_questions_own_links_also_when_it_belongs_to_no_lecture(client, settings):
+    """A problem-set question is in no lecture's list, so a page that read its links from "its lecture" showed none: the
+    suggested slide pages of such a question were visible from the slide and nowhere on the question. The question view
+    states the question's own ties, by the same rules as the lecture lists, with no deck on screen."""
+    from lecture_brain import inferred_anchors
+
+    context = inferred_anchors.course_context(settings, COURSE)
+    question_id, other = "BE505-PS01-Q01", "BE505-PS01-Q02"
+    question = context["index"]["questions"][question_id]
+    deck = next(d for l in context["inventory"]["lectures"] if l["lecture_id"] == "lecture-01" for d in l["decks"] if d["source_id"] == "src-lecture-01-slides")
+    before = client.get(f"/api/courses/{COURSE}/questions/{question_id}").json()
+    assert before["lecture_ids"] == [] and before["ties"] is not None and [t for t in before["ties"] if t["tie"] == "agent_inferred"] == []
+    assert before["no_link"] in ({"state": "no_suggestion", "reason": "no_file"}, None)   # no suggestions file yet (None: the course anchors it to a page of another file)
+    inferred_anchors.store(settings, COURSE, {
+        "contract": "ll.inferred-anchors/1", "course_id": COURSE, "produced_at": "2026-10-05T12:00:00Z", "producer": "claude-session", "question_index_sha256": context["index"]["sha256"],
+        "items": [{"question_id": question_id, "question_version": question["version"], "lecture_id": "lecture-01", "source_id": "src-lecture-01-slides", "source_sha256": context["deck_sha256_of"](deck),
+                   "pages": [2], "regions": None, "criteria": [question["criteria"][0]["criterion_id"]], "coverage": "partial",
+                   "rationale": "Synthetic: the named page shows the part this criterion asks about.", "state": "agent_inferred", "verifier": None}]})
+    view = client.get(f"/api/courses/{COURSE}/questions/{question_id}").json()
+    (suggested,) = [t for t in view["ties"] if t["tie"] == "agent_inferred"]
+    assert (suggested["lecture_id"], suggested["source_id"], suggested["pages"], suggested["granularity"]) == ("lecture-01", "src-lecture-01-slides", [2], "page")
+    assert suggested["on_displayed_deck"] is False and suggested["logical_slide_ids"] == [] and suggested["learner_decision"] is None and view["no_link"] is None
+    assert suggested["criteria_supported"] == 1 and suggested["criteria_total"] == len(question["criteria"])
+    # the same tie the slide shows, by the same identity
+    lecture = client.get(f"/api/courses/{COURSE}/lectures/lecture-01").json()
+    on_slide = [t for s in lecture["slides"] if s["page"] == 2 for t in s["question_ties"] if t["question_id"] == question_id]
+    assert [t["suggestion_id"] for t in on_slide] == [suggested["suggestion_id"]]
+    # a question nobody proposed anything for says so; the learner's rejection is reflected here too
+    untouched = client.get(f"/api/courses/{COURSE}/questions/{other}").json()
+    assert [t for t in untouched["ties"] if t["tie"] == "agent_inferred"] == [] and (untouched["no_link"] is None or untouched["no_link"]["state"] == "no_suggestion")
+    assert client.post(f"/api/courses/{COURSE}/suggestions/{suggested['suggestion_id']}/decision", json={"decision": "rejected"}).status_code == 200
+    after = client.get(f"/api/courses/{COURSE}/questions/{question_id}").json()
+    assert [t for t in after["ties"] if t["tie"] == "agent_inferred"] == [] and [d["suggestion_id"] for d in after["suggestion_history"]["rejected_by_learner"]] == [suggested["suggestion_id"]]
+    # R2-Q10: nothing of the assessor's guidance rides along
+    assert "answer_guidance" not in suggested and not {"guidance", "expected_answer", "rubric"} & set(suggested)
+
+
 def test_generated_speech_text_states_what_was_covered_and_what_was_withheld(client, settings):
     view = client.get(f"/api/courses/{COURSE}/lectures/lecture-02").json()
     for recording in view["recordings"]:

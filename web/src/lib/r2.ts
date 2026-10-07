@@ -246,6 +246,18 @@ export function questionsForPage(view: View, page: number): PageQuestions {
   };
 }
 
+/**
+ * The links a question's own page lists. The question view states them itself (the Brain's `ties` and `no_link`, by the
+ * rules of the lecture lists and with no deck on screen), so a question that is in no lecture's list (a problem set)
+ * shows its suggested slide pages too. A Brain that states none leaves the row of the question's lecture; with neither,
+ * `ties` is undefined and the page falls back to the catalog's anchors.
+ */
+export function questionOwnLinks(view: { ties?: QuestionRow["ties"] | null; no_link?: QuestionRow["no_link"] | null } | null | undefined, row: QuestionRow | undefined):
+  { ties: QuestionRow["ties"]; noLink: NonNullable<QuestionRow["no_link"]> | null } {
+  if (Array.isArray(view?.ties)) return { ties: view.ties, noLink: view.no_link ?? null };
+  return { ties: row?.ties, noLink: row?.no_link ?? null };
+}
+
 /** How the questions of a lecture divide (result of `lectureQuestionCounts`); the three parts add up to `all`. */
 export interface LectureQuestionCounts {
   /** Rows of All lecture questions. courseAnchor + agentInferred + withoutLink = all. */

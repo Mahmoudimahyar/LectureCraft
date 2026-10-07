@@ -103,6 +103,20 @@ def _why(tie: dict, where: str, support: list[int], here: int | None) -> str:
     return text
 
 
+def ties_for(question_id: str, *, bank: dict, index: dict | None, inferred: dict | None, decisions: dict | None, section_ties: dict[str, list[dict]] | None = None,
+             confirmed_outranks_verifier: bool = True) -> dict[str, Any] | None:
+    """``{ties, no_link, suggestion_history}`` of ONE catalogued question, by the rules of :func:`enrich` and with no deck on
+    screen (``on_displayed_deck`` is false on every tie, ``logical_slide_ids`` empty). For a view of the question itself:
+    a question that belongs to no lecture unit (a problem set) has its links nowhere else. ``None``: the bank has no
+    such question."""
+    if question_id not in (bank.get("questions") or {}):
+        return None
+    view = {"lecture_id": None, "deck": None, "slides": [], "questions": {"all": [{"question_id": question_id}], "related_by_relationship": []}}
+    enrich(view, bank=bank, index=index, source_map=None, inferred=inferred, decisions=decisions, section_ties=section_ties, confirmed_outranks_verifier=confirmed_outranks_verifier)
+    row = view["questions"]["all"][0]
+    return {"ties": row["ties"], "no_link": row["no_link"], "suggestion_history": row["suggestion_history"]}
+
+
 def enrich(view: dict, *, bank: dict, index: dict | None, source_map: dict | None, inferred: dict | None, decisions: dict | None,
            evidence_of: Callable[[str], dict] | None = None, concepts_of_page: Callable[[int], Iterable[Any]] | None = None,
            section_ties: dict[str, list[dict]] | None = None, confirmed_outranks_verifier: bool = True) -> dict:

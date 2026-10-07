@@ -148,6 +148,45 @@ def test_a_question_page_carries_the_questions_own_links_also_when_it_belongs_to
     assert "answer_guidance" not in suggested and not {"guidance", "expected_answer", "rubric"} & set(suggested)
 
 
+def test_the_question_bank_states_each_questions_links_as_the_lecture_lists_do(client, settings):
+    """UI contract R2: a suggested link is on the question's card wherever the card appears. The bank's rows carry the same
+    ties, no-link line and suggestion history as the row of the same question in its lecture's list (no deck is on
+    screen in the bank), and a question of no lecture carries them too."""
+    from lecture_brain import inferred_anchors
+
+    context = inferred_anchors.course_context(settings, COURSE)
+    deck = next(d for l in context["inventory"]["lectures"] if l["lecture_id"] == "lecture-01" for d in l["decks"] if d["source_id"] == "src-lecture-01-slides")
+    sha = context["deck_sha256_of"](deck)
+    questions = context["index"]["questions"]
+
+    def item(question_id, pages):
+        return {"question_id": question_id, "question_version": questions[question_id]["version"], "lecture_id": "lecture-01", "source_id": "src-lecture-01-slides", "source_sha256": sha,
+                "pages": pages, "regions": None, "criteria": [questions[question_id]["criteria"][0]["criterion_id"]], "coverage": "partial",
+                "rationale": "Synthetic: the named pages show the part this criterion asks about.", "state": "agent_inferred", "verifier": None}
+
+    inferred_anchors.store(settings, COURSE, {"contract": "ll.inferred-anchors/1", "course_id": COURSE, "produced_at": "2026-10-05T12:00:00Z", "producer": "claude-session",
+                                              "question_index_sha256": context["index"]["sha256"], "items": [item("BE505-L01-Q04", [2, 3]), item("BE505-PS01-Q01", [2])]})
+    bank = client.get(f"/api/courses/{COURSE}/questions?limit=500").json()
+    rows = {row["question_id"]: row for row in bank["items"]}
+    assert len(rows) == bank["total"] and all({"ties", "no_link", "suggestion_history"} <= set(row) for row in rows.values())
+    for question_id, pages in (("BE505-L01-Q04", [2, 3]), ("BE505-PS01-Q01", [2])):
+        (suggested,) = [t for t in rows[question_id]["ties"] if t["tie"] == "agent_inferred"]
+        assert suggested["pages"] == pages and suggested["on_displayed_deck"] is False and suggested["on_lecture_deck"] is True and rows[question_id]["no_link"] is None
+    # the same statement as the lecture's own list, tie for tie (only the deck on screen differs)
+    lecture = client.get(f"/api/courses/{COURSE}/lectures/lecture-01").json()
+    in_lecture = {row["question_id"]: row for row in lecture["questions"]["all"]}
+    key = lambda tie: (tie["tie"], tie["granularity"], tie["source_id"], tuple(tie["pages"]), tie.get("suggestion_id"))  # noqa: E731
+    for question_id, row in in_lecture.items():
+        assert sorted(map(key, rows[question_id]["ties"])) == sorted(map(key, row["ties"])), question_id
+        assert rows[question_id]["no_link"] == row["no_link"], question_id
+    # one question of the detail route and of the bank say the same
+    detail = client.get(f"/api/courses/{COURSE}/questions/BE505-PS01-Q01").json()
+    assert sorted(map(key, detail["ties"])) == sorted(map(key, rows["BE505-PS01-Q01"]["ties"]))
+    # a page of the bank computes the links of its own rows only, and a narrower page says the same about them
+    first = client.get(f"/api/courses/{COURSE}/questions?limit=2").json()["items"]
+    assert [row["ties"] for row in first] == [rows[row["question_id"]]["ties"] for row in first]
+
+
 def test_generated_speech_text_states_what_was_covered_and_what_was_withheld(client, settings):
     view = client.get(f"/api/courses/{COURSE}/lectures/lecture-02").json()
     for recording in view["recordings"]:

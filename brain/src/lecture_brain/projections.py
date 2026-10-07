@@ -136,6 +136,9 @@ class Projector:
                 rows.append(self._question_row(link, question))
         offset, limit = max(0, int(offset)), max(1, min(int(limit), 500))
         page = rows[offset:offset + limit]
+        own = self._own_ties_of(course_id, [row["question_id"] for row in page], catalogs, inventory=inventory, bank=bank)
+        for row in page:  # R2: the card says the question's links wherever it appears, the bank included
+            row.update(own.get(row["question_id"]) or {"ties": None, "no_link": None, "suggestion_history": None})
         titles = {l["lecture_id"]: l["title"] for l in inventory["lectures"]}
         try:
             guidance = read_guidance(binding.root, index)
@@ -467,11 +470,15 @@ class Projector:
         """The question's own links for its page (R2): ``ties``, ``no_link`` and ``suggestion_history`` as the lecture lists
         state them, whatever lecture (or none) its collection belongs to. All three are ``None`` when they cannot be
         read; the page then falls back to the catalog's anchors and never shows a broken view."""
+        return self._own_ties_of(course_id, [question_id], catalogs).get(question_id) or {"ties": None, "no_link": None, "suggestion_history": None}
+
+    def _own_ties_of(self, course_id: str, question_ids: list[str], catalogs: dict, *, inventory: dict | None = None, bank: dict | None = None) -> dict[str, dict[str, Any]]:
+        """:meth:`_own_ties` for several questions in one pass (a page of the bank). Empty when nothing could be read."""
         try:
             binding = self.settings.course(course_id)
-            inventory = build_inventory(binding)
+            inventory = inventory if inventory is not None else build_inventory(binding)
             index = catalogs["questions"]
-            bank = self._bank(course_id, catalogs)
+            bank = bank if bank is not None else self._bank(course_id, catalogs)
             inferred = inferred_anchors.load(self.settings, course_id, index=index, inventory=inventory, deck_sha256_of=lambda item: self._bytes_sha(course_id, item),
                                              guidance_text_of=inferred_anchors.guidance_reader(binding.root, index))
             try:
@@ -479,13 +486,14 @@ class Projector:
                 sections = study_maps.section_ties(maps, bank)
             except Exception:  # noqa: BLE001 - an unreadable study note costs the section ties, not the page
                 sections = None
-            found = question_ties.ties_for(question_id, bank=bank, index=index, inferred=inferred, decisions=inferred_anchors.decisions(self.settings, course_id), section_ties=sections)
+            found = question_ties.ties_for_many(question_ids, bank=bank, index=index, inferred=inferred, decisions=inferred_anchors.decisions(self.settings, course_id), section_ties=sections)
             decks = {lecture["lecture_id"]: (primary_deck(lecture) or {}).get("source_id") for lecture in inventory["lectures"]}
-            for tie in (found or {}).get("ties") or []:  # pages of that lecture's own slides open in the lecture; a page of another file opens as a file
-                tie["on_lecture_deck"] = bool(tie.get("lecture_id")) and tie.get("source_id") is not None and decks.get(tie["lecture_id"]) == tie["source_id"]
-        except Exception:  # noqa: BLE001 - a damaged private file of this step never breaks reading the question
-            found = None
-        return found or {"ties": None, "no_link": None, "suggestion_history": None}
+            for entry in found.values():
+                for tie in entry["ties"] or []:  # pages of that lecture's own slides open in the lecture; a page of another file opens as a file
+                    tie["on_lecture_deck"] = bool(tie.get("lecture_id")) and tie.get("source_id") is not None and decks.get(tie["lecture_id"]) == tie["source_id"]
+            return found
+        except Exception:  # noqa: BLE001 - a damaged private file of this step never breaks reading the questions
+            return {}
 
     # ---- concept structure (projection of owner catalogs) ----------------------------------------
     def concepts_view(self, course_id: str) -> dict[str, Any]:

@@ -132,7 +132,7 @@ describe("the selection a scope opens with", () => {
     await waitFor(() => expect(selected()).toBe("t-charlie"));
     expect(new URLSearchParams(address.split("?")[1]).get("scope")).toBeNull(); // still the course scope
     expect(asked).toContain("lecture:lecture-90");
-    expect(asked).toContain("course focus=t-charlie");
+    await waitFor(() => expect(asked).toContain("course focus=t-charlie")); // the focus is asked for after the selection is in the address, not in the same turn
   });
 
   it("keeps a selection that came with the address", async () => {

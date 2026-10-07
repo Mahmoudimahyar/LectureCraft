@@ -877,7 +877,7 @@ class Projector:
             else:
                 for page, text in enumerate(texts, start=1):
                     if text:
-                        entries.append({"type": "slide", "title": f"{lecture['title']} — slide {page}", "text": text[:1500], "ref": {"lecture_id": lecture["lecture_id"], "page": page}})
+                        entries.append({"type": "slide", "title": f"{lecture['title']} — PDF page {page}", "text": text[:1500], "ref": {"lecture_id": lecture["lecture_id"], "page": page}})
             other_dir = self.preparation.prepared_dir(course_id, lecture["lecture_id"]) / "other"
             for item in [*lecture["decks"], *lecture["extra_materials"]] if other_dir.is_dir() else []:
                 if item["disclosure"] == "restricted_solution":

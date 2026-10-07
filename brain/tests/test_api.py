@@ -204,6 +204,18 @@ def test_built_app_is_served_with_browser_safe_types_and_policy(runtime, tmp_pat
     assert app_client.get("/api/not-a-route").status_code == 404
 
 
+def test_a_search_hit_on_slide_text_is_titled_by_its_pdf_page_never_by_a_slide_number(client):
+    """R2-S6: the identity of a page is its physical PDF page. A hit titled "slide 5" for PDF page 5 states a slide number
+    nobody established (a build group makes page and slide differ)."""
+    for _ in range(6):
+        client.post("/api/supervisor/tick")
+    hits = [e for e in client.get("/api/courses/be505/search-index").json()["entries"] if e["type"] == "slide"]
+    assert hits, "slide text is searchable after the first preparation"
+    for hit in hits:
+        assert hit["title"].endswith(f"— PDF page {hit['ref']['page']}"), hit["title"]
+        assert "slide " not in hit["title"].split("—")[-1].lower()
+
+
 def test_cleanup_of_rebuildable_data_queues_its_rebuild_so_nothing_stays_unprocessed(client, runtime):
     """Removing prepared slide text must not silently leave lectures unsearchable: the rebuild is queued and runs."""
     for _ in range(6):

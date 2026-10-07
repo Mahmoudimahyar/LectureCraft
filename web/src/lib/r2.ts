@@ -365,10 +365,21 @@ export interface PageRanges {
   unexplained: boolean;
 }
 
+/**
+ * A range says the slide was SHOWN only where video frames of that recording were visible (UI contract, R2). The Brain
+ * gives a link a person made the relation "displayed_during" whatever the file is; over a recording without a picture
+ * it is read as "discussed_during", so nothing on screen says a page was shown or that frames were inspected there.
+ */
+function withoutPictureClaim(view: View, range: TimingRange): TimingRange {
+  if (range.relation !== "displayed_during") return range;
+  const recording = view?.recordings?.find((entry) => entry.source_id === range.recording?.source_id);
+  return recording?.media_type?.startsWith("video/") ? range : { ...range, relation: "discussed_during" };
+}
+
 /** The ranges of one page and, when it has none, its one no-range state. Nothing is derived: a page the view does not hold gives `known: false`. */
 export function rangesForPage(view: View, page: number): PageRanges {
   const slide = slideAt(view, page);
-  const ranges = [...(slide?.ranges ?? [])];
+  const ranges = (slide?.ranges ?? []).map((range) => withoutPictureClaim(view, range));
   const pageRanges = ranges.filter((range) => range.support?.scope !== "section");
   const sectionRanges = ranges.filter((range) => range.support?.scope === "section");
   const known = slide?.ranges !== undefined;

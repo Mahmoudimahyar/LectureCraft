@@ -74,6 +74,8 @@ export function TutorPanel({ courseId, lecture, page, slideRef, pinned, onUnpin,
   const textRef = useRef<HTMLTextAreaElement>(null);
   const threadEnd = useRef<HTMLDivElement>(null);
   const loaded = useRef(false);
+  /** The draft whose save still waits for its 350 ms; null once it is written or the composer is empty. */
+  const unsaved = useRef<(() => Draft) | null>(null);
   const requests = useLocalRequests(courseId);
 
   // Restore the draft for this lecture (it stays attached to the page it was written for).
@@ -111,19 +113,26 @@ export function TutorPanel({ courseId, lecture, page, slideRef, pinned, onUnpin,
   useEffect(() => {
     if (!loaded.current) return;
     if (text === "") {
+      unsaved.current = null;
       setDurability("empty");
       void deleteDraft(draftId);
       return;
     }
     setDurability("saving");
+    const draft = (): Draft => ({ draftId, courseId, mode: mode as DraftMode, text, updatedAt: isoNow(),
+      context: { lectureId: lecture.lecture_id, page: draftPage, questionId: questionId || undefined, source: draftSlideRef ?? undefined, label: contextLabel } });
+    unsaved.current = draft;
     const timer = window.setTimeout(() => {
-      const draft: Draft = { draftId, courseId, mode: mode as DraftMode, text, updatedAt: isoNow(),
-        context: { lectureId: lecture.lecture_id, page: draftPage, questionId: questionId || undefined, source: draftSlideRef ?? undefined, label: contextLabel } };
-      void saveDraft(draft).then((r) => setDurability(r.durability));
+      unsaved.current = null;
+      void saveDraft(draft()).then((r) => setDurability(r.durability));
     }, 350);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, mode, draftPage, questionId]);
+  // Leaving the lecture inside those 350 ms (a link pressed right after the last keystroke) writes the waiting draft at once instead of dropping it.
+  useEffect(() => () => {
+    if (unsaved.current) void saveDraft(unsaved.current());
+  }, []);
 
   const slideQuestions = draftSlide?.questions ?? [];
   const chosenQuestion = slideQuestions.find((q) => q.question_id === questionId) ?? null;

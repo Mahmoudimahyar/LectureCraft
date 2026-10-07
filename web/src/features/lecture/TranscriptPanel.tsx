@@ -433,7 +433,7 @@ export function TranscriptPanel({ transcripts, slideRanges, positionMs, playing,
                       {/* The gutter: the time where the row has one; the quote button under it, or in its place. No line number is drawn. */}
                       <div className={cn(GUTTER, "relative")}>
                         {time && (
-                          <button type="button" className={cn("ll-num block cursor-pointer rounded-thumb border-0 bg-transparent p-0 text-left text-meta leading-[var(--ll-lh-read)] hover:text-accent-text hover:underline", spoken ? "font-semibold text-accent-text" : "text-muted")}
+                          <button type="button" className={cn("ll-num block cursor-pointer rounded-thumb border-0 bg-transparent p-0 text-left text-meta leading-[var(--ll-lh-read)] hover:text-accent-text hover:underline [@media(pointer:coarse)]:min-w-6", spoken ? "font-semibold text-accent-text" : "text-muted")}
                             onClick={() => onSeek(time.ms)} aria-label={`Go to ${clockLabel(time.ms)} in the recording (${timeBasisWords(time)})`} title={`Play from ${clockLabel(time.ms)} (${timeBasisWords(time)})`}>
                             {clockLabel(time.ms)}
                           </button>
@@ -441,7 +441,8 @@ export function TranscriptPanel({ transcripts, slideRanges, positionMs, playing,
                         <button type="button" onClick={(event) => pick(row, event.shiftKey)} aria-label={`Select line ${n}${chosen ? " (selected)" : ""}`} aria-pressed={chosen}
                           title={`Line ${n}. Select it to ask about it; Shift-press another to select the lines between`}
                           className={cn("ll-ib ll-ib-sm -ml-1.5 text-muted transition-opacity duration-[var(--ll-motion-small)] hover:text-ink focus-visible:opacity-100 group-hover/line:opacity-100 [@media(pointer:coarse)]:opacity-100",
-                            time ? "absolute left-0 top-[22px] h-6 min-w-6" : "-mt-0.5", chosen ? "text-accent-text opacity-100" : "opacity-0")}>
+                            // On a touch screen the quote button is always drawn: it starts below the time (24 px) and its press area stops there, so neither covers the other.
+                            time ? "absolute left-0 top-[22px] h-6 min-w-6 [@media(pointer:coarse)]:top-[28px] [@media(pointer:coarse)]:after:top-[-4px]" : "-mt-0.5", chosen ? "text-accent-text opacity-100" : "opacity-0")}>
                           <Quote aria-hidden />
                         </button>
                       </div>

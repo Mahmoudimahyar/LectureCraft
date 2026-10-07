@@ -192,11 +192,58 @@ recorded reason (`no_file`, `no_item`, `stale`).
   number of entries kept because their own question digest still matches. Stale reasons are `question_version_differs`,
   `question_changed`, `source_bytes_differ`, `source_unavailable`, `earlier_catalog` (no digest recorded) and `catalog_unavailable`.
 
+### 1.5 Method benchmark and prepared binding (R2-T6, R2-T2; added 2026-10-07)
+
+**The benchmark record** is an optional private file of ONE installation, `<state_dir>/benchmarks/alignment.json`, contract
+`ll.alignment-benchmark/1`, written outside the app by whoever ran the comparison and only read by the Brain
+(`benchmark_record.py`):
+
+```jsonc
+{"contract": "ll.alignment-benchmark/1",
+ "method": {"name": "lexical-sequence", "version": "2"},   // exactly as a range names its method
+ "baseline": {"name": "lexical-monotone-baseline"},
+ "compared_on": "…",                                       // in words: which labelled references
+ "labelled_windows": 120,                                  // whole number, at least 1
+ "result": "not_clearly_better",                           // "better" | "not_clearly_better" | "worse"
+ "thresholds_fixed_before_reading_answers": true,
+ "produced_at": "2026-10-06T08:00:00Z",
+ "note": "…"}
+```
+
+Exactly these keys. A file of any other shape (another contract, a key missing or too many, a wrong type, a method that is its own
+baseline, more than 64 KiB) is reported as unreadable and treated as absent; it is never repaired or rewritten.
+
+- **`slides[].ranges[].benchmark`** and **`timing.benchmark`** (lecture view): `{state, reason, method, baseline, compared_on,
+  labelled_windows, result, thresholds_fixed_before_reading_answers, produced_at}`. `state` is `benchmarked` only when the record
+  names exactly the range's method name AND version; then the record's fields are stated. Otherwise `not_benchmarked` with
+  `reason`: `no_record`, `record_unreadable`, `record_is_for_another_method`, `record_is_for_another_version`, `is_the_baseline`
+  (the range comes from the lexical baseline itself) or `no_method_named`; every field of the record is then `null`. A link a
+  person entered (`origin: "manual"`) and a range the course states (`origin: "reviewed_source_map"`) are no method's
+  suggestion: `not_applicable` with `reason` `entered_by_a_person` / `stated_by_the_course`. `method` is always the range's own.
+  `timing.benchmark` is the statement for the method that suggests ranges now. Derived when the view is made: the stored timing
+  links carry nothing of it. A benchmark is of a method; it changes no range's `review_state`.
+- **`GET /api/courses/{c}/timing`** adds, with and without the queue, `benchmark: {record: "present" | "absent" | "unreadable",
+  detail, recorded: {the record without its contract name} or null, current_method: {name, version}, statement: {as above, for
+  current_method}}` and `runners: [{origin, runner, tool, tool_version, model, language, parameters_sha256, settings_sha256,
+  same_as_prepared, generations, recordings: [{source_id, filename, generation}]}]` — one row per distinct identity of the
+  generated speech generations served now. `tool` … `parameters_sha256` are what the generation's manifest states; `origin` and
+  `runner` what its provenance states (`null` when it carries none). `settings_sha256` is the settings identity of the
+  installation's speech runner for a generation that runner published from its frozen queue, and `same_as_prepared` whether
+  that is the identity of the prepared binding; both are `null` for any other generation and when the queue is left out.
+- Only with the queue it also adds **`binding`**: `{state: "prepared_inactive" | "refused", command, argv, command_sha256,
+  settings_sha256, runner, same_runner, schedule: null, note}` or `null` with `binding_reason: {code, text}`
+  (`no_speech_binding`, a refusal of the binding file such as `binding_invalid` or `state_dir_not_bound`,
+  `nothing_published_by_this_runner`, `readback_failed`). `command` is the runner's own command that continues its queue;
+  `command_sha256` the SHA-256 of `argv` as compact JSON; `settings_sha256` the digest every chunk result must carry, computed
+  from the binding as it is now. `same_runner` is true, and the state `prepared_inactive`, when that digest equals the one
+  frozen in the queue the published text was made under; otherwise the state is `refused`. `schedule` is always `null`: this
+  is a readback (`speech/binding.py`) that starts, schedules and writes nothing. With `queue=false` both keys are `null`.
+
 ## 2. Other routes
 
 | Route | Returns |
 |---|---|
-| `GET /api/courses/{c}/timing[?queue=false]` | `{course_id, allowance: {ceiling_seconds, used_seconds, remaining_seconds} or null, resume_command, build_command, queue_included, lectures: [{lecture_id, title, stage, links: {state, differs, built_at}, summary: {pages, pages_with_range}, recordings: [the same objects as 1.3 plus queue {state, chunks_done, chunks_total, seconds_covered}]}], summary, note}`. A lecture's `summary` is read from its stored links alone: `pages` is the page count of the deck the links were built for (`null` when nothing was built), `pages_with_range` the pages a shown link names while the links are current (`null` when they are stale or missing); the learner's own links and rejections are applied in the lecture view only. `queue=false` leaves out the transcription queue, the allowance and the resume command (`queue` is `null` on every recording) and then reads no other course. |
+| `GET /api/courses/{c}/timing[?queue=false]` | `{course_id, allowance: {ceiling_seconds, used_seconds, remaining_seconds} or null, resume_command, build_command, queue_included, lectures: [{lecture_id, title, stage, links: {state, differs, built_at}, summary: {pages, pages_with_range}, deck: {source_id, filename, state, page_count, map_state, cause, denominators, roles_established, roles_established_outside}, recordings: [the same objects as 1.3 plus queue {state, chunks_done, chunks_total, seconds_covered}]}], summary, note}`. A lecture's `summary` is read from its stored links alone: `pages` is the page count of the deck the links were built for (`null` when nothing was built), `pages_with_range` the pages a shown link names while the links are current (`null` when they are stale or missing); the learner's own links and rejections are applied in the lecture view only. A lecture's `deck` is the unit's displayed deck, read from the STORED source map only (a status inspects no file and builds no map): `state` is `"pdf"` (a readable PDF), `"not_a_pdf"` (a presentation or another file without pages to count), `"no_deck"` (none is chosen; `source_id` and `filename` are `null`) or `"unreadable"` (missing, empty or damaged); `map_state` is `"stored"` or `"not_built"` for a PDF and `null` otherwise; `denominators` is the object of 1.1 (raw and instructional figures with the counts of the other roles, adding up to `page_count`); `roles_established` is `{generated, agent_reviewed, human_confirmed}`, the pages counted by the `role.state` of 1.2, and `roles_established_outside` the same for the pages outside the instructional figure (uncertain and excluded). Without a stored map `page_count`, `denominators` and both role counts are `null` and `cause` says why in the words of `source_map.reason` (`"no_deck"`, `"not_a_pdf"`, `"unreadable"`, `"not_built"`); with one, `cause` is `null`. `queue=false` leaves out the transcription queue, the allowance and the resume command (`queue` is `null` on every recording) and then reads no other course. |
 | `GET /api/courses/{c}/questions/{q}` | The question view as before, plus the question's OWN links: `ties` (the objects of `questions.all[].ties`, section 1.2, with `on_displayed_deck: false` and empty `logical_slide_ids`: no deck is on screen; each tie also says `on_lecture_deck`, true when its pages are pages of the slides of its `lecture_id`, so the page opens them in the lecture), `no_link` and `suggestion_history`. They are stated whatever lecture the question's collection belongs to, or none: a problem-set question is in no lecture's list and shows its suggested slide pages here. All three are `null` when they cannot be read; the page then lists the catalog's `anchors`. |
 | `POST /api/courses/{c}/lectures/{l}/timing/build` | Rebuilds the lecture's derived timing links from current inputs (app-private file only); returns the lecture's `timing` object |
 | `GET /api/courses/{c}/lectures/{l}/source-map` | The full stored map of the displayed deck, with override history |
@@ -249,6 +296,6 @@ mutate the view and read only what they are handed:
 |---|---|---|
 | `slide_identity.py` | `enrich(view, *, source_map, reason=None)` | `source_map`, `slides[].identity`, `slides[].role` |
 | `question_ties.py` | `enrich(view, *, bank, index, source_map, inferred, decisions, evidence_of, concepts_of_page, section_ties)` | `slides[].question_ties`, `slides[].related_questions`, `questions.all[].ties/no_link/evidence`, `questions.counts` |
-| `timing_links.py` | `enrich(view, *, source_map, links, generated)` | `slides[].ranges`, `slides[].no_range`, `timing` |
+| `timing_links.py` | `enrich(view, *, source_map, links, generated, annotations=None, benchmark=None)` | `slides[].ranges` (each with `benchmark`, section 1.5), `slides[].no_range`, `timing` (with `timing.benchmark`) |
 
 Each module registers its own routes through `register(app, runtime, locked)`, called from `create_app`.

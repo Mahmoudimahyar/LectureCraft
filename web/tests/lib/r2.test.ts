@@ -408,6 +408,22 @@ describe("rangesForPage", () => {
     expect(rangesForPage(only, 2)).toMatchObject({ pageRanges: [], selectedDefault: sampleRangeSection, noRange: null });
   });
 
+  it("says a slide was shown only where the recording has a picture: on an audio file a link made by hand reads as discussed", () => {
+    // UI contract, R2: "It says the slide was shown only where video frames of that recording were visible and inspected for that interval."
+    // The Brain's relation of a link a person made is "displayed_during" whatever the file is (found by browser check R2-T10).
+    const byHand: TimingRange = { ...sampleRangeConfirmed, relation: "displayed_during" };
+    const recordedAs = (mediaType: string): LectureView => ({
+      ...withSlide(7, (slide) => ({ ...slide, ranges: [byHand] })),
+      recordings: sampleLectureView.recordings.map((recording) => (recording.source_id === byHand.recording.source_id ? { ...recording, media_type: mediaType } : recording)),
+    });
+    for (const audio of ["audio/wav", "audio/mp4"]) {
+      const page = rangesForPage(recordedAs(audio), 7);
+      expect(page.ranges).toEqual([{ ...byHand, relation: "discussed_during" }]);
+      expect(page.selectedDefault?.relation).toBe("discussed_during");
+    }
+    expect(rangesForPage(recordedAs("video/mp4"), 7).ranges[0]).toBe(byHand); // with a picture the link stays as it was made
+  });
+
   it("reports exactly one of the six states for a page without a range, each on its own page of the sample", () => {
     const states = Object.fromEntries(PAGES.map((page) => [page, rangesForPage(sampleLectureView, page).noRange?.state ?? null]));
     expect(states).toEqual({ 1: "no_range_expected", 2: null, 3: null, 4: null, 5: null, 6: "ambiguous", 7: null, 8: "not_discussed", 9: "audio_unprocessed", 10: "association_not_run",

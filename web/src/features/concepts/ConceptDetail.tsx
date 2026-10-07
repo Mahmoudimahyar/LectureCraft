@@ -158,8 +158,10 @@ export interface ConceptDetailProps {
 }
 
 function Scroll({ framed, children }: { framed: boolean; children: ReactNode }) {
+  // A tab may hold nothing that takes focus (Evidence is sentences only): the scrolling region itself is then the stop
+  // from which the keyboard scrolls it (WCAG 2.1.1). The ring is drawn inside, where the panel does not clip it.
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-[var(--ll-panel-pad,16px)] [scrollbar-width:thin]">
+    <div tabIndex={0} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-[var(--ll-panel-pad,16px)] [scrollbar-width:thin] focus-visible:[outline-offset:-2px]">
       <div className={cn("flex w-full flex-col", !framed && "mx-auto max-w-[640px]")}>{children}</div>
     </div>
   );

@@ -8,6 +8,7 @@ import type {
   RelatedQuestion, RoleState, SectionTieDetail, SlidePosition, SlideRole, SlideRoleValue, SourceMapUnavailableReason, SuggestedTieFields, SuggestionCoverage, SuggestionState, SuggestionVerdict,
   TextAlignmentState, TieCriterion, TieKind, TieWhere, TimingGenerated, TimingRange, TimingStage, TimingSummary, TimingTextAlignment, ViewRevisions,
 } from "./types";
+import type { BenchmarkResult, BenchmarkStatement } from "./types";
 
 export const SOURCE_STATE: Record<string, { label: string; tone: Tone; detail: string }> = {
   registered_readable: { label: "Available", tone: "success", detail: "Registered by the course updater and readable." },
@@ -329,7 +330,68 @@ export const METHOD_WORDS: Record<string, string> = { "lexical-sequence": "wordi
 export const methodWords = (method: MethodRef | null | undefined): string => (method ? (METHOD_WORDS[method.name] ?? method.name) : "");
 /** The words in the brackets of a suggestion made from the course's study map (origin "reviewed_source_map"). */
 export const COURSE_STUDY_MAP_WORDS = "course study map";
-type RangeKindInput = Pick<TimingRange, "origin" | "review_state"> & { method?: MethodRef | null };
+
+// ---- R2-T6: the method of a suggestion, and what this installation's benchmark record says of it -------------------------
+// A benchmark compares a METHOD with the plain baseline on labelled references. It reviews no range: none of these words
+// calls a suggestion aligned, verified or confirmed (tests/lecture/range-method.test.tsx reads every table below).
+/** The lexical baseline in words. A baseline name without words here is read as words. */
+export const BASELINE_WORDS: Record<string, string> = { "lexical-monotone-baseline": "plain word overlap" };
+/** The method against the baseline, as the record states it. A result without words here is shown as recorded. */
+export const BENCHMARK_RESULT_WORDS: Record<BenchmarkResult, string> = { better: "better", not_clearly_better: "not clearly better", worse: "worse" };
+/** Why a method's suggestion is not benchmarked here, by the Brain's reason. A reason without words here says the first line. */
+export const NOT_BENCHMARKED_WORDS: Record<string, string> = {
+  no_record: "Not benchmarked on this installation.",
+  record_unreadable: "Not benchmarked on this installation: its benchmark record could not be read.",
+  record_is_for_another_method: "Not benchmarked on this installation: the benchmark record here is for another method.",
+  record_is_for_another_version: "Not benchmarked on this installation: the benchmark record here is for another version of this method.",
+  is_the_baseline: "This is the baseline itself: not benchmarked.",
+  no_method_named: "Not benchmarked: no method is recorded for this suggestion.",
+};
+/** A range that is no method's suggestion: what the course itself states is said so; of a link a person made nothing is said. */
+export const NOT_A_SUGGESTION_WORDS: Record<string, string> = { stated_by_the_course: "Stated by the course's study map, not suggested by a matching method.", entered_by_a_person: "" };
+const identifierAsWords = (name: string): string => name.replace(/[-_./]+/g, " ").trim();
+const capitalised = (text: string): string => (text ? text[0]!.toUpperCase() + text.slice(1) : "");
+/** "plain word overlap" for the app's lexical baseline; another baseline by its recorded name read as words; "" for none. */
+export const baselineWords = (name: string | null | undefined): string => (name ? (BASELINE_WORDS[name] ?? identifierAsWords(name)) : "");
+/**
+ * "Wording match, version 2": a method and its version in plain words, never by its identifier. A name without words of
+ * its own is read as words. The baseline is named without a version (what its record carries there names a function).
+ */
+export function methodVersionWords(method: MethodRef | null | undefined): string {
+  if (!method?.name) return "";
+  const name = capitalised(METHOD_WORDS[method.name] ?? BASELINE_WORDS[method.name] ?? identifierAsWords(method.name));
+  return method.version && !(method.name in BASELINE_WORDS) ? `${name}, version ${method.version}` : name;
+}
+/**
+ * What a benchmark statement says, as one sentence: "Compared with plain word overlap on <what>: not clearly better.",
+ * "Not benchmarked on this installation." (with the reason), or the words for a range that is no method's suggestion.
+ * No statement at all names no record, which is "not benchmarked".
+ */
+export function benchmarkSentence(statement: BenchmarkStatement | null | undefined): string {
+  if (!statement) return NOT_BENCHMARKED_WORDS.no_record!;
+  if (statement.state === "not_applicable") return NOT_A_SUGGESTION_WORDS[statement.reason ?? ""] ?? "";
+  if (statement.state !== "benchmarked") return NOT_BENCHMARKED_WORDS[statement.reason ?? ""] ?? NOT_BENCHMARKED_WORDS.no_record!;
+  const against = baselineWords(statement.baseline?.name) || "the baseline";
+  const on = (statement.compared_on ?? "").trim();
+  const result = statement.result ? ((BENCHMARK_RESULT_WORDS as Record<string, string | undefined>)[statement.result] ?? unlistedLabel(statement.result)) : "result not stated";
+  const late = statement.thresholds_fixed_before_reading_answers === false ? " The thresholds were set after the answers were read." : "";
+  return `Compared with ${against}${on ? ` on ${on}` : ""}: ${result}.${late}`;
+}
+type MethodStatementInput = Pick<TimingRange, "origin" | "review_state"> & { method?: MethodRef | null; benchmark?: BenchmarkStatement | null };
+/**
+ * The method line of a range: "Wording match, version 2. Not benchmarked on this installation." or "Wording match,
+ * version 2. Compared with plain word overlap on <what>: not clearly better." For what the course itself states, that
+ * it is no method's suggestion; "" for a range a person entered or confirmed.
+ */
+export function methodStatement(range: MethodStatementInput): string {
+  const kind = rangeKindOf(range);
+  if (kind === "reviewed" || kind === "entered_by_you") return "";
+  if (range.origin === "reviewed_source_map") return NOT_A_SUGGESTION_WORDS.stated_by_the_course!;
+  if (range.benchmark?.state === "not_applicable") return NOT_A_SUGGESTION_WORDS[range.benchmark.reason ?? ""] ?? "";
+  return [methodVersionWords(range.method), benchmarkSentence(range.benchmark)].filter(Boolean).join(". ");
+}
+
+type RangeKindInput =Pick<TimingRange, "origin" | "review_state"> & { method?: MethodRef | null };
 /** "Suggestion (wording match)", "Suggestion (course study map)", "Suggestion, checked by a second pass (wording match)", "Reviewed", "Entered by you": a suggestion always with its method. */
 export function rangeKindLabel(range: RangeKindInput): string {
   const kind = rangeKindOf(range);
@@ -800,6 +862,135 @@ export const pptxMatchLabel = (match: Pick<PptxMatch, "match_basis" | "match_sta
 export const SOURCE_MAP_UNAVAILABLE_LABEL: Record<SourceMapUnavailableReason, string> = { // open wording
   no_deck: "No slides file is chosen for this lecture", not_a_pdf: "The slides file is not a PDF", unreadable: "The slides file could not be read", not_built: "The source map has not been built yet",
 };
+
+// ---- the pages of a deck by role (R2-S10) ----------------------------------------------------------------------------------
+// Two figures, always together: every page of the file, and the pages that are teaching content. The other roles are
+// counted in sentences so that what is on screen adds up to the page count. No percentage; nothing is called complete.
+/** The roles the teaching-content figure counts. */
+export const INSTRUCTIONAL_ROLES: readonly SlideRoleValue[] = ["instructional", "worked_example_or_question", "mixed"];
+const UNCERTAIN_ROLES: readonly SlideRoleValue[] = ["objectives_or_summary", "unknown"];
+const EXCLUDED_ROLES: readonly SlideRoleValue[] = ["structural_title_or_section", "administrative", "blank"];
+/** The label of the raw figure: every physical page of the file. */
+export const RAW_PAGES_TERM = "PDF pages";
+/** The label of the instructional figure. */
+export const INSTRUCTIONAL_PAGES_TERM = "Count as teaching content";
+const ROLE_PAGES: Record<SlideRoleValue, readonly [string, string]> = {
+  instructional: ["instructional page", "instructional pages"], worked_example_or_question: ["worked example or question page", "worked example or question pages"], mixed: ["mixed page", "mixed pages"],
+  objectives_or_summary: ["objectives or summary page", "objectives or summary pages"], unknown: ["page of unknown role", "pages of unknown role"],
+  structural_title_or_section: ["title or section page", "title or section pages"], administrative: ["administrative page", "administrative pages"], blank: ["blank page", "blank pages"],
+};
+/** "1 title or section page", "2 pages of unknown role"; a role this build has no words for is shown as recorded. */
+export function rolePagesLabel(role: string, count: number): string {
+  const known = (ROLE_PAGES as Record<string, readonly [string, string] | undefined>)[role];
+  return known ? countLabel(count, known[0], known[1]) : `${countLabel(count, "page")} of role ${words(role)}`;
+}
+/** Pages counted by who established their role (`RolesEstablished` of the read API). */
+export interface RoleStateCounts { generated: number; agent_reviewed: number; human_confirmed: number }
+/**
+ * Who set the roles, counted from the pages of a lecture view: over all pages, and over the pages outside the
+ * teaching-content figure. A page whose role nobody established (no source map) is in neither count.
+ */
+export function rolesEstablishedOf(slides: ReadonlyArray<{ role?: Pick<SlideRole, "value" | "state"> | null }>): { all: RoleStateCounts; outside: RoleStateCounts } {
+  const all: RoleStateCounts = { generated: 0, agent_reviewed: 0, human_confirmed: 0 };
+  const outside: RoleStateCounts = { generated: 0, agent_reviewed: 0, human_confirmed: 0 };
+  for (const slide of slides) {
+    const state = slide.role?.state;
+    if (state !== "generated" && state !== "agent_reviewed" && state !== "human_confirmed") continue;
+    all[state] += 1;
+    if (!INSTRUCTIONAL_ROLES.includes(slide.role!.value)) outside[state] += 1;
+  }
+  return { all, outside };
+}
+const establishedParts = (counts: RoleStateCounts, order: ReadonlyArray<keyof RoleStateCounts>): string[] => {
+  const phrase: Record<keyof RoleStateCounts, string> = { generated: "generated by the detector", human_confirmed: "set by you", agent_reviewed: "set by an agent" };
+  return order.filter((key) => counts[key] > 0).map((key) => `${counts[key]} ${phrase[key]}`);
+};
+const totalOf = (counts: RoleStateCounts | null | undefined): number => (counts ? counts.generated + counts.agent_reviewed + counts.human_confirmed : 0);
+/** One standing of the pages outside the teaching count, as a sentence: its count, and its roles when they add up to it. */
+function standingSentence(count: number, byRole: Record<string, number> | null, roles: readonly SlideRoleValue[], standing: string): string {
+  const parts = roles.map((role) => [role, byRole?.[role] ?? 0] as const).filter(([, pages]) => pages > 0);
+  const addsUp = parts.reduce((sum, [, pages]) => sum + pages, 0) === count;
+  const verb = count === 1 ? "is" : "are";
+  if (addsUp && parts.length === 1) return `${rolePagesLabel(parts[0]![0], count)} ${verb} ${standing}.`;
+  return `${countLabel(count, "page")} ${verb} ${standing}${addsUp ? `: ${parts.map(([role, pages]) => rolePagesLabel(role, pages)).join(", ")}` : ""}.`;
+}
+export interface DeckPageFacts {
+  /** Every page of the file. */
+  raw: number;
+  /** The pages that count as teaching content; null when no role was established, and then nothing else is stated. */
+  instructional: number | null;
+  uncertain: number | null;
+  excluded: number | null;
+  /** The other roles in sentences. With `instructional` their counts add up to `raw`. */
+  others: string[];
+  /** How the roles were established: over all pages, then over the pages outside the teaching count. */
+  established: string[];
+}
+/**
+ * The pages of a deck by role, from the denominators of a source map and (when known) who set the roles. Null when
+ * the pages were not counted. An unknown role is listed as uncertain, never as excluded; who set aside the pages
+ * outside the teaching count is said whenever anyone but the detector set a role.
+ */
+export function deckPageFacts(
+  denominators: { raw: number | null; instructional: number | null; by_role: Record<string, number> | null; uncertain: number | null; excluded: number | null } | null | undefined,
+  roles?: { all?: RoleStateCounts | null; outside?: RoleStateCounts | null } | null,
+): DeckPageFacts | null {
+  if (!denominators || typeof denominators.raw !== "number") return null;
+  const { raw, instructional, uncertain, excluded, by_role: byRole } = denominators;
+  if (typeof instructional !== "number" || typeof uncertain !== "number" || typeof excluded !== "number") return { raw, instructional: null, uncertain: null, excluded: null, others: [], established: [] };
+  const others: string[] = [];
+  if (uncertain > 0) others.push(standingSentence(uncertain, byRole, UNCERTAIN_ROLES, "listed as uncertain, not excluded"));
+  if (excluded > 0) others.push(standingSentence(excluded, byRole, EXCLUDED_ROLES, "excluded"));
+  if (others.length === 0) others.push("No page is listed as uncertain or excluded.");
+  const established: string[] = [];
+  const all = roles?.all;
+  if (all && totalOf(all) > 0) {
+    const corrected = all.human_confirmed + all.agent_reviewed;
+    established.push(`Roles: ${corrected > 0 ? establishedParts(all, ["generated", "human_confirmed", "agent_reviewed"]).join(", ") : `${all.generated} generated by the detector, none set by you or by an agent`}.`);
+    const outside = roles?.outside;
+    const pagesOutside = totalOf(outside);
+    if (corrected > 0 && outside && pagesOutside > 0) {
+      const which = `the ${countLabel(pagesOutside, "page")}`;
+      established.push(outside.human_confirmed + outside.agent_reviewed > 0
+        ? `Of ${which} outside the teaching count: ${establishedParts(outside, ["human_confirmed", "agent_reviewed", "generated"]).join(", ")}.`
+        : `None of ${which} outside the teaching count had its role set by you or by an agent.`);
+    }
+  }
+  return { raw, instructional, uncertain, excluded, others, established };
+}
+
+// ---- the deck of a lecture in the course readback (R2-T12) -------------------------------------------------------------------
+/** What the displayed deck of a lecture is. Open wording. */
+export const DECK_STATE_LABEL: Record<"pdf" | "not_a_pdf" | "no_deck" | "unreadable", string> = {
+  pdf: "Readable PDF", not_a_pdf: "Not a PDF: no pages", no_deck: "No deck named", unreadable: "Unreadable",
+};
+const POWERPOINT_ONLY_LABEL = "PowerPoint only: no pages";
+/** The state of a lecture's deck in words; a presentation without a PDF is named as one, and a state without words here is shown as recorded. */
+export function deckStateLabel(deck: { state: string; filename?: string | null }): string {
+  if (deck.state === "not_a_pdf" && /\.(pptx?|ppsx?)$/i.test(deck.filename ?? "")) return POWERPOINT_ONLY_LABEL;
+  return (DECK_STATE_LABEL as Record<string, string | undefined>)[deck.state] ?? words(deck.state);
+}
+/** Why a deck's pages are not counted, as a sentence. */
+export const DECK_CAUSE_SENTENCE: Record<SourceMapUnavailableReason, string> = {
+  no_deck: "No slides file is chosen for this lecture, so no pages are counted.",
+  not_a_pdf: "Pages are counted in a PDF file only.",
+  unreadable: "The file is missing, empty or could not be read, so no pages are counted.",
+  not_built: "Its pages are not counted yet: the source map of this file has not been built.",
+};
+/** The cause as a sentence; null when there is none, and a cause without words here as recorded. */
+export function deckCauseSentence(cause: string | null | undefined): string | null {
+  if (!cause) return null;
+  const known = (DECK_CAUSE_SENTENCE as Record<string, string | undefined>)[cause];
+  if (known) return known;
+  const recorded = words(cause);
+  return `${recorded.charAt(0).toUpperCase()}${recorded.slice(1)}.`;
+}
+/** "Ranges on 8 of 14 pages.": only when both figures were sent. */
+export function rangesOnPagesLabel(summary: { pages?: number | null; pages_with_range?: number | null } | null | undefined): string | null {
+  const pages = summary?.pages;
+  const withRange = summary?.pages_with_range;
+  return typeof pages === "number" && typeof withRange === "number" ? `Ranges on ${withRange} of ${countLabel(pages, "page")}.` : null;
+}
 
 // ---- suggestions file -----------------------------------------------------------------------------------------------------
 /** Where the suggestions file of a course stands. An earlier catalog and an unreadable file are two different things. Open wording. */

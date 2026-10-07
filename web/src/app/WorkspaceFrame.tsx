@@ -54,6 +54,13 @@ export function outlineDefaultPx(kind: FrameKind, windowWidth: number): number {
   return clamp(184, Math.round(0.1 * windowWidth + 48), 288);
 }
 export const contextDefaultPx = (windowWidth: number): number => clamp(396, Math.round(0.362 * windowWidth - 112), 720);
+/**
+ * The narrowest the context panel can be made in a window. The lecture's five tabs are set in the `ui` size, which steps
+ * up at 1920 and 2400 px (3.2): with one count they need a row of 378, 395 and 414 px, and the panel's sides take 18 px
+ * below 1920 and 26 px from there. The specification's 396 px holds them only at the smallest size, so the bound steps
+ * with the type and the tab row never has to scroll (R2-V3). The concept explorer's three tabs fit 396 px at every size.
+ */
+export const contextMinPx = (kind: FrameKind, windowWidth: number): number => (kind !== "lecture" || windowWidth < 1920 ? FRAME_SPECS[kind].context.min : windowWidth < 2400 ? 422 : 442);
 
 export function frameArrangement({ width, largeText = false, focus = false }: { width: number; largeText?: boolean; focus?: boolean }): FrameArrangement {
   if (focus) return "focus";
@@ -486,14 +493,14 @@ export function WorkspaceFrame({ kind, outline, stage, context, labels, panes, p
     if (arranged.current || parseStoredLayout(readStored(spec.storageKey))) return; // the learner's own arrangement stands
     const area = panelArea(groupWidth);
     const bounds = frameBounds(kind, groupWidth);
-    const context = clamp(bounds.context.minPx, Math.round(widths.context), bounds.context.maxPx);
+    const context = clamp(Math.max(bounds.context.minPx, contextMinPx(kind, windowWidth)), Math.round(widths.context), bounds.context.maxPx);
     const room = Math.max(0, area - bounds.stageMinPx - context); // an open outline never takes the stage under its share
     const outline = widths.outline > 0 && room >= bounds.outline.minPx ? clamp(bounds.outline.minPx, Math.round(widths.outline), Math.min(bounds.outline.maxPx, room)) : 0;
     const next: FrameLayout = { outline: (outline / area) * 100, stage: ((area - outline - context) / area) * 100, context: (context / area) * 100 };
     const now = layoutPixels({ outline: 0, stage: 0, context: 0, ...group.getLayout() }, groupWidth);
     if (Math.abs(now.outline - outline) <= 1 && Math.abs(now.context - context) <= 1) return;
     group.setLayout(next);
-  }, [arrangement, groupRef, groupWidth, kind, spec.storageKey]);
+  }, [arrangement, groupRef, groupWidth, kind, spec.storageKey, windowWidth]);
   // A proposal made before the Group was there (the zones are rendered before it) is applied when it is.
   useLayoutEffect(() => {
     if (initialLayout && proposed.current) proposeWidths(proposed.current);
@@ -530,7 +537,7 @@ export function WorkspaceFrame({ kind, outline, stage, context, labels, panes, p
                 </Panel>
                 <Separator id="panel-edge" aria-label="Resize the context panel" aria-valuetext={separatorValueText("context", sizes?.context ?? 0)}
                   className={clsx(SEPARATOR_CLASS, "after:opacity-55")} />
-                <Panel id="context" minSize={spec.context.min} maxSize={spec.context.max} defaultSize={contextDefaultPx(windowWidth)} groupResizeBehavior="preserve-pixel-size"
+                <Panel id="context" minSize={contextMinPx(kind, windowWidth)} maxSize={spec.context.max} defaultSize={contextDefaultPx(windowWidth)} groupResizeBehavior="preserve-pixel-size"
                   onResize={onContextResize} className="flex min-h-0 min-w-0" style={{ overflow: "hidden" }}>
                   <Slot host={hosts.context} park={park} role="complementary" aria-label={labels.context} className="flex-1" />
                 </Panel>

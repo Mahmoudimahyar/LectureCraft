@@ -33,7 +33,7 @@ NOW = "2026-10-06T09:00:00Z"
 PLANNER = ("University", "Fixture Brain", "planner-config.yaml")
 NO_RANGE_STATES = {"recording_unavailable", "no_range_expected", "audio_unprocessed", "association_not_run", "ambiguous", "not_discussed"}
 RANGE_KEYS = {"range_id", "recording", "timebase", "start_ms", "end_ms", "relation", "occurrence_index", "occurrences_total", "support", "method", "origin", "review_state", "quality",
-              "why", "evidence", "annotation_id"}
+              "why", "evidence", "annotation_id", "benchmark"}  # "benchmark": what the installation's benchmark record says of what made the range (R2-T6; test_benchmark_record.py)
 
 # ---- synthetic material: an imaginary baking course ----------------------------------------------------------------------
 DECK = {"source_id": "src-syn-deck", "version_id": "v1-deck", "sha256": "d" * 64}
@@ -726,7 +726,8 @@ def test_a_section_link_appears_on_every_page_the_course_names_with_section_scop
 def test_the_timing_block_is_spelled_as_the_read_api_states():
     result = enriched(material(pairings=[pairing([5], [LINE_OF["gluten"]])]))
     timing = result["timing"]
-    assert set(timing) == {"stage", "recordings", "summary"} and timing["stage"] == "associated"
+    assert set(timing) == {"stage", "recordings", "summary", "benchmark"} and timing["stage"] == "associated"
+    assert (timing["benchmark"]["state"], timing["benchmark"]["reason"]) == ("not_benchmarked", "no_record")  # no record was handed in: nothing is called benchmarked
     (row,) = timing["recordings"]
     assert set(row) == {"source_id", "filename", "duration_ms", "generated", "text_alignment", "association"}
     assert set(row["generated"]) == {"generation", "text_origin", "review_state", "covered_intervals", "unresolved_intervals", "unresolved_ms", "coverage_fraction", "covers_whole_recording"}
@@ -1075,6 +1076,82 @@ def test_a_status_row_says_on_how_many_pages_of_the_deck_a_current_range_lies(lo
     assert stale["links"]["state"] == "stale" and stale["summary"] == {"pages": document["slides"]["page_count"], "pages_with_range": None}
 
 
+DECK_KEYS = {"source_id", "filename", "state", "page_count", "map_state", "cause", "denominators", "roles_established", "roles_established_outside"}
+
+
+def stored_map_files(settings, course="be505") -> list[str]:
+    area = settings.app_area(course) / "source-map"
+    return sorted(p.relative_to(area).as_posix() for p in area.rglob("*") if p.is_file()) if area.exists() else []
+
+
+def test_a_status_row_states_the_deck_of_its_lecture_with_both_page_figures_read_from_the_stored_map_only(local):
+    """R2-S10, R2-T12: the coverage readback has a deck beside the recordings of every lecture. The raw page count and
+    the instructional count are two figures of one object (the lecture view's own ``denominators``), with how the roles
+    were established, and they come from the STORED source map: a status never inspects a file."""
+    from lecture_brain import slide_identity as si
+    from lecture_brain import sourcemap
+    from lecture_brain.ownerio.inventory import primary_deck
+
+    def row(lecture_id="lecture-05"):
+        return {entry["lecture_id"]: entry for entry in tl.status(local, "be505", queue=False)["lectures"]}[lecture_id]["deck"]
+
+    # Nothing is stored yet: the deck is named, it is a readable PDF, no figure is stated and the cause is; nothing was built.
+    named = {"source_id": "src-lecture-05-slides", "filename": "Fixture Lecture 05 - R2 showcase.pdf", "state": "pdf"}
+    assert row() == {**named, "page_count": None, "map_state": "not_built", "cause": "not_built", "denominators": None, "roles_established": None, "roles_established_outside": None}
+    assert set(row()) == DECK_KEYS and stored_map_files(local) == [], "a status builds no source map"
+    assert all(set(entry["deck"]) == DECK_KEYS for entry in tl.status(local, "be505")["lectures"]), "with the queue too"
+
+    lecture = unit(local, "lecture-05")["lecture"]
+    deck = primary_deck(lecture)
+    si.prebuild(local, "be505", lecture_id="lecture-05")
+    stored = stored_map_files(local)
+    source_map, reason = si.map_for(local, "be505", lecture, deck, build="never")
+    assert reason is None and stored
+    first = row()
+    assert {key: first[key] for key in named} == named and (first["page_count"], first["map_state"], first["cause"]) == (14, "stored", None)
+    assert first["denominators"] == si.block(source_map)["denominators"], "the same object as the lecture view states"
+    figures = first["denominators"]
+    assert (figures["raw"], figures["instructional"], figures["uncertain"], figures["excluded"]) == (14, 10, 2, 2)
+    assert figures["instructional"] + figures["uncertain"] + figures["excluded"] == figures["raw"] == sum(figures["by_role"].values()) == first["page_count"]
+    assert first["roles_established"] == {"generated": 14, "agent_reviewed": 0, "human_confirmed": 0}
+    assert first["roles_established_outside"] == {"generated": 4, "agent_reviewed": 0, "human_confirmed": 0}, "the pages outside the instructional figure: uncertain and excluded"
+    assert stored_map_files(local) == stored, "reading the status stored nothing more"
+    others = {entry["lecture_id"]: entry["deck"] for entry in tl.status(local, "be505", queue=False)["lectures"] if entry["lecture_id"] != "lecture-05"}
+    assert others and all(other["state"] == "pdf" and other["map_state"] == "not_built" and other["denominators"] is None for other in others.values())
+
+    # Two pages re-labelled by the learner and one by an agent: the raw figure stays, the excluded count moves by exactly
+    # those pages, and the row says how many roles each of them set.
+    before = {page["page"]: page["role"]["role"] for page in source_map["pages"]}
+    assert before[9] in si._INSTRUCTIONAL and before[13] not in si._EXCLUDED and before[14] not in si._EXCLUDED
+    sourcemap.apply_override(local, "be505", deck, {"type": "role", "page": 13, "role": "blank"}, author="learner", reason="synthetic correction for a test", lecture=lecture, now=NOW)
+    sourcemap.apply_override(local, "be505", deck, {"type": "role", "page": 14, "role": "administrative"}, author="learner", reason="synthetic correction for a test", lecture=lecture, now=NOW)
+    sourcemap.apply_override(local, "be505", deck, {"type": "role", "page": 9, "role": "structural_title_or_section"}, author="agent", reason="synthetic correction for a test", lecture=lecture, now=NOW)
+    after = row()
+    moved = sum(1 for page in (13, 14) if before[page] in si._INSTRUCTIONAL)
+    assert after["page_count"] == after["denominators"]["raw"] == 14
+    assert after["denominators"]["excluded"] == figures["excluded"] + 3 and after["denominators"]["instructional"] == figures["instructional"] - 1 - moved
+    assert sum(after["denominators"]["by_role"].values()) == 14
+    assert after["roles_established"] == {"generated": 11, "agent_reviewed": 1, "human_confirmed": 2}
+    outside = after["roles_established_outside"]
+    assert sum(outside.values()) == after["denominators"]["uncertain"] + after["denominators"]["excluded"] and (outside["agent_reviewed"], outside["human_confirmed"]) == (1, 2)
+    view_rows = si.page_rows(si.map_for(local, "be505", lecture, deck, build="never")[0])
+    assert after["roles_established"] == {state: sum(1 for entry in view_rows if entry["role"]["state"] == state) for state in ("generated", "agent_reviewed", "human_confirmed")}
+
+
+def test_a_deck_that_has_no_pages_to_count_is_a_row_with_its_cause_and_no_figure(local):
+    """An empty file, a presentation without a PDF and a lecture without a chosen deck are rows too: named when there
+    is a file, with the cause in the lecture view's own words for it and nothing counted."""
+    nothing = {"page_count": None, "map_state": None, "denominators": None, "roles_established": None, "roles_established_outside": None}
+    rows = {entry["lecture_id"]: entry["deck"] for entry in tl.status(local, "be572", queue=False)["lectures"]}
+    assert rows["lecture-01"] == {"source_id": "src-lecture-01-slides", "filename": "Fixture 572 Empty.pdf", "state": "unreadable", "cause": "unreadable", **nothing}
+    assert rows["lecture-02"]["filename"] == "Fixture 572 Lecture 02.pptx" and rows["lecture-02"]["source_id"]
+    assert {key: rows["lecture-02"][key] for key in ("state", "cause", *nothing)} == {"state": "not_a_pdf", "cause": "not_a_pdf", **nothing}
+    assert rows["lecture-00"]["state"] == "pdf" and rows["lecture-00"]["cause"] == "not_built"
+    assert stored_map_files(local, "be572") == []
+    lecture = dict(unit(local, "lecture-01")["lecture"], decks=[], deck_choice=None)
+    assert tl.deck_readback(local, "be505", lecture) == {"source_id": None, "filename": None, "state": "no_deck", "cause": "no_deck", **nothing}
+
+
 def test_the_two_routes_read_the_course_and_rebuild_one_lecture(local, journal, tmp_path):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
@@ -1093,7 +1170,7 @@ def test_the_two_routes_read_the_course_and_rebuild_one_lecture(local, journal, 
     listing = client.get("/api/courses/be505/timing")
     assert listing.status_code == 200 and {row["lecture_id"]: row["stage"] for row in listing.json()["lectures"]}["lecture-01"] == "partly_processed"  # 57.6 of 60 seconds, not matched yet
     built = client.post("/api/courses/be505/lectures/lecture-01/timing/build")
-    assert built.status_code == 200 and set(built.json()) == {"stage", "recordings", "summary"} and built.json()["stage"] == "associated"
+    assert built.status_code == 200 and set(built.json()) == {"stage", "recordings", "summary", "benchmark"} and built.json()["stage"] == "associated"
     assert built.json()["summary"]["ranges"] > 0 and links_path(local).is_file()
     assert {row["lecture_id"]: row["stage"] for row in client.get("/api/courses/be505/timing").json()["lectures"]}["lecture-01"] == "associated"
     assert client.get("/api/courses/nope/timing").status_code == 404 and client.post("/api/courses/be505/lectures/lecture-99/timing/build").status_code == 404

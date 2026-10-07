@@ -763,6 +763,82 @@ export type LineRange = [number, number];
 export type EstablishedState = "generated" | "agent_reviewed" | "human_confirmed";
 /** `version` is null for a link a person entered or that an annotation record carries (no method version applies). */
 export interface MethodRef { name: string; version: string | null }
+/** The method against the baseline, as an installation's benchmark record states it (R2-T6). */
+export type BenchmarkResult = "better" | "not_clearly_better" | "worse";
+/**
+ * What ONE range, or the method in use, may say about a benchmark (R2-T6). "benchmarked" only when the installation's
+ * record names exactly this method name AND version; otherwise "not_benchmarked" with `reason` (no_record,
+ * record_unreadable, record_is_for_another_method, record_is_for_another_version, is_the_baseline, no_method_named).
+ * A link a person entered and a range the course states are no method's suggestion: "not_applicable"
+ * (entered_by_a_person, stated_by_the_course). Everything of the record is null unless the state is "benchmarked".
+ * A benchmark is of a method: it reviews no range.
+ */
+export interface BenchmarkStatement {
+  state: "benchmarked" | "not_benchmarked" | "not_applicable" | (string & {});
+  reason: string | null;
+  /** The range's own method, never the record's. */
+  method: MethodRef | null;
+  baseline: { name: string } | null;
+  /** In words: which labelled references both were scored on. */
+  compared_on: string | null;
+  labelled_windows: number | null;
+  result: BenchmarkResult | (string & {}) | null;
+  thresholds_fixed_before_reading_answers: boolean | null;
+  produced_at: string | null;
+}
+/** An installation's benchmark record as written (contract ll.alignment-benchmark/1, without the contract name). */
+export interface BenchmarkRecord {
+  method: { name: string; version: string };
+  baseline: { name: string };
+  compared_on: string;
+  labelled_windows: number;
+  result: BenchmarkResult | (string & {});
+  thresholds_fixed_before_reading_answers: boolean;
+  produced_at: string;
+  note: string;
+}
+/** Where the installation's record stands, what it states, the method that suggests ranges now and what the record says of THAT method. */
+export interface BenchmarkReadback {
+  record: "present" | "absent" | "unreadable" | (string & {});
+  /** Why an unreadable record could not be read; it is treated as absent and never repaired. */
+  detail: string | null;
+  recorded: BenchmarkRecord | null;
+  current_method: MethodRef | null;
+  statement: BenchmarkStatement;
+}
+/**
+ * The prepared binding of later transcription runs to the installation's one runner (R2-T2): the runner's own command
+ * and settings identity. "prepared_inactive" when it is the same runner as the published speech text; "refused" when
+ * its settings are not. `schedule` is always null: nothing is scheduled, and the app never starts it.
+ */
+export interface PreparedBinding {
+  state: "prepared_inactive" | "refused" | (string & {});
+  command: string;
+  argv?: string[];
+  command_sha256?: string | null;
+  settings_sha256: string;
+  runner?: string | null;
+  same_runner: boolean;
+  schedule: null;
+  note: string;
+}
+/** What made the generated speech text of one or more recordings, as the generations themselves state it (R2-T2). */
+export interface RunnerIdentity {
+  /** "speech_runner" for a text this installation's runner published; null when the text states no origin. */
+  origin: string | null;
+  runner: string | null;
+  tool: string | null;
+  tool_version: string | null;
+  /** "repository@revision" as the text states it. */
+  model: string | null;
+  language: string | null;
+  parameters_sha256: string | null;
+  /** The runner's settings identity; null for a text the installation's runner did not publish, and without the queue. */
+  settings_sha256: string | null;
+  same_as_prepared: boolean | null;
+  generations: number;
+  recordings: Array<{ source_id: string; filename: string | null; generation: string }>;
+}
 
 // ---- 1.1 source map ------------------------------------------------------------------------------------------------
 export type SlideRoleValue = "instructional" | "worked_example_or_question" | "objectives_or_summary" | "structural_title_or_section" | "administrative" | "blank" | "mixed" | "unknown";
@@ -1142,6 +1218,8 @@ export interface TimingRange {
   evidence: { transcript_lines?: LineRange[]; terms?: string[]; shape?: string | null; [key: string]: unknown };
   /** Set for manual and human-confirmed links (ll.annotation/1 records). */
   annotation_id: string | null;
+  /** What the installation's benchmark record says of what made this range (R2-T6). Absent from an older Brain: then nothing names a record. */
+  benchmark?: BenchmarkStatement | null;
 }
 
 export type NoRangeState = "recording_unavailable" | "no_range_expected" | "audio_unprocessed" | "association_not_run" | "ambiguous" | "not_discussed";
@@ -1233,7 +1311,13 @@ export interface TimingSummary {
   agent_reviewed: number;
   generated: number;
 }
-export interface LectureTiming { stage: TimingStage; recordings: TimingRecording[]; summary: TimingSummary }
+export interface LectureTiming {
+  stage: TimingStage;
+  recordings: TimingRecording[];
+  summary: TimingSummary;
+  /** What the installation's benchmark record says of the method that suggests ranges now (R2-T6). */
+  benchmark?: BenchmarkStatement | null;
+}
 /**
  * The revisions a lecture view was built from. A view is current only when all match. Every key is optional: the API
  * document lists all six, and the Brain of today states `timing_links` only (a key that is absent claims nothing).
@@ -1265,6 +1349,33 @@ export interface CourseTimingSummary {
   ranges?: number;
   [key: string]: unknown;
 }
+/** Pages counted by who established their role: the detector (`generated`), an agent's correction, or the learner's own. */
+export interface RolesEstablished { generated: number; agent_reviewed: number; human_confirmed: number }
+/** `pdf`: a readable PDF. `not_a_pdf`: a presentation or another file without pages to count. `no_deck`: none is chosen. `unreadable`: missing, empty or damaged. */
+export type DeckReadbackState = "pdf" | "not_a_pdf" | "no_deck" | "unreadable";
+/**
+ * The displayed deck of one lecture in the course readback, read from the STORED source map only. Without a stored map
+ * every figure is null and `cause` says why; nothing is counted from a file that was not mapped.
+ */
+export interface DeckReadback {
+  source_id: string | null;
+  filename: string | null;
+  state: DeckReadbackState;
+  page_count: number | null;
+  /** For a PDF whether its source map is stored; null for anything else. */
+  map_state: "stored" | "not_built" | null;
+  cause: SourceMapUnavailableReason | null;
+  /** The object of the lecture view: raw and instructional figures with the counts of the other roles. */
+  denominators: SourceMapDenominators | null;
+  roles_established: RolesEstablished | null;
+  /** The same counts for the pages outside the instructional figure (uncertain and excluded). */
+  roles_established_outside: RolesEstablished | null;
+}
+/**
+ * A lecture row's `summary` of `GET /api/courses/{c}/timing`, read from its stored links alone: the page count of the
+ * deck they were built for, and the pages a current link names (null when the links are stale or missing).
+ */
+export interface LectureLinksSummary { pages: number | null; pages_with_range: number | null }
 /** `GET /api/courses/{c}/timing`: per lecture and recording the stage, coverage and queue; the allowance of local transcription; the one resumable command. */
 export interface CourseTimingView {
   course_id: string;
@@ -1273,12 +1384,21 @@ export interface CourseTimingView {
   resume_command: string | null;
   /** The command that rebuilds the course's timing links. */
   build_command?: string | null;
+  /** The installation's benchmark record of the slide-matching method (R2-T6). */
+  benchmark?: BenchmarkReadback | null;
+  /** The prepared, never active binding of later transcription runs (R2-T2); null with `binding_reason` when the installation has none. Stated only with the queue. */
+  binding?: PreparedBinding | null;
+  binding_reason?: { code: string; text: string } | null;
+  /** What made each generated speech text that is served now, one row per distinct identity (R2-T2). */
+  runners?: RunnerIdentity[];
   lectures: Array<{
     lecture_id: string;
     title: string | null;
     stage: TimingStage;
     /** Where the lecture's stored timing links stand against the current inputs. */
     links?: { state: string; differs: string[]; built_at: string | null };
+    /** The lecture's displayed deck with both page figures; absent from a Brain that states none. */
+    deck?: DeckReadback | null;
     recordings: Array<TimingRecording & { queue?: TimingQueue | null }>;
   }>;
   summary: CourseTimingSummary;

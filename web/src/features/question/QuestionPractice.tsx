@@ -208,6 +208,9 @@ export function QuestionPractice() {
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  /** The question whose kept draft has been read. Before that an empty field is the page opening, not the learner clearing it. */
+  const [draftReadFor, setDraftReadFor] = useState<string | null>(null);
+
   useEffect(() => {
     if (courseId) app.setCourseId(courseId);
     void getDraft(draftId).then((d) => {
@@ -215,19 +218,22 @@ export function QuestionPractice() {
         setText(d.text);
         setDurability("saved_on_device");
       }
-    });
+    }).finally(() => setDraftReadFor(draftId));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftId]);
 
   useEffect(() => {
     if (text === "") {
+      // The field is empty when the page opens. Deleting then would remove the kept draft before it is read: it would live
+      // only in the field until the next save, and be lost by leaving the page in that moment.
+      if (draftReadFor !== draftId) return;
       void deleteDraft(draftId);
       setDurability("empty");
       return;
     }
     const timer = window.setTimeout(() => void saveDraft({ draftId, courseId, mode: "practice", text, updatedAt: isoNow(), context: { questionId, label: `Question ${questionId}` } }).then((r) => setDurability(r.durability)), 350);
     return () => window.clearTimeout(timer);
-  }, [text, draftId, courseId, questionId]);
+  }, [text, draftId, courseId, questionId, draftReadFor]);
 
   const thread = useMemo(() => (requests.data ?? []).filter((r) => r.context.questionId === questionId && ["practice", "explain", "ask", "diagnose", "review_answer"].includes(r.action)).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1)), [requests.data, questionId]);
   useEffect(() => {

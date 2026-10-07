@@ -18,13 +18,16 @@ import { clearLocalData, listDrafts, listOutbox } from "@/lib/db";
 import { formatFingerprint } from "@/lib/device";
 import { dotJoin } from "@/lib/format";
 import {
-  ASSOCIATION_STATE_LABEL, INFERRED_FILE_STATE_LABEL, TEXT_ALIGNMENT_STATE_LABEL, TIMING_STAGE_LABEL, countLabel, durationLabel, generatedCoverageSentence, nb, unlistedLabel,
+  ASSOCIATION_STATE_LABEL, INFERRED_FILE_STATE_LABEL, INSTRUCTIONAL_PAGES_TERM, RAW_PAGES_TERM, TEXT_ALIGNMENT_STATE_LABEL, TIMING_STAGE_LABEL, countLabel, deckCauseSentence, deckPageFacts, deckStateLabel,
+  durationLabel, generatedCoverageSentence, nb, rangesOnPagesLabel, unlistedLabel,
 } from "@/lib/labels";
 import { useCourseTiming, useInferredAnchors, useSettings } from "@/lib/queries";
 import { TEXT_SCALES, type ThemePref } from "@/lib/theme";
 import { driveConfigFromEnv, DRIVE_SCOPES } from "@/lib/transport";
-import type { CourseTimingSummary, CourseTimingView, InferredAnchorsReadback, TimingAllowance, TimingQueue, TimingStage } from "@/lib/types";
-import { Callout, Fact, Facts, Page, Picker, keyWords } from "@/features/search/SearchOverlay";
+import type { CourseTimingSummary, CourseTimingView, DeckReadback, InferredAnchorsReadback, LectureLinksSummary, TimingAllowance, TimingQueue, TimingStage } from "@/lib/types";
+import { Callout, Details, Fact, Facts, Page, Picker, keyWords } from "@/features/search/SearchOverlay";
+import { BENCHMARK_RESULT_WORDS, baselineWords, methodVersionWords } from "@/lib/labels";
+import type { BenchmarkReadback, PreparedBinding, RunnerIdentity } from "@/lib/types";
 
 const SECTIONS = [["appearance", "Appearance"], ["access", "Access and devices"], ["ai", "AI and Brain"], ["limits", "Limits"], ["data", "Data and privacy"], ["maintenance", "Maintenance"], ["build", "Build and data"]] as const;
 
@@ -603,6 +606,147 @@ function CountList({ rows, unit }: { rows: Array<{ key: string; label: string; c
   );
 }
 
+/**
+ * The deck of a lecture as a row of its own in the course readback (R2-S10, R2-T12): the file and what it is, then the
+ * raw page count and the teaching-content count together, the other roles in words so that the figures add up to the
+ * page count, who set the roles, and on how many pages a range lies. Where no page is counted the cause is said and no
+ * figure is drawn. Nothing for a Brain that states no deck.
+ */
+export function DeckReadbackRow({ deck, summary }: { deck: DeckReadback | null | undefined; summary?: { pages?: number | null; pages_with_range?: number | null } | null }) {
+  if (!deck) return null;
+  const facts = deckPageFacts(deck.denominators, { all: deck.roles_established, outside: deck.roles_established_outside });
+  const cause = deckCauseSentence(deck.cause);
+  const ranges = rangesOnPagesLabel(summary);
+  return (
+    <p className="ll-measure mt-1 text-muted" data-testid="deck-row" data-deck-state={deck.state}>
+      Slides: {deck.filename ? <><span className="break-words text-ink">{deck.filename}</span>. </> : null}{deckStateLabel(deck)}.
+      {facts && (
+        <>
+          {" "}<span data-figure="raw"><span className="ll-num font-semibold text-ink">{facts.raw}</span> {RAW_PAGES_TERM}</span>
+          {facts.instructional !== null && <>, <span data-figure="instructional"><span className="ll-num font-semibold text-ink">{facts.instructional}</span> {lowerFirst(INSTRUCTIONAL_PAGES_TERM)}</span></>}.
+          {facts.others.length > 0 && <>{" "}<span data-part="other-roles">{facts.others.join(" ")}</span></>}
+          {facts.established.length > 0 && <>{" "}<span data-part="roles-established">{facts.established.join(" ")}</span></>}
+        </>
+      )}
+      {cause && <>{" "}<span data-part="cause">{cause}</span></>}
+      {ranges && <>{" "}<span data-part="ranges">{ranges}</span></>}
+    </p>
+  );
+}
+const lowerFirst = (text: string): string => (text ? `${text[0]!.toLowerCase()}${text.slice(1)}` : text);
+
+// ---- R2-T6 and R2-T2: the benchmark record, what made the speech text, the prepared binding (wording is pure; tested in
+// tests/features/method-and-binding.test.tsx). These are facts of the installation, read back with each course. ------------
+const startLower = (text: string): string => (text ? `${text[0]!.toLowerCase()}${text.slice(1)}` : text);
+const startUpper = (text: string): string => (text ? `${text[0]!.toUpperCase()}${text.slice(1)}` : text);
+/** A digest for a reader: its first twelve characters. The whole value is the Brain's; this only tells two apart. */
+export const shortDigest = (digest: string | null | undefined): string => (!digest ? "" : digest.length > 12 ? `${digest.slice(0, 12)}…` : digest);
+
+/** The one sentence about the installation's benchmark record: none, unreadable, for the method in use, or for another one. */
+export function benchmarkRecordLead(benchmark: BenchmarkReadback | null | undefined): string {
+  if (!benchmark) return "The Brain states nothing about a benchmark record.";
+  const inUse = startLower(methodVersionWords(benchmark.current_method));
+  const now = `the method that suggests ranges now${inUse ? ` (${inUse})` : ""}`;
+  if (benchmark.record === "unreadable") {
+    return `The benchmark record of this installation could not be read${benchmark.detail ? ` (${benchmark.detail})` : ""}. It is treated as absent and was not changed: ${now} is not benchmarked here.`;
+  }
+  if (benchmark.record !== "present" || !benchmark.recorded) return `No benchmark record on this installation. ${startUpper(now)} is not benchmarked here.`;
+  return benchmark.statement?.state === "benchmarked" ? `This installation has a benchmark record for ${now.replace(/ \(.*\)$/, "")}.` : `This installation has a benchmark record, but not for ${now}, which is not benchmarked here.`;
+}
+/** The record as terms and values: method and version, what it was compared with and on what, the result, the labelled windows, the date. Nothing without a record. */
+export function benchmarkRecordRows(benchmark: BenchmarkReadback | null | undefined): Array<[term: string, value: string]> {
+  const recorded = benchmark?.record === "present" ? benchmark.recorded : null;
+  if (!recorded) return [];
+  const result = (BENCHMARK_RESULT_WORDS as Record<string, string | undefined>)[recorded.result] ?? unlistedLabel(String(recorded.result));
+  const rows: Array<[string, string]> = [
+    ["Method", methodVersionWords(recorded.method)],
+    ["Compared with", `${startUpper(baselineWords(recorded.baseline?.name))}, on ${recorded.compared_on}`],
+    ["Result", startUpper(result)],
+    ["Labelled windows", String(recorded.labelled_windows)],
+    ["Thresholds", recorded.thresholds_fixed_before_reading_answers ? "Fixed before the answers were read" : "Set after the answers were read"],
+    ["Recorded", formatWhen(recorded.produced_at)],
+  ];
+  if (recorded.note?.trim()) rows.push(["Note", recorded.note.trim()]);
+  return rows;
+}
+export function BenchmarkBlock({ benchmark }: { benchmark: BenchmarkReadback | null | undefined }) {
+  const rows = benchmarkRecordRows(benchmark);
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="timing-benchmark" data-record={benchmark?.record ?? "not_stated"}>
+      <h4 className="text-ui font-semibold">Benchmark of the slide-matching method</h4>
+      <p className="ll-measure text-ui text-muted">{benchmarkRecordLead(benchmark)}</p>
+      {rows.length > 0 && <Facts>{rows.map(([term, value]) => <Fact key={term} term={term}>{value}</Fact>)}</Facts>}
+      <p className="ll-measure text-ui text-muted">A benchmark compares the method with plain word overlap on labelled examples. It checks no range: every suggested range stays a suggestion.</p>
+    </div>
+  );
+}
+
+const RUNNER_ORIGIN_WORDS: Record<string, string> = { speech_runner: "This installation's runner", producer_bundle: "An imported bundle of prepared speech text", synthetic_fixture: "A labelled synthetic sample" };
+/** What made the speech text of some recordings, in words: the tool, its version, the model, how many recordings, and whether its settings are those of the prepared command. */
+export function runnerIdentityWords(identity: RunnerIdentity): string {
+  const tool = identity.tool?.trim();
+  const version = identity.tool_version && identity.tool_version !== "unknown" ? identity.tool_version.trim() : "";
+  const model = (identity.model ?? "").split("@")[0]!.trim();
+  const made = `${tool ? `${tool}${version ? `, version ${version}` : ""}` : "Tool not stated"}, ${model ? `model ${model}` : "model not stated"}.`;
+  const same = identity.same_as_prepared === true ? " Same settings as the prepared command." : identity.same_as_prepared === false ? " Other settings than the prepared command." : "";
+  return `${made} ${countLabel(identity.generations, "recording")}.${same}`;
+}
+/** The identifiers of one identity, for its closed Details: digests shortened, the model's revision, who made it, the recordings. A value that is not stated is left out. */
+export function runnerIdentityDetails(identity: RunnerIdentity): Array<[term: string, value: string]> {
+  const origin = identity.origin ? (RUNNER_ORIGIN_WORDS[identity.origin] ?? unlistedLabel(identity.origin)) : "Not stated by the text";
+  const rows: Array<[string, string]> = [
+    ["Settings identity", shortDigest(identity.settings_sha256)],
+    ["Parameters stated by the text", shortDigest(identity.parameters_sha256)],
+    ["Model revision", shortDigest((identity.model ?? "").split("@")[1])],
+    ["Made by", identity.origin && identity.runner ? `${origin} (${identity.runner})` : origin],
+    ["Recordings", (identity.recordings ?? []).map((recording) => recording.filename ?? recording.source_id).join(", ")],
+  ];
+  return rows.filter(([, value]) => value !== "");
+}
+export function RunnersBlock({ runners }: { runners: RunnerIdentity[] | null | undefined }) {
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="timing-runners">
+      <h4 className="text-ui font-semibold">What made the generated speech text</h4>
+      {!runners ? <p className="text-ui text-muted">The Brain states nothing about what made the speech text.</p>
+        : runners.length === 0 ? <p className="text-ui text-muted">No speech text has been generated for this course.</p> : (
+          <ul className="flex flex-col gap-1.5">
+            {runners.map((identity, at) => (
+              <li key={at} className="text-ui" data-testid="timing-runner">
+                <p className="ll-measure">{runnerIdentityWords(identity)}</p>
+                <Details rows={runnerIdentityDetails(identity)} />
+              </li>
+            ))}
+          </ul>
+        )}
+    </div>
+  );
+}
+
+/** What is said of later transcription runs: the Brain's own sentence for a listed binding, its reason when there is none. A schedule is never expected. */
+export function bindingLead(binding: PreparedBinding | null | undefined, reason: { code: string; text: string } | null | undefined): string {
+  if (binding) {
+    if (binding.schedule !== null && binding.schedule !== undefined) return "The Brain reports a schedule for this command. This page expected none; check it on the Brain PC before relying on what is said here.";
+    if (binding.note?.trim()) return binding.note.trim();
+    return binding.state === "prepared_inactive" && binding.same_runner ? "Prepared, not active. Nothing is scheduled." : "Not prepared. Nothing is scheduled.";
+  }
+  return reason?.text?.trim() || "The Brain states nothing about a prepared later run.";
+}
+export function BindingBlock({ binding, reason }: { binding: PreparedBinding | null | undefined; reason: { code: string; text: string } | null | undefined }) {
+  const listed = binding && binding.state === "prepared_inactive" && binding.same_runner && (binding.schedule === null || binding.schedule === undefined) ? binding : null;
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="timing-binding" data-state={binding?.state ?? "none"}>
+      <h4 className="text-ui font-semibold">Later transcription runs</h4>
+      <p className="ll-measure text-ui text-muted">{bindingLead(binding, reason)}</p>
+      {listed && (
+        <>
+          <CopyText text={listed.command} label="Copy the command" />
+          <Details rows={[["Settings identity", shortDigest(listed.settings_sha256)], ["Command identity", shortDigest(listed.command_sha256)], ["Runner", listed.runner ?? ""]]} />
+        </>
+      )}
+    </div>
+  );
+}
+
 function TimingReadback({ courseId }: { courseId: string }) {
   const timing = useCourseTiming(courseId);
   const [lecturesOpen, setLecturesOpen] = useState(false);
@@ -634,6 +778,9 @@ function TimingReadback({ courseId }: { courseId: string }) {
           <CopyText text={data.build_command} label="Copy the command" />
         </div>
       )}
+      <RunnersBlock runners={data.runners} />
+      <BindingBlock binding={data.binding} reason={data.binding_reason} />
+      <BenchmarkBlock benchmark={data.benchmark} />
       <div>
         <SectionToggle aria-expanded={lecturesOpen} count={data.lectures.length} className="text-ui" onClick={() => setLecturesOpen((value) => !value)}>Each lecture</SectionToggle>
         {lecturesOpen && (
@@ -653,6 +800,7 @@ function TimingReadback({ courseId }: { courseId: string }) {
                       ])}
                     </p>
                   ))}
+                  <DeckReadbackRow deck={lecture.deck} summary={(lecture as { summary?: LectureLinksSummary | null }).summary} />
                   {stored && <p className="mt-1 text-muted">Stored ranges: {stored}{lecture.links?.built_at ? `, built ${formatWhen(lecture.links.built_at)}` : ""}</p>}
                 </li>
               );

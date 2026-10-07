@@ -879,21 +879,23 @@ export interface ColumnGroup {
   label: string;
   /** The family of the lines that join this group to what is drawn above it; its stroke is shown beside the label and between the groups. */
   family: GraphEdgeFamily | null;
+  /** The stroke of those lines as the key names it. "Part of" and "prerequisite or overlap" are both of the structure family: only the stroke tells them apart. */
+  line: EdgeLegendKind | null;
   nodes: MapNodeModel[];
 }
 /** The same model as one centred column: groups of neighbours in rank order, each named, the slide after the concepts it supports. */
 export function columnGroups(model: MapModel): ColumnGroup[] {
-  if (model.view === "topics") return [{ key: "topics", label: "", family: null, nodes: model.nodes }];
+  if (model.view === "topics") return [{ key: "topics", label: "", family: null, line: null, nodes: model.nodes }];
   const groups: ColumnGroup[] = [];
   const seen = new Set<string>();
-  const familyTo = (ids: string[]): GraphEdgeFamily | null => {
+  const joinTo = (ids: string[]): MapModel["edges"][number] | null => {
     const mine = new Set(ids);
-    const hit = model.edges.find((edge) => (mine.has(edge.source) && seen.has(edge.target)) || (mine.has(edge.target) && seen.has(edge.source)));
-    return hit?.family ?? null;
+    return model.edges.find((edge) => (mine.has(edge.source) && seen.has(edge.target)) || (mine.has(edge.target) && seen.has(edge.source))) ?? null;
   };
   const push = (key: string, label: string, nodes: MapNodeModel[]): void => {
     if (nodes.length === 0) return;
-    groups.push({ key, label, family: familyTo(nodes.map((node) => node.id)), nodes });
+    const join = joinTo(nodes.map((node) => node.id));
+    groups.push({ key, label, family: join?.family ?? null, line: join?.legend ?? null, nodes });
     for (const node of nodes) seen.add(node.id);
   };
   for (const rank of model.ranks) {

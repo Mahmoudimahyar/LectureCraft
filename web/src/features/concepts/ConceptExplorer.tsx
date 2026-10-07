@@ -11,7 +11,8 @@ import { DropdownMenu } from "radix-ui";
 import { ArrowLeft, ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useApp } from "@/app/state";
 import { BAND_CLASS, TextTabs, WorkspaceFrame, useWorkspaceFrame, type FramePane } from "@/app/WorkspaceFrame";
-import { Button, IconButton, Segmented, StaleNotice, cn } from "@/components/ui";
+import { Button, EmptyState, IconButton, Segmented, StaleNotice, cn } from "@/components/ui";
+import { ApiError } from "@/lib/api";
 import { CONCEPT_SCOPE_LABEL, R2_ACTION, conceptScopeHeading, countLabel, nb, staleViewLine } from "@/lib/labels";
 import { useCourse, useLecture } from "@/lib/queries";
 import { conceptGraphErrorCode, identityOf, isStale, isStructuralPage, nextContentPage } from "@/lib/r2";
@@ -163,8 +164,8 @@ export function questionsInScope(graph: ConceptGraphView | null | undefined, nod
 }
 
 // ---- zones -----------------------------------------------------------------------------------------------------------------
-function OutlineZone({ state, heading, note, unknownScope, reveal, conceptCounts, ties }: { state: ExplorerState; heading: string | null; note: string | null; unknownScope: string | null; reveal: string[];
-  conceptCounts: ReadonlyMap<string, number> | null; ties: ReadonlyMap<string, AnchorTieKind> | null }) {
+function OutlineZone({ state, heading, note, unknownScope, reveal, conceptCounts, ties, notice }: { state: ExplorerState; heading: string | null; note: string | null; unknownScope: string | null; reveal: string[];
+  conceptCounts: ReadonlyMap<string, number> | null; ties: ReadonlyMap<string, AnchorTieKind> | null; notice: ReactNode }) {
   const frame = useWorkspaceFrame();
   const framed = frame.arrangement === "frame";
   return (
@@ -172,6 +173,8 @@ function OutlineZone({ state, heading, note, unknownScope, reveal, conceptCounts
       {framed && <div className={cn(BAND_CLASS, "pl-4 pr-2")}><h2 className="text-ui font-semibold">Outline</h2></div>}
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2 pb-4 [scrollbar-width:thin] max-[1179px]:p-3">
         <div className={cn(!framed && "mx-auto w-full max-w-[640px]")}>
+          {/* One pane at a time: the line that this view is older than its inputs is said in the pane in front, not only above the map. */}
+          {!framed && notice}
           {unknownScope ? (
             <div className="grid justify-items-start gap-2 p-2">
               <p className="ll-measure text-read text-muted">{unknownScope}</p>
@@ -221,7 +224,7 @@ function StageZone({ state, scopeName, slideLabel, note, unknownScope, notice }:
   );
 }
 
-function DetailZone({ state, counts, onTab }: { state: ExplorerState; counts: Record<DetailTabId, number | null>; onTab: (tab: DetailTabId) => void }) {
+function DetailZone({ state, counts, onTab, notice }: { state: ExplorerState; counts: Record<DetailTabId, number | null>; onTab: (tab: DetailTabId) => void; notice: ReactNode }) {
   const frame = useWorkspaceFrame();
   const framed = frame.arrangement === "frame";
   const focus = useFocusGraph(state.courseId, state.scopeText, state.selected);
@@ -239,6 +242,7 @@ function DetailZone({ state, counts, onTab }: { state: ExplorerState; counts: Re
       )}
       <div id="ll-concept-detail" role={framed && state.selected ? "tabpanel" : undefined} aria-labelledby={framed && state.selected ? `ll-concept-tab-${state.tab}` : undefined}
         className={cn("flex min-h-0 flex-1 flex-col", framed && "ll-region my-3 overflow-hidden")}>
+        {!framed && notice && <div className="flex-none px-3 pt-3">{notice}</div>}
         <ConceptDetail courseId={state.courseId} nodeId={state.selected} tab={state.tab} scope={state.scope} graphNode={graphNode} tie={state.scope.kind === "slide" && state.selected ? sourceTies(focus.data).get(state.selected) ?? null : null}
           scopeQuestions={scopeQuestions} place={state.place} returnTo={state.here} onClear={() => state.select(null)} framed={framed} />
       </div>
@@ -386,6 +390,19 @@ export function ConceptExplorer() {
     ...DETAIL_TABS.map((entry) => ({ id: entry.id, label: entry.label, zone: "context" as const, count: selected ? counts[entry.id] ?? undefined : undefined })),
   ];
 
+  // An address that names no configured course is an explained state with a way back, not an empty outline beside a map
+  // that "could not be drawn" (R2-B3). Every other failure keeps the map's own error with Try again.
+  if (base.error instanceof ApiError && base.error.status === 404 && conceptGraphErrorCode(base.error) === null && course.error instanceof ApiError && course.error.status === 404) {
+    return (
+      <div className="p-6" data-testid="concept-course-unresolved">
+        <h1 className="sr-only">Concept map</h1>
+        <EmptyState title="No course is configured under this address" action={<Link className="ll-btn" to="/study">Back to Study</Link>}>
+          “{courseId}” is not one of the configured courses. Your records are not affected.
+        </EmptyState>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="concept-explorer" data-scope={scopeText}>
       <h1 className="sr-only">Concept map</h1>
@@ -397,9 +414,9 @@ export function ConceptExplorer() {
       <div className="min-h-0 flex-1">
         <WorkspaceFrame kind="concepts" testId="concept-frame" pane={pane} onPaneChange={showPane} paneSwitchLabel="Concept map pane"
           labels={{ outline: "Concept outline", stage: "Concept map", context: "Selected item" }} panes={panes}
-          outline={<OutlineZone state={explorer} heading={heading} note={note} unknownScope={unknownScope} reveal={reveal} conceptCounts={conceptCounts} ties={ties} />}
+          outline={<OutlineZone state={explorer} heading={heading} note={note} unknownScope={unknownScope} reveal={reveal} conceptCounts={conceptCounts} ties={ties} notice={notice} />}
           stage={<StageZone state={explorer} scopeName={scopeName} slideLabel={slideLabel} note={note} unknownScope={unknownScope} notice={notice} />}
-          context={<DetailZone state={explorer} counts={counts} onTab={showPane} />} />
+          context={<DetailZone state={explorer} counts={counts} onTab={showPane} notice={notice} />} />
       </div>
     </div>
   );

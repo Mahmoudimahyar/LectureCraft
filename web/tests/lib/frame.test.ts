@@ -4,7 +4,7 @@
 // shows up as a changed stage width.
 import { describe, expect, it } from "vitest";
 import {
-  FRAME_MIN_WIDTH, FRAME_SPECS, SEPARATOR_PX, contextDefaultPx, firstRunLayout, frameArrangement, frameBounds, frameGroupWidth, layoutPixels, outlineDefaultPx, parseStoredLayout,
+  FRAME_MIN_WIDTH, FRAME_SPECS, SEPARATOR_PX, contextDefaultPx, contextMinPx, firstRunLayout, frameArrangement, frameBounds, frameGroupWidth, layoutPixels, outlineDefaultPx, parseStoredLayout,
   railWidth, separatorValueText, stageBlockWidth,
 } from "@/app/WorkspaceFrame";
 
@@ -112,6 +112,17 @@ describe("bounds", () => {
     expect(FRAME_SPECS.concepts.storageKey).toBe("ll.frame.concepts");
     expect(FRAME_SPECS.lecture.groupId).toBe("ll-frame-lecture");
     expect(FRAME_SPECS.concepts.groupId).toBe("ll-frame-concepts");
+  });
+  it("the lecture's context panel is never narrower than its five tabs at the type size of the window (R2-V3)", () => {
+    // Measured in the browser (web/e2e/flows/08-r2-visual-identity.spec.ts, R2-V3): five `ui` tabs with one count need a
+    // row of 378 px at 14 px type, 395 px at 15 px (from 1920) and 414 px at 16 px (from 2400); the panel's sides take
+    // 18 px below 1920 and 26 px from there.
+    const needed = (width: number): number => (width < 1920 ? 378 + 18 : width < 2400 ? 395 + 26 : 414 + 26);
+    for (const width of [1180, 1440, 1919, 1920, 2399, 2400, 2560, 3840]) expect(contextMinPx("lecture", width), `at ${width}`).toBeGreaterThanOrEqual(needed(width));
+    expect([1180, 1919, 1920, 2399, 2400, 3840].map((width) => contextMinPx("lecture", width))).toEqual([396, 396, 422, 422, 442, 442]);
+    expect([1180, 1920, 2560].map((width) => contextMinPx("concepts", width))).toEqual([396, 396, 396]); // three tabs: the specification's bound at every size
+    // the stepped bound still leaves the stage its share and the outline its minimum
+    for (const width of [1920, 2560]) expect(frameBounds("lecture", frameGroupWidth(width)).context.maxPx).toBeGreaterThan(contextMinPx("lecture", width));
   });
   it("keep the stage at no less than 40 % of the Group at every frame width (R2-V3)", () => {
     for (const width of [1180, 1280, 1440, 1679, 1680, 1920, 2560, 3840]) {

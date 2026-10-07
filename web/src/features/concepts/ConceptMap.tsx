@@ -16,7 +16,7 @@ import { Button, IconButton, Skeleton, cn } from "@/components/ui";
 import { EDGE_LEGEND, GRAPH_NODE_KIND_LABEL, PRIOR_EXPOSURE_LABEL, TIE_KIND, countLabel, evidenceAttemptsLabel, evidenceLabel, unlistedLabel, type EdgeLegendKind } from "@/lib/labels";
 import { useConceptGraph } from "@/lib/queries";
 import { conceptGraphErrorCode } from "@/lib/r2";
-import type { ConceptGraphScopeParam, ConceptGraphView, EvidenceObject, GraphEdgeFamily, GraphNodeKind, GraphScopeKind } from "@/lib/types";
+import type { ConceptGraphScopeParam, ConceptGraphView, EvidenceObject, GraphNodeKind, GraphScopeKind } from "@/lib/types";
 import { Kind, SuggestedOnly, wherePhrase, type TreePlace } from "./ConceptTree";
 import {
   MAP_ZOOM, ONE_COLUMN_BELOW, RANK_LABEL, buildMapModel, centreOn, clampViewport, columnGroups, drawnWhole, isInView, layoutMap, mapNodeWidth, moreSides, nodeWidths, openingViewport, topicGrid, zoomAbout,
@@ -80,7 +80,6 @@ const LINE: Record<EdgeLegendKind, { width: number; hot: number; dash?: string; 
   assessment: { width: 1.5, hot: 2, dash: "6 4" },
   source: { width: 2.6, hot: 3, dash: "0.1 5.5", round: true },
 };
-const FAMILY_LINE: Record<GraphEdgeFamily, EdgeLegendKind> = { structure: "hierarchy", assessment: "assessment", source: "source" };
 
 function Line({ d, kind, hot = false }: { d: string; kind: EdgeLegendKind; hot?: boolean }) {
   const style = LINE[kind];
@@ -344,11 +343,11 @@ function Column({ model }: { model: MapModel }) {
           <section key={group.key} aria-label={group.label || undefined} className="flex flex-col gap-2">
             {index > 0 && (
               <svg aria-hidden width="30" height="20" viewBox="0 0 30 20" className="ml-3 flex-none overflow-visible">
-                {group.family ? <Line d="M15 2V18" kind={FAMILY_LINE[group.family]} /> : null}
+                {group.line ? <Line d="M15 2V18" kind={group.line} /> : null}
               </svg>
             )}
             {group.label && (
-              <p className="flex items-center gap-2 text-ui font-semibold text-muted">{group.family ? <Sample kind={FAMILY_LINE[group.family]} /> : null}{group.label}</p>
+              <p className="flex items-center gap-2 text-ui font-semibold text-muted">{group.line ? <Sample kind={group.line} /> : null}{group.label}</p>
             )}
             {group.nodes.map((node) => (
               <div key={node.id} className="grid gap-1">

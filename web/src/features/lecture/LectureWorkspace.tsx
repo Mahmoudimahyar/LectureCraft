@@ -631,7 +631,8 @@ function LectureComposition({ update, deckChoice, focus, focusLine, panelParam, 
           </section>
         )}
         <SourcesPanel courseId={courseId} slide={slide} others={lecture.other_materials} lectureQuestionCount={lecture.questions.all.length} onShowLectureQuestions={() => showTab("questions")}
-          outlineHref={conceptMapHref(courseId, `slide:${lectureId}:${page}`)} onPin={pin} />
+          outlineHref={conceptMapHref(courseId, `slide:${lectureId}:${page}`)} onPin={pin}
+          onCorrected={(before) => { if (rangesFollowTheMap(before)) void rematch("Your correction was recorded.", true); }} />
         {slideNotes.length > 0 && (
           <section aria-labelledby="notes-heading">
             <h3 id="notes-heading" className="mb-1 text-head font-semibold">Your notes on this page</h3>

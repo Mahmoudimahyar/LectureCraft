@@ -145,6 +145,19 @@ describe("one centred column (a phone)", () => {
     expect(family.Questions).toBe("assessment");
   });
 
+  it("gives each group the stroke of those lines as the key names it: a related question is joined by the prerequisite-or-overlap stroke, not by the part-of stroke", () => {
+    const groups = columnGroups(buildMapModel(sampleConceptGraphSlide));
+    const line = Object.fromEntries(groups.map((group) => [group.label, group.line]));
+    expect(line.Topic).toBeNull();
+    expect(line["Selected concept"]).toBe("hierarchy");
+    expect(line["Supported on"]).toBe("source");
+    expect(line.Questions).toBe("assessment");
+    // Both are of the structure family; only the stroke tells "part of" from "prerequisite or overlap".
+    const related = groups.find((group) => group.label.startsWith("Related question"))!;
+    expect(related.family).toBe("structure");
+    expect(related.line).toBe("prerequisite_or_overlap");
+  });
+
   it("is one unnamed group at topic level", () => {
     const groups = columnGroups(buildMapModel(sampleConceptGraphCourse));
     expect(groups).toHaveLength(1);

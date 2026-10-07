@@ -48,6 +48,7 @@ import sys
 from typing import Any, Callable
 
 from . import alignment
+from . import benchmark_record
 from . import contracts as c
 from . import sourcemap
 from .annotations import AnnotationStore, media_duration_ms
@@ -1132,7 +1133,16 @@ def _timing_block(view: dict, links: dict, generated: dict, associations: dict[s
     return {"stage": stage, "recordings": rows, "summary": {}}
 
 
-def enrich(view: dict, *, source_map: dict | None, links: dict | None, generated: dict | None, annotations: list[dict] | None = None) -> dict[str, Any]:
+def _with_benchmark(ranges: list[dict], benchmark: dict | None) -> list[dict]:
+    """R2-T6: every range says what the installation's benchmark record states about what made it (``benchmark_record.statement``).
+    Derived when the view is made, from the record as it is then: the stored links carry nothing of it."""
+    for item in ranges:
+        item["benchmark"] = benchmark_record.statement(benchmark, item.get("method"), item.get("origin"))
+    return ranges
+
+
+def enrich(view: dict, *, source_map: dict | None, links: dict | None, generated: dict | None, annotations: list[dict] | None = None,
+           benchmark: dict | None = None) -> dict[str, Any]:
     """Set ``slides[].ranges``, ``slides[].no_range`` and ``timing`` on a lecture view (``r2-read-api.md`` 1.2 and 1.3).
 
     ``links`` is what :func:`read` returned (``None``: nothing was built); ``generated`` is ``Derived.current`` per
@@ -1150,6 +1160,10 @@ def enrich(view: dict, *, source_map: dict | None, links: dict | None, generated
     accepted text alignment of the current document timed: ``{line, start_ms, end_ms, recording_source_id,
     review_state: "generated", method}``; ``line_times`` — links a person made — is left as it is) and
     ``text_alignment`` (one row per recording that was aligned with this transcript).
+
+    ``benchmark`` is what ``benchmark_record.read`` returned for the installation (``None``: no record). Every range gets
+    ``benchmark`` — what that record says about what made the range — and ``timing.benchmark`` says the same of the
+    method that suggests ranges now (R2-T6). A benchmark is of a method; it reviews no range.
     """
     generated = generated or {}
     links = links if isinstance(links, dict) and links.get("state") in {"current", "stale", "missing"} else evaluate(None, None)
@@ -1246,7 +1260,7 @@ def enrich(view: dict, *, source_map: dict | None, links: dict | None, generated
                 same_stretch.setdefault(stretch, link)
         sections = _numbered([_as_range(link, 0, 0) for link in same_stretch.values()])
         ranges = _numbered(people) + sorted(page_level + sections + _numbered(earlier), key=lambda r: (r["start_ms"], r["end_ms"], str(r["range_id"])))
-        row["ranges"] = ranges
+        row["ranges"] = _with_benchmark(ranges, benchmark)
         for item in ranges:
             distinct[item["range_id"]] = item["review_state"]
         if ranges:
@@ -1316,6 +1330,8 @@ def enrich(view: dict, *, source_map: dict | None, links: dict | None, generated
     states = Counter(distinct.values())
     timing["summary"] = {"pages": len(slides), "pages_with_range": with_range, "pages_no_range_expected": expected, "pages_without_range": len(slides) - with_range - expected,
                          "ranges": len(distinct), "human_confirmed": states.get("human_confirmed", 0), "agent_reviewed": states.get("agent_reviewed", 0), "generated": states.get("generated", 0)}
+    # R2-T6: what the installation's benchmark record says about the method that suggests ranges here (none read: not benchmarked).
+    timing["benchmark"] = benchmark_record.statement(benchmark, _method(alignment.SEQUENCE_METHOD), "pipeline")
     view["timing"] = timing
     view.setdefault("revisions", {})["timing_links"] = [{"recording_source_id": record["source_id"], "links_revision": links.get("links_revision")} for record in links.get("recordings") or []
                                                        if links["state"] != "missing" and record["source_id"] not in links.get("stale_recordings", [])]
@@ -1338,7 +1354,8 @@ def enrich_view(settings: Settings, course_id: str, lecture_id: str, view: dict,
     links = read(settings, course_id, lecture_id, current_inputs=inputs_of(material), annotations=annotations)
     shown = (view.get("deck") or {}).get("source_id")
     # Another file of the unit is on screen for this request: the unit's own map says nothing about its pages.
-    return enrich(view, source_map=source_map if deck is None or shown == deck["source_id"] else None, links=links, generated=generated)
+    return enrich(view, source_map=source_map if deck is None or shown == deck["source_id"] else None, links=links, generated=generated,
+                  benchmark=benchmark_record.read(settings))
 
 
 # ---- status: every lecture and recording of a course -----------------------------------------------------------------------
@@ -1357,6 +1374,54 @@ def _speech(settings: Settings, course_id: str) -> tuple[dict | None, str | None
     queue = {row["source_id"]: {"state": row.get("state"), "chunks_done": row.get("chunks_done"), "chunks_total": row.get("chunks_total"), "seconds_covered": row.get("seconds_covered")}
              for row in rows}
     return (numbers if numbers["ceiling_seconds"] is not None and allowance.get("ledger") != "unreadable" else None), report.get("resume_command"), queue
+
+
+def _prepared_binding(settings: Settings) -> dict[str, Any]:
+    """R2-T2: the prepared, inactive binding of later transcription runs, from the runner's own readback (``speech.binding``). Reads only."""
+    try:
+        from .speech import binding as speech_binding
+
+        return speech_binding.prepared(settings)
+    except Exception:  # noqa: BLE001 - the readback of another module; without it nothing is said of a prepared run
+        return {"binding": None, "reason": {"code": "readback_failed", "text": "The runner's readback could not be read, so nothing is stated about a prepared run."},
+                "published": {}, "queue_settings_sha256": None}
+
+
+def _runner_identities(course_id: str, served: dict[str, dict], prepared: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """R2-T2: what made each generated speech generation that is served now, one row per distinct identity.
+
+    ``tool``, ``tool_version``, ``model``, ``language`` and ``parameters_sha256`` are what the generation's own manifest
+    states; ``origin`` and ``runner`` what its provenance states (``None`` for a generation that carries none).
+    ``settings_sha256`` is the settings identity of this installation's runner for a generation that runner published
+    from its frozen queue, and ``same_as_prepared`` whether that is the identity of the prepared binding; both are
+    ``None`` for a generation the runner did not publish, and when the runner was not consulted (``prepared`` is None)."""
+    binding = (prepared or {}).get("binding")
+    groups: dict[tuple, dict[str, Any]] = {}
+    for source_id, row in served.items():
+        current = next((g for g in row.get("generations") or [] if g.get("state") == "current" and g.get("generation") == row.get("current_generation")), None)
+        if current is None:
+            continue
+        producer, provenance = current.get("producer") or {}, current.get("provenance") or {}
+        mine = prepared is not None and prepared["published"].get(f"{course_id}/{source_id}") == current["generation"]
+        settings_sha256 = prepared["queue_settings_sha256"] if mine else None
+        same = None if settings_sha256 is None or binding is None else settings_sha256 == binding["settings_sha256"]
+        identity = {"origin": provenance.get("origin"), "runner": provenance.get("runner"), "tool": producer.get("tool"), "tool_version": producer.get("tool_version"),
+                    "model": producer.get("model"), "language": producer.get("language"), "parameters_sha256": producer.get("parameters_sha256"),
+                    "settings_sha256": settings_sha256, "same_as_prepared": same}
+        group = groups.setdefault(tuple(identity.values()), {**identity, "generations": 0, "recordings": []})
+        group["generations"] += 1
+        group["recordings"].append({"source_id": source_id, "filename": row.get("filename"), "generation": current["generation"]})
+    return sorted(groups.values(), key=lambda group: (-group["generations"], str(group["tool"]), str(group["parameters_sha256"])))
+
+
+def _method_and_binding(settings: Settings, course_id: str, served: dict[str, dict], include_queue: bool) -> dict[str, Any]:
+    """What the course readback says beyond its rows: the installation's benchmark record of the matching method (R2-T6),
+    the prepared binding of later runs (R2-T2; only with the queue, because it consults the runner) and the runner
+    identity of every served generation. Reads only: nothing here starts, schedules or writes anything."""
+    prepared = _prepared_binding(settings) if include_queue else None
+    return {"benchmark": benchmark_record.installation(benchmark_record.read(settings), _method(alignment.SEQUENCE_METHOD)),
+            "binding": prepared["binding"] if prepared else None, "binding_reason": prepared["reason"] if prepared else None,
+            "runners": _runner_identities(course_id, served, prepared)}
 
 
 def status(settings: Settings, course_id: str, *, preparation: Preparation | None = None, queue: bool = True) -> dict[str, Any]:
@@ -1401,9 +1466,9 @@ def status(settings: Settings, course_id: str, *, preparation: Preparation | Non
             totals["ranges"] += row["association"]["ranges"]
         stages[timing["stage"]] += 1
         lectures.append({"lecture_id": lecture_id, "title": lecture.get("title"), "stage": timing["stage"], "links": {"state": links["state"], "differs": links["differs"], "built_at": links.get("built_at")},
-                         "summary": _row_summary(document, links), "recordings": timing["recordings"]})
+                         "summary": _row_summary(document, links), "deck": deck_readback(settings, course_id, lecture), "recordings": timing["recordings"]})
     return {"course_id": course_id, "allowance": allowance, "resume_command": resume_command, "queue_included": include_queue, "build_command": _build_command(settings, course_id),
-            "lectures": lectures,
+            **_method_and_binding(settings, course_id, served, include_queue), "lectures": lectures,
             "summary": {"lectures": len(lectures), "stages": stages, **{key: totals[key] for key in ("recordings", "recordings_with_generated", "recordings_associated", "covered_ms",
                                                                                                     "unresolved_ms", "duration_ms", "ranges")}},
             "note": "Stages and times as measured. Generated timing is unreviewed; ranges are suggestions; nothing here estimates what remains."}
@@ -1419,6 +1484,47 @@ def _row_summary(document: dict | None, links: dict) -> dict[str, int | None]:
         return {"pages": pages, "pages_with_range": None}
     named = {page for link in links.get("links") or [] for page in (link.get("support") or {}).get("pages") or []}
     return {"pages": pages, "pages_with_range": len(named)}
+
+
+DECK_STATES = ("pdf", "not_a_pdf", "no_deck", "unreadable")
+_ROLE_STATES = ("generated", "agent_reviewed", "human_confirmed")
+_INSTRUCTIONAL_ROLES = frozenset({"instructional", "worked_example_or_question", "mixed"})  # the roles the instructional figure counts (slide_identity, "The denominators")
+
+
+def deck_readback(settings: Settings, course_id: str, lecture: dict) -> dict[str, Any]:
+    """The deck of one lecture unit for the coverage readback (R2-S10, R2-T12), from the STORED source map only.
+
+    ``state`` is what the unit's displayed deck is: ``pdf`` (a readable PDF file), ``not_a_pdf`` (a presentation or
+    another file that has no pages to count), ``no_deck`` (no deck is chosen for the unit) or ``unreadable`` (missing,
+    empty or damaged). ``map_state`` is ``stored`` or ``not_built`` for a PDF and ``None`` otherwise. ``denominators``
+    is the object the lecture view states (``slide_identity.block``): the raw page count beside the instructional
+    count, with the counts of the other roles, which add up to ``page_count``. ``roles_established`` counts the pages
+    by who set their role (each page's ``role.state`` of the lecture view), and ``roles_established_outside`` the same
+    for the pages outside the instructional figure (the uncertain and the excluded ones), so that pages set aside by a
+    correction are counted with who set them aside. Where there is no stored map every figure is ``None`` and ``cause``
+    names why, in the lecture view's words for it (``slide_identity.REASONS``).
+
+    Nothing is inspected or built here: a deck whose map is not stored says ``not_built``, and its pages are not counted.
+    """
+    from . import slide_identity  # imported here: it needs the web framework
+
+    deck = primary_deck(lecture)
+    row: dict[str, Any] = {"source_id": deck["source_id"] if deck else None, "filename": deck.get("filename") if deck else None, "state": "no_deck", "page_count": None,
+                           "map_state": None, "cause": "no_deck", "denominators": None, "roles_established": None, "roles_established_outside": None}
+    if deck is None:
+        return row
+    source_map, reason = slide_identity.map_for(settings, course_id, lecture, deck, build="never")
+    if source_map is None:
+        row["state"] = reason if reason in DECK_STATES else "pdf"
+        row["map_state"] = "not_built" if row["state"] == "pdf" else None
+        row["cause"] = reason
+        return row
+    roles = [entry["role"] for entry in slide_identity.page_rows(source_map)]
+    everywhere = Counter(role["state"] for role in roles)
+    outside = Counter(role["state"] for role in roles if role["value"] not in _INSTRUCTIONAL_ROLES)
+    row.update(state="pdf", page_count=source_map["page_count"], map_state="stored", cause=None, denominators=slide_identity.block(source_map)["denominators"],
+               roles_established={state: everywhere[state] for state in _ROLE_STATES}, roles_established_outside={state: outside[state] for state in _ROLE_STATES})
+    return row
 
 
 def _build_command(settings: Settings, course_id: str) -> str:

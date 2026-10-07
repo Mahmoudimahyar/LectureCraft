@@ -22,7 +22,7 @@ import type { BasisGlyphKind } from "@/components/glyphs";
 import { BasisLabel, rangeBasisGlyph } from "@/components/labels";
 import { cn } from "@/components/ui";
 import {
-  COURSE_STUDY_MAP_WORDS, DISPLAYED_SENTENCE, METHOD_WORDS, QUALITY_LABEL, RANGE_RELATION_LABEL, TOPIC_DISCUSSION_SENTENCE, countLabel, durationLabel, methodLabel, methodWords, pagesRef, qualityStateLabel,
+  COURSE_STUDY_MAP_WORDS, DISPLAYED_SENTENCE, METHOD_WORDS, QUALITY_LABEL, RANGE_RELATION_LABEL, TOPIC_DISCUSSION_SENTENCE, countLabel, durationLabel, methodLabel, methodStatement, methodWords, pagesRef, qualityStateLabel,
   rangeKindInFull, rangeKindOf, rangeSupportLine, recordingLabel, timeSpanLabel, transcriptLinesRef, type RangeKind,
 } from "@/lib/labels";
 import type { GroupPositionKind, LineRange, MethodRef, NoRangeCandidate, QualityName, TimingRange } from "@/lib/types";
@@ -97,6 +97,17 @@ export function methodRecord(range: RangeLike): string {
   if (range.origin === "manual" || !range.method || range.method.name === "manual") return "";
   return `Method: ${methodLabel(range.method)}`;
 }
+/**
+ * The head's line about the method (R2-T6): once per method, how the suggestions of this list were made and whether
+ * that method is benchmarked on this installation: "How the suggestions were made: wording match, version 2. Not
+ * benchmarked on this installation." "" when no method suggested anything here (the learner's own ranges, the
+ * course's own statements). The same words stand under each range's Qualities, on the row "Method".
+ */
+export function rangeListMethodLine(ranges: ReadonlyArray<RangeLike & Pick<TimingRange, "benchmark">>): string {
+  const statements = [...new Set(ranges.filter((range) => range.origin === "pipeline").map((range) => methodStatement(range)).filter((words) => words !== ""))];
+  if (statements.length === 0) return "";
+  return `How the suggestions were made: ${statements[0]![0]!.toLowerCase()}${statements[0]!.slice(1)}${statements.slice(1).map((words) => ` ${words}`).join("")}`;
+}
 
 // ---- the head of the list, from the data -----------------------------------------------------------------------------------
 type Timed = Pick<TimingRange, "start_ms" | "end_ms" | "recording" | "support">;
@@ -155,6 +166,7 @@ function Qualities({ range, groupKind, structural, onCorrect, onOpenTranscriptLi
   const terms = (range.evidence?.terms ?? []).filter((term) => typeof term === "string" && term.trim() !== "");
   const where = rangeSupportLine(range.support, groupKind).full;
   const record = methodRecord(range);
+  const method = methodStatement(range);
   return (
     <dl className="col-span-2 mb-2 ml-9 mr-2 grid gap-1.5 border-t border-hairline pt-2 text-ui @max-[479px]:ml-[30px]" data-testid="range-qualities">
       {QUALITY_ORDER.map((name) => (
@@ -171,6 +183,13 @@ function Qualities({ range, groupKind, structural, onCorrect, onOpenTranscriptLi
           {structural && <> {TOPIC_DISCUSSION_SENTENCE}</>}
         </dd>
       </div>
+      {/* R2-T6: the method in plain words and what this installation's benchmark record says of it. Of the method, not of this range. */}
+      {method !== "" && (
+        <div className="grid grid-cols-[15em_minmax(0,1fr)] gap-x-3 @max-[639px]:grid-cols-1">
+          <dt className="text-muted">Method</dt>
+          <dd className="break-words" data-testid="range-benchmark">{method}</dd>
+        </div>
+      )}
       {(lines.length > 0 || terms.length > 0 || record !== "") && (
         <div className="grid grid-cols-[15em_minmax(0,1fr)] gap-x-3 @max-[639px]:grid-cols-1">
           <dt className="text-muted">Evidence</dt>
@@ -208,6 +227,7 @@ export function RangeList({ pages, ranges, candidates, selection, onSelect, open
   const lead = listed
     ? `${countLabel(listed.length, "candidate")}. None was clear enough to show as the range. Pressing ${listed.length === 1 ? "the row" : "a row"} plays it to its end.`
     : rangeListLead(ranges, pages);
+  const methodLine = listed ? "" : rangeListMethodLine(ranges);
   return (
     <Popover.Root open={open} onOpenChange={onOpenChange}>
       <Popover.Anchor virtualRef={anchor as RefObject<HTMLElement>} />
@@ -234,6 +254,7 @@ export function RangeList({ pages, ranges, candidates, selection, onSelect, open
             <b className="font-semibold text-ink">{heading}</b>
             <span>{lead}</span>
             {note && <span className="basis-full pt-1" data-testid="range-list-note">{note}</span>}
+            {methodLine && <span className="basis-full pt-1" data-testid="range-list-method">{methodLine}</span>}
           </p>
           <RadioGroup.Root value={selection} onValueChange={pick} aria-label={heading} className="flex flex-col gap-0.5"
             onKeyDownCapture={(event) => { arrows.current = event.key.startsWith("Arrow"); }} onKeyUpCapture={() => { arrows.current = false; }} onPointerDownCapture={() => { arrows.current = false; }}>

@@ -14,14 +14,15 @@
 // submitted to the owner, never an in-place overwrite.
 import { useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation, useSearchParams } from "react-router";
-import { AlignLeft, ChevronRight, Clock, ExternalLink, FileText, Mic, Paperclip } from "lucide-react";
+import { AlignLeft, ChevronRight, Clock, ExternalLink, FileText, Layers, Mic, Paperclip } from "lucide-react";
 import { BasisLabel } from "@/components/labels";
 import { Button, Callout, Dialog, Field, cn, formatMs } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import type { SourceRef } from "@/lib/db";
 import {
-  GROUPING_NOT_ESTABLISHED, NO_PPTX_MATCH_LABEL, RANGE_KIND_LABEL, ROLE_LABEL, SOURCE_MAP_UNAVAILABLE_LABEL, SOURCE_STATE, TIMING_STAGE_LABEL, associationSentence, copyOfOneSlideLabel, countLabel,
-  durationLabel, groupingLabel, kindLabel, nb, pagesRef, positionLabel, pptxMatchLabel, printedBasisLabel, recordingLabel, roleStateLabel, unlistedLabel,
+  GROUPING_NOT_ESTABLISHED, INSTRUCTIONAL_PAGES_TERM, NO_PPTX_MATCH_LABEL, RANGE_KIND_LABEL, RAW_PAGES_TERM, ROLE_LABEL, SOURCE_MAP_UNAVAILABLE_LABEL, SOURCE_STATE, TIMING_STAGE_LABEL, associationSentence,
+  copyOfOneSlideLabel, countLabel, deckPageFacts, durationLabel, groupingLabel, kindLabel, nb, pagesRef, positionLabel, pptxMatchLabel, printedBasisLabel, recordingLabel, roleStateLabel, rolesEstablishedOf,
+  unlistedLabel,
 } from "@/lib/labels";
 import { useSourceMapOverride } from "@/lib/queries";
 import { identityOf } from "@/lib/r2";
@@ -53,6 +54,8 @@ interface SourcesPanelProps {
   lecture?: LectureView;
   page?: number;
   onPin: (source: SourceRef, label: string) => void;
+  /** A correction of the grouping or the role was recorded from this panel; `before` is the lecture as it was read before it (the composition has the ranges matched again). */
+  onCorrected?: (before: LectureView) => void;
   // The questions and concepts of the slide moved to their own tabs (5.12); these are accepted and no longer drawn.
   relatedByConcept?: QuestionRow[];
   lectureQuestionCount?: number;
@@ -145,7 +148,7 @@ const LINK_STATE: Record<string, { words: string; glyph: "suggested" | "by_you" 
   rejected: { words: "Rejected", glyph: "suggested" },
 };
 
-export function SourcesPanel({ courseId, slide, others = [], lecture: lectureProp, page: pageProp, onPin }: SourcesPanelProps) {
+export function SourcesPanel({ courseId, slide, others = [], lecture: lectureProp, page: pageProp, onPin, onCorrected }: SourcesPanelProps) {
   const location = useLocation();
   const workspace = useWorkspaceOrNull();
   const lecture = lectureProp ?? workspace?.lecture ?? null;
@@ -174,6 +177,7 @@ export function SourcesPanel({ courseId, slide, others = [], lecture: lecturePro
             ) : (
               <SourceRow icon={<FileText />} title="Lecture slides">{lecture.display.reason ?? "No slides file is shown for this lecture."}</SourceRow>
             )}
+            <DeckPages lecture={lecture} />
             {lecture.recordings.length === 0 && <SourceRow icon={<Mic />} title="Lecture recording">No recording is linked to this lecture.</SourceRow>}
             {lecture.recordings.map((recording) => (
               <SourceRow key={recording.source_id} icon={<Mic />} title={recordingLabel(lecture.recordings, recording.source_id)} to={sourceHref(recording.source_id)} back={back}>
@@ -223,9 +227,47 @@ export function SourcesPanel({ courseId, slide, others = [], lecture: lecturePro
       </section>
 
       {lecture && page !== null && correcting && (
-        <CorrectPageDialog courseId={courseId} lecture={lecture} page={page} onClose={() => setCorrecting(false)} onDone={(message) => { setCorrecting(false); setNotice(message); }} />
+        <CorrectPageDialog courseId={courseId} lecture={lecture} page={page} onClose={() => setCorrecting(false)} onDone={(message, before) => { setCorrecting(false); setNotice(message); onCorrected?.(before); }} />
       )}
     </div>
+  );
+}
+
+/**
+ * The pages of the displayed deck by role (R2-S10), a row of the lecture's sources. Two labelled figures that are always
+ * shown together, every page of the file and the pages that count as teaching content; then the other roles in words, so
+ * that what is on screen adds up to the page count; then who set the roles. Without a source map only the page count is
+ * stated, with the cause. No percentage, and nothing here calls the deck complete.
+ */
+function DeckPages({ lecture }: { lecture: LectureView }) {
+  const map = lecture.source_map;
+  const facts = useMemo(() => (map ? deckPageFacts(map.denominators, rolesEstablishedOf(lecture.slides)) : null), [map, lecture.slides]);
+  if (!map || !facts) return null;
+  const figure = "flex items-baseline gap-2";
+  const cause = map.state === "unavailable" ? (SOURCE_MAP_UNAVAILABLE_LABEL[map.reason] ?? unlistedLabel(String(map.reason))) : "";
+  return (
+    <li className="border-t border-hairline first:border-t-0" data-testid="deck-pages">
+      <div className="-mx-2 grid grid-cols-[20px_minmax(0,1fr)] items-start gap-3 px-2 py-3">
+        <span aria-hidden className="mt-0.5 flex-none text-muted [&>svg]:size-[18px]"><Layers /></span>
+        <div className="grid min-w-0 gap-1">
+          <p className="text-read font-semibold">Pages by role</p>
+          <dl className="flex flex-wrap gap-x-6 gap-y-1">
+            <div className={figure} data-figure="raw"><dt className="text-ui text-muted">{RAW_PAGES_TERM}</dt>{" "}<dd className="ll-num text-read font-semibold">{facts.raw}</dd></div>
+            {facts.instructional !== null && (
+              <div className={figure} data-figure="instructional"><dt className="text-ui text-muted">{INSTRUCTIONAL_PAGES_TERM}</dt>{" "}<dd className="ll-num text-read font-semibold">{facts.instructional}</dd></div>
+            )}
+          </dl>
+          {facts.instructional === null ? (
+            <p className="text-ui text-muted">The roles of these pages are not established, so no teaching-content count is stated{cause ? `: ${cause[0]!.toLowerCase()}${cause.slice(1)}` : ""}.</p>
+          ) : (
+            <>
+              <p className="text-read [overflow-wrap:anywhere]" data-testid="deck-other-roles">{facts.others.join(" ")}</p>
+              {facts.established.length > 0 && <p className="text-ui text-muted" data-testid="deck-roles-established">{facts.established.join(" ")}</p>}
+            </>
+          )}
+        </div>
+      </div>
+    </li>
   );
 }
 
@@ -366,7 +408,7 @@ export function groupingChoices(lecture: LectureView, page: number): GroupingCho
 const ROLE_ORDER: SlideRoleValue[] = ["instructional", "worked_example_or_question", "objectives_or_summary", "mixed", "unknown", "structural_title_or_section", "administrative", "blank"];
 
 /** Records the learner's own correction of the grouping and of the role as new revisions of the source map; the file and every earlier revision stay. */
-function CorrectPageDialog({ courseId, lecture, page, onClose, onDone }: { courseId: string; lecture: LectureView; page: number; onClose: () => void; onDone: (message: string) => void }) {
+function CorrectPageDialog({ courseId, lecture, page, onClose, onDone }: { courseId: string; lecture: LectureView; page: number; onClose: () => void; onDone: (message: string, before: LectureView) => void }) {
   const [params] = useSearchParams();
   const override = useSourceMapOverride(courseId, lecture.lecture_id, params.get("deck"));
   const choices = useMemo(() => groupingChoices(lecture, page), [lecture, page]);
@@ -384,10 +426,11 @@ function CorrectPageDialog({ courseId, lecture, page, onClose, onDone }: { cours
     setBusy(true);
     setError(null);
     const why = reason.trim() || "Corrected by the learner in the Sources tab";
+    const before = lecture; // the view the correction is made on: whether its ranges followed the map is read from it
     try {
       if (chosen) await override.mutateAsync({ ...chosen.request, reason: why } as SourceMapOverrideRequest);
       if (role !== current) await override.mutateAsync({ op: "role", pages: [page], value: role, reason: why });
-      onDone("Your correction was recorded as a new revision. Earlier revisions are kept, and views built on the old grouping are refreshed.");
+      onDone("Your correction was recorded as a new revision. Earlier revisions are kept, and views built on the old grouping are refreshed.", before);
     } catch (failure) {
       setError(failure instanceof ApiError ? failure.detail : (failure as Error).message);
     } finally {

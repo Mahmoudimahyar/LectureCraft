@@ -176,7 +176,7 @@ function StudyPage({ routeCourseId }: { routeCourseId?: string }) {
             </Tabs.Content>
           </Tabs.Root>
         )}
-        <p className="mt-6 max-w-[76ch] text-ui text-muted" data-testid="study-closing-line">{STUDY_CLOSING_LINE}</p>
+        <p className="mt-6 max-w-[64ch] text-ui text-muted" data-testid="study-closing-line">{STUDY_CLOSING_LINE}</p>
       </section>
     </div>
   );

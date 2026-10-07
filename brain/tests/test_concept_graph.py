@@ -545,12 +545,20 @@ def test_a_criterion_of_a_suggested_link_is_supported_only_by_the_pages_the_link
              "criteria": [{"criterion_id": "Q2.C01", "number": 1, "label": "Criterion 1", "pages": [23, 24]},      # both builds
                           {"criterion_id": "Q2.C02", "number": 2, "label": "Criterion 2", "pages": [24]},          # the last build only
                           {"criterion_id": "Q2.C03", "number": 3, "label": "Criterion 3"},                         # no page stated per criterion: the link's pages
-                          {"criterion_id": "Q2.C04", "number": 4, "label": "Criterion 4", "pages": [31]}]}]        # pages outside the link's own: not widened, the link's pages
+                          {"criterion_id": "Q2.C04", "number": 4, "label": "Criterion 4", "pages": [31]}]}]        # the link places it on another slide only: nothing of it is on this one
     view = {"source_map": {"state": "ready", "map_revision": "a1b2c3d4e5f60718", "logical_slides": [{"id": GROUP, "kind": "build_group", "pages": [22, 23, 24]}]},
             "slides": [slide(22, 1, ties), slide(23, 2, ties), slide(24, 3, ties)]}
     for page in (22, 23, 24):
         entries = {entry["node_id"]: entry["pages"] for entry in cg.slide_support_from_lecture_view(view, page)["entries"]}
-        assert entries == {"Q2.C01": [23, 24], "Q2.C02": [24], "Q2.C03": [23, 24], "Q2.C04": [23, 24]}
+        assert entries == {"Q2.C01": [23, 24], "Q2.C02": [24], "Q2.C03": [23, 24]}
+    # A link over several slides (pages 45, 48 and 56 are three slides): on the slide of page 45 only the criterion the link
+    # places on page 45 is an entry; the criterion it places on pages 48 and 56 is no support of this slide.
+    spread = [{"question_id": "Q8", "tie": "agent_inferred", "where": "on_this_page", "support_pages": [45], "learner_decision": None,
+               "criteria": [{"criterion_id": "Q8.C01", "number": 1, "label": "Criterion 1", "pages": [48, 56]}, {"criterion_id": "Q8.C02", "number": 2, "label": "Criterion 2", "pages": [45]}]}]
+    single = {"source_map": {"state": "ready", "map_revision": "a1b2c3d4e5f60718", "logical_slides": [{"id": "ls-x-p45", "kind": "single", "pages": [45]}]},
+              "slides": [{"page": 45, "identity": {"page_index": 45, "page_count": 59, "logical_slide_id": "ls-x-p45", "position": None, "label": "PDF page 45 of 59"},
+                          "role": {"value": "instructional", "state": "generated", "uncertain": False, "forced_requirements": True, "basis": []}, "question_ties": spread}]}
+    assert [(entry["node_id"], entry["pages"]) for entry in cg.slide_support_from_lecture_view(single, 45)["entries"]] == [("Q8.C02", [45])]
 
 
 def test_slide_support_is_read_from_an_enriched_lecture_view():

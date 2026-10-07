@@ -7,10 +7,33 @@ import { expect, test } from "../fixtures";
 
 const L2 = `/courses/${COURSE}/lectures/lecture-02`;
 
+// R2 lecture context panel (R2-V3, R2-V9): the tutor is one of five tabs of the context panel from 1180 px and one
+// pane of the workspace below it; the panel opens on Questions (or the tab last used), so the tutor is opened by its tab.
+const showTutor = (page: Page): Promise<void> => page.getByRole("tab", { name: "Tutor", exact: true }).click();
+/** Below 1180 px the slide, its pager and the recording are the "Slide" pane; from 1180 px they are always on screen. */
+async function showSlide(page: Page): Promise<void> {
+  if (isNarrow(page)) await page.getByRole("tab", { name: "Slide", exact: true }).click();
+}
+/** An item of the pager's More menu (finish the session, readable text, and the note when the band is too short for it). */
+async function pagerMore(page: Page, item: string): Promise<void> {
+  await showSlide(page);
+  await page.getByTestId("pager").getByRole("button", { name: /^More: finish the session/ }).click();
+  await page.getByTestId("pager-more").getByRole("menuitem", { name: item, exact: true }).click();
+}
+/** "Note" is a pager button while the band has room for it, and the first item of More when it has not. */
+async function openNote(page: Page): Promise<void> {
+  await showSlide(page);
+  const inBand = page.getByTestId("pager").getByRole("button", { name: "Note", exact: true });
+  if (await inBand.count()) await inBand.click();
+  else await pagerMore(page, "Note");
+}
+/** The pager's identity line; its parts are held together by no-break spaces. */
+const position = async (page: Page): Promise<string> => ((await page.getByTestId("slide-position").textContent()) ?? "").replace(/ /g, " ").replace(/\s+/g, " ").trim();
+
 async function ask(page: Page, text: string, slide = 3): Promise<Locator> {
   await page.goto(`${L2}?page=${slide}`);
   await expect(page.getByTestId("slide-canvas")).toHaveAttribute("data-rendered", String(slide));
-  if (isNarrow(page)) await page.getByRole("tab", { name: "Tutor", exact: true }).click();
+  await showTutor(page);
   await page.locator("#tutor-composer").fill(text);
   await page.getByTestId("send").click();
   return page.getByTestId("request-card").filter({ hasText: text });
@@ -71,7 +94,7 @@ test.describe("operations and recovery", () => {
     expect(job.dispatches, "a request cancelled before it started never reaches the tutor").toBe(0);
 
     await page.goto("/activity");
-    await page.getByLabel("Which requests to show").selectOption("all");
+    await page.getByRole("radiogroup", { name: "Which requests to show" }).getByRole("radio", { name: "All requests" }).click();
     const row = page.getByTestId("activity-job").filter({ has: page.locator(`a[href="/activity/${requestId}"]`) });
     await expect(row).toHaveAttribute("data-state", "CANCELLED");
     await expect(row).toContainText("Received by Brain"); // the admitted bundle with the learner's text is retained
@@ -88,22 +111,27 @@ test.describe("operations and recovery", () => {
     const open = async (p: Page, slide: number, draft: string) => {
       await p.goto(`${L2}?page=${slide}`);
       await expect(p.getByTestId("slide-canvas")).toHaveAttribute("data-rendered", String(slide));
-      if (isNarrow(p)) await p.getByRole("tab", { name: "Tutor", exact: true }).click();
+      await showTutor(p);
       await p.locator("#tutor-composer").fill(draft);
       await expect(p.getByText("Draft saved on this device")).toBeVisible();
     };
     await open(page, 1, "Draft from device A about induction timing");
     await open(pageB, 3, "Draft from device B about copy number");
 
-    await page.getByRole("button", { name: "Finish session" }).click();
+    await pagerMore(page, "Finish the session");
     await expect(page.getByRole("heading", { name: "Session summary" })).toBeVisible();
     await settle(request);
-    await pageB.getByRole("button", { name: "Finish session" }).click(); // B never saw A's checkpoint
+    await pagerMore(pageB, "Finish the session"); // B never saw A's checkpoint
     await expect(pageB.getByRole("heading", { name: "Session summary" })).toBeVisible();
     await settle(request);
 
+    // Rebuilt Study home (design specification section 6): one course is shown at a time. The course's tab says a
+    // choice is waiting whichever course is open, and the pane of that course carries the choice itself.
     await page.goto("/study");
-    const card = page.getByRole("listitem").filter({ hasText: "be505" });
+    const tab = page.getByTestId("course-tabs").locator(`[role="tab"][data-course="${COURSE}"]`);
+    await expect(tab).toContainText("Two study positions need your choice");
+    await tab.click();
+    const card = page.getByTestId("resume-conflict");
     await expect(card.getByText("Two study positions need your choice")).toBeVisible();
     await expect(card).toContainText("Both drafts are kept; nothing was merged or overwritten.");
     await card.getByRole("link", { name: "Compare and choose" }).click();
@@ -116,7 +144,8 @@ test.describe("operations and recovery", () => {
 
     await heads.filter({ hasText: "Draft from device B about copy number" }).getByRole("button", { name: "Continue from this one" }).click();
     await expect(page).toHaveURL(/lectures\/lecture-02\?page=3/);
-    await expect(page.getByTestId("slide-position")).toHaveText("Slide 3 of 3");
+    await showSlide(page);
+    await expect.poll(() => position(page)).toBe("PDF page 3 of 3"); // R2-S2: the line names the physical page; "Slide N" is never derived from the page index
     await expect(page.getByTestId("lecture-media")).toHaveJSProperty("paused", true);
     const resume = await (await request.get(`/api/courses/${COURSE}/resume`)).json();
     expect(resume.conflict, "the conflict is resolved by an explicit choice").toBeNull();
@@ -139,7 +168,7 @@ test.describe("operations and recovery", () => {
     const requestId = (await card.getAttribute("data-request-id"))!;
     expect((await jobsOf(request)).some((j) => j.request_id === requestId), "the Brain has not seen it").toBe(false);
     // Reading keeps working while sending does not.
-    if (isNarrow(page)) await page.getByRole("tab", { name: "Slide", exact: true }).click();
+    await showSlide(page);
     await expect(page.getByTestId("slide-canvas")).toBeVisible();
 
     // While the Brain is still unreachable the request stays held, visibly, with a manual "Send now".
@@ -172,7 +201,7 @@ test.describe("operations and recovery", () => {
     const jobs = (await jobsOf(request)).filter((j) => j.request_id === requestId);
     expect(jobs, "delivered exactly once").toHaveLength(1);
     expect(jobs[0]!.state).toBe("SUCCEEDED");
-    if (isNarrow(page)) await page.getByRole("tab", { name: "Tutor", exact: true }).click();
+    await showTutor(page);
     const after = page.getByTestId("request-card").filter({ hasText: question });
     await expect(after.getByRole("list", { name: "Request status" })).toContainText("Received by Brain", { timeout: 20_000 });
     await expect(after.getByTestId("tutor-reply")).toBeVisible({ timeout: 20_000 });
@@ -192,8 +221,8 @@ test.describe("operations and recovery", () => {
     const requestId = (await card.getAttribute("data-request-id"))!;
 
     // A note needs no tutor turn, so it is not stuck behind the waiting question.
-    if (isNarrow(page)) await page.getByRole("tab", { name: "Slide", exact: true }).click();
-    await page.getByRole("button", { name: "Save note" }).click();
+    await showSlide(page);
+    await openNote(page);
     const note = unique("note written during the quota wait");
     await page.getByRole("dialog").getByLabel("Note").fill(note);
     await page.getByRole("dialog").getByRole("button", { name: "Save note" }).click();
@@ -202,7 +231,7 @@ test.describe("operations and recovery", () => {
 
     await setFixtureMode(request, "auth_required");
     const second = unique("Asked while sign-in is required");
-    if (isNarrow(page)) await page.getByRole("tab", { name: "Tutor", exact: true }).click();
+    await showTutor(page);
     await page.locator("#tutor-composer").fill(second);
     await page.getByTestId("send").click();
     const authCard = page.getByTestId("request-card").filter({ hasText: second });
@@ -238,7 +267,7 @@ test.describe("operations and recovery", () => {
     const threads = page.getByRole("region", { name: "Course threads" });
     await expect(threads.getByRole("listitem")).toHaveCount(5);
     await expect(threads).toContainText("'latest thread' is never used");
-    await expect(page.getByTestId("fixture-mode")).toHaveValue("normal");
+    await expect(page.getByTestId("fixture-mode")).toHaveAttribute("data-value", "normal");
     await expectAccessible(page, testInfo, "settings-ai");
 
     await page.goto("/settings/limits");

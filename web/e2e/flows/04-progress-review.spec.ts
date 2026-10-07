@@ -1,6 +1,6 @@
 // UI19–UI24, UI31: evidence-backed progress, typed concept navigation, history, deliberate review
 // and the session wrap-up. Nothing here computes a mastery score, and nothing schedules itself.
-import type { APIRequestContext, Page } from "@playwright/test";
+import type { APIRequestContext, Locator, Page } from "@playwright/test";
 import { COURSE, expectAccessible, expectNoHorizontalOverflow, isNarrow, pair, settle, shot } from "../helpers";
 import { expect, test } from "../fixtures";
 
@@ -11,6 +11,38 @@ const items = (page: Page) => page.getByRole("region", { name: /^Your selected a
 const available = (page: Page) => page.getByRole("region", { name: /^Course questions you can add/ });
 /** The app's own confirmation that the signed request left this device. Only then is it safe to look at the Brain or reload. */
 const sent = (page: Page, text: string) => expect(page.getByRole("status").filter({ hasText: text })).toBeVisible();
+
+/** A picker of the app (a Radix select: a combobox button and a list of options), chosen the way a learner does. */
+async function pick(page: Page, name: string, option: string): Promise<void> {
+  const picker = page.getByRole("combobox", { name, exact: true });
+  await picker.click();
+  await page.getByRole("option", { name: option, exact: true }).click();
+  await expect(picker).toContainText(option);
+}
+
+const COURSE_NAME: Record<string, string> = { be505: "FIXTURE BE 505 - Molecular Systems (synthetic)", ds551: "FIXTURE DS 551 - Data Systems (synthetic)" };
+/**
+ * The active course of the course-scoped pages (Progress, Review, Library, History, Activity). On a wide window it is
+ * the picker "Active course: <name>" in the header path; on a narrow one it is the "Active course" group of the Menu.
+ */
+async function chooseActiveCourse(page: Page, courseId: string): Promise<void> {
+  if (isNarrow(page)) await page.getByRole("button", { name: "Menu: search, appearance, sections" }).click();
+  else await page.getByRole("navigation", { name: "Where you are" }).getByRole("button", { name: /^Active course: / }).click();
+  await page.getByRole("menuitemradio", { name: COURSE_NAME[courseId]!, exact: true }).click();
+  await expect(page.getByRole("menu")).toHaveCount(0); // choosing closes the list
+}
+
+/**
+ * The identifiers of a record stand under "Details", closed until asked for; this opens the one inside `scope` and
+ * returns its facts. Once opened it stays open while the learner moves from one catalog item to the next, so it is
+ * pressed only when it is closed.
+ */
+async function openDetails(scope: Page | Locator): Promise<Locator> {
+  const toggle = scope.getByRole("button", { name: "Details", exact: true });
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  return scope.getByRole("definition");
+}
 
 test.describe("progress, history and review", () => {
   test.beforeEach(async ({ page }) => {
@@ -29,13 +61,24 @@ test.describe("progress, history and review", () => {
     const up = page.getByRole("region", { name: "concept is assessed as skill" });
     await expect(up.getByRole("heading")).toContainText("Reached from");
     await up.getByRole("link", { name: "Origin of replication" }).click();
-    await expect(page.getByText("Concept be505.concept.origin-of-replication")).toBeVisible();
+    // The item is named by its catalog label and its type in words; the catalog identifier — the proof that the node
+    // reached here is that one node — stands under a closed "Details" (fix round, area "other": plain words, identifiers on request).
+    const main = page.getByRole("main");
+    await expect(page).toHaveURL(/concepts\/be505\.concept\.origin-of-replication$/);
+    // Exact: the skill page left behind is headed "Explain what the origin of replication does …", which a loose name would match.
+    await expect(page.getByRole("heading", { level: 1, name: "Origin of replication", exact: true })).toBeVisible();
+    await expect(main.getByText("Concept", { exact: true })).toBeVisible();
+    await expect(main).not.toContainText("be505.concept.origin-of-replication"); // not in the page until asked for
+    await expect(await openDetails(main)).toHaveText("be505.concept.origin-of-replication");
     await expect(page.getByRole("region", { name: "topic includes concept" })).toContainText("Source: question index.");
     await expect(page.getByText("Relations keep the owner's labels; none grants automatic credit.")).toBeVisible();
     await page.getByRole("region", { name: "topic includes concept" }).getByRole("link", { name: "Plasmid structure" }).click();
-    await expect(page.getByRole("heading", { level: 1, name: "Plasmid structure" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Plasmid structure", exact: true })).toBeVisible();
+    await expect(main.getByText("Topic", { exact: true })).toBeVisible();
+    await expect(await openDetails(main)).toHaveText(/^be505\.topic\./); // the identifier shown is this item's, not the one left behind
     await page.goBack();
-    await expect(page.getByText("Concept be505.concept.origin-of-replication")).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Origin of replication", exact: true })).toBeVisible();
+    await expect(await openDetails(main)).toHaveText("be505.concept.origin-of-replication");
     await expectAccessible(page, testInfo, "concept");
     await expectNoHorizontalOverflow(page);
   });
@@ -50,7 +93,7 @@ test.describe("progress, history and review", () => {
     await expect(page.locator("main")).not.toContainText("%"); // no percentage of any kind on this page
 
     // The gap is described as an observation whose cause is not established, with counter-evidence kept beside it.
-    await page.getByRole("combobox", { name: "Show", exact: true }).selectOption({ label: "Gap seen in latest response" });
+    await pick(page, "Show", "Gap seen in latest response");
     const gap = page.getByTestId("skill-list").getByRole("listitem").filter({ hasText: "Distinguish plasmid replication from gene transcription" });
     await expect(gap).toContainText("Gap seen in latest response");
     await expect(gap).toContainText("the cause is not established");
@@ -69,9 +112,13 @@ test.describe("progress, history and review", () => {
     await shot(page, testInfo, "progress");
 
     // A course with no attempts is "not assessed" — never zero, never failing.
-    await page.getByLabel("Active course").selectOption("ds551");
-    await expect(page.getByText("No attempt is recorded for this course. That is not a score of zero — nothing has been measured yet.")).toBeVisible();
-    await page.getByLabel("Active course").selectOption(COURSE);
+    const nothingMeasured = page.getByText("No attempt is recorded for this course. That is not a score of zero — nothing has been measured yet.");
+    await chooseActiveCourse(page, "ds551");
+    await expect(nothingMeasured).toBeVisible();
+    await expect(page.getByRole("list", { name: "Evidence summary" })).toContainText(/(^|\D)0 recorded attempts/);
+    await expect(page.locator("main")).not.toContainText("%");
+    await chooseActiveCourse(page, COURSE);
+    await expect(nothingMeasured).toHaveCount(0);
   });
 
   test("UI21 history shows the exact response, regrades as revisions of the same attempt, and conversations as delivered", async ({ page, request, unique }) => {
@@ -221,7 +268,7 @@ test.describe("progress, history and review", () => {
     const target = dueBefore[0]!;
 
     // First sitting: skip. Nothing is recorded and the item stays available.
-    await page.getByLabel("Session size").selectOption("1");
+    await pick(page, "Session size", "1 item");
     await page.getByTestId("start-review").click();
     await expect(page.getByRole("heading", { name: "Review session" })).toBeVisible();
     await expect(page.getByTestId("review-prompt")).toHaveText(target.question.prompt);
@@ -237,7 +284,7 @@ test.describe("progress, history and review", () => {
 
     // Second sitting: answer from memory. The response is captured, assessed and only then scheduled.
     await page.getByRole("link", { name: "Back to review" }).click();
-    await page.getByLabel("Session size").selectOption("1");
+    await pick(page, "Session size", "1 item");
     await page.getByTestId("start-review").click();
     const answer = unique("Growth shows the plasmid marker is present, not that the gene of interest is expressed; replication continues and the promoter is needed for RNA.");
     await page.locator("#review-answer").fill(answer);
@@ -257,14 +304,18 @@ test.describe("progress, history and review", () => {
   test("UI31 the session summary reports only what happened: answers requested are not assessments, and nothing is scheduled by itself", async ({ page, request, unique }) => {
     await page.goto(`/courses/${COURSE}/lectures/lecture-02?page=2`);
     await expect(page.getByTestId("slide-canvas")).toHaveAttribute("data-rendered", "2");
-    if (isNarrow(page)) await page.getByRole("tab", { name: "Tutor", exact: true }).click();
+    // R2-V3: the tutor is one of the five tabs of the context panel (the panel opens on Questions), at every width.
+    await page.getByRole("tab", { name: "Tutor", exact: true }).click();
     const question = unique("Why measure the uninduced baseline?");
     await page.locator("#tutor-composer").fill(question);
     await page.getByTestId("send").click();
     await expect(page.getByTestId("request-card").filter({ hasText: question }).getByTestId("tutor-reply")).toBeVisible({ timeout: 20_000 });
     const reviewBefore = (await reviewView(request)).items.length;
 
-    await page.getByRole("button", { name: "Finish session" }).click();
+    // Finishing is an item of the page band's More menu; on a narrow screen the band belongs to the Slide pane.
+    if (isNarrow(page)) await page.getByRole("tab", { name: "Slide", exact: true }).click();
+    await page.getByRole("button", { name: /^More: finish the session/ }).click();
+    await page.getByRole("menuitem", { name: "Finish the session", exact: true }).click();
     await expect(page).toHaveURL(/\/study\/sessions\/session-[^/]+\/summary/);
     await expect(page.getByRole("heading", { name: "Session summary" })).toBeVisible();
     const counts = page.getByTestId("wrapup-counts");
@@ -276,7 +327,9 @@ test.describe("progress, history and review", () => {
 
     // The stopping point is the Brain's verified checkpoint, not a guess.
     const where = page.getByRole("region", { name: "Where you stopped" });
-    await expect(where).toContainText(/Slide 2 of lecture-02 .*synchronised/, { timeout: 20_000 });
+    // R2-S2: the place is a physical page of the lecture named by its title; "Slide N" is never made from the page index.
+    await expect(where).toContainText(/Fixture Lecture 02 - Expression control, PDF page 2\b.*synchronised/, { timeout: 20_000 });
+    await expect(where).not.toContainText("Position not confirmed by the Brain yet");
     await expect(page.getByTestId("pending-none")).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText("Time spent and slides viewed are observations only; they are never treated as evidence of knowledge.")).toBeVisible();
 
@@ -284,11 +337,14 @@ test.describe("progress, history and review", () => {
     await expect(page).toHaveURL(/\/study$/);
     await settle(request);
     expect((await reviewView(request)).items.length, "leaving with Done schedules nothing").toBe(reviewBefore);
-    // Study home now offers the synchronised position (not a model-written recap), still paused.
-    const resume = page.getByRole("link", { name: /^Continue: lecture 02, slide 2/ });
-    await expect(resume).toContainText("paused");
-    await resume.click();
-    await expect(page.getByTestId("slide-position")).toHaveText("Slide 2 of 3");
+    // Study home now offers the synchronised position (not a model-written recap), still paused. The Resume block says
+    // it in the words of the identity line (R2-S2); "with the recording paused at" is drawn only from the Brain's
+    // checkpoint of this very page.
+    const resume = page.getByRole("region", { name: "Resume" });
+    await expect(resume.getByRole("heading", { level: 2 })).toHaveText("Fixture Lecture 02 - Expression control");
+    await expect(resume.getByTestId("resume-where")).toContainText(/You stopped on PDF\spage\s2\sof\s3, with the recording paused\sat\s\d+:\d\d\./);
+    await resume.getByRole("link", { name: "Resume lecture", exact: true }).click();
+    await expect(page.getByTestId("slide-position")).toHaveText("PDF page 2 of 3");
     await expect(page.getByTestId("lecture-media")).toHaveJSProperty("paused", true);
   });
 });

@@ -8,11 +8,22 @@ import { expect, test } from "../fixtures";
 
 const L2 = `/courses/${COURSE}/lectures/lecture-02`;
 
+/**
+ * R2-V3: the tutor is one of five tabs of the context panel (Tutor, Questions, Concepts, Transcript, Sources) and the
+ * panel opens on Questions, so the Tutor tab is chosen at every width — in the "Context panel" band on a wide screen,
+ * in the "Workspace pane" switch on a narrow one. Exactly one tab named Tutor exists in either arrangement.
+ */
+async function showTutor(page: Page): Promise<Locator> {
+  const tab = page.getByRole("tab", { name: "Tutor", exact: true });
+  await tab.click();
+  await expect(tab).toHaveAttribute("aria-selected", "true");
+  return page.getByTestId("tutor-panel");
+}
+
 async function openTutor(page: Page, url: string, renderedPage: string): Promise<Locator> {
   await page.goto(url);
   await expect(page.getByTestId("slide-canvas")).toHaveAttribute("data-rendered", renderedPage);
-  if (isNarrow(page)) await page.getByRole("tab", { name: "Tutor", exact: true }).click();
-  return page.getByTestId("tutor-panel");
+  return showTutor(page);
 }
 
 const attempts = async (request: APIRequestContext): Promise<number> => (await (await request.get(`/api/courses/${COURSE}/history`)).json()).attempts.length;
@@ -25,7 +36,8 @@ test.describe("tutoring", () => {
     const tutor = await openTutor(page, `${L2}?page=2`, "2");
     await expect(tutor.getByText("Fixture tutor (test double)")).toBeVisible();
     await expect(tutor.getByRole("radio", { name: "Quick answer" })).toBeChecked();
-    await expect(tutor.getByTestId("context-chip")).toHaveText("Slide 2");
+    // R2-S2: the page is named as a page; "Slide N" is never derived from the page index.
+    await expect(tutor.getByTestId("context-chip")).toHaveText("About page 2");
 
     const question = unique("What does the repressor do at the operator?");
     await tutor.locator("#tutor-composer").fill(question);
@@ -45,8 +57,10 @@ test.describe("tutoring", () => {
     const reply = card.getByTestId("tutor-reply");
     await expect(reply).toContainText("Short version");
     await expect(reply).toContainText("FIXTURE"); // the test double labels its own output
-    await expect(reply.getByRole("list", { name: "Sources used" }).getByRole("link", { name: "Slide/page 2" })).toBeVisible();
-    await expect(card.getByRole("note")).toContainText("Not assessed this exchange");
+    await expect(reply).toContainText("Tutor, quick answer"); // the reply says which kind of help it is
+    await expect(reply.getByRole("list", { name: "Sources used" }).getByRole("link", { name: "p. 2", exact: true })).toBeVisible(); // R2-S2: a page citation
+    await expect(card.getByRole("note")).toContainText("Not assessed in this exchange.");
+    await expect(card.getByRole("note")).toContainText("Receiving an answer does not show what you can do on your own.");
     await expect(card.getByRole("note")).toContainText("Your earlier evidence is unchanged.");
     await expect(card.getByTestId("feedback")).toHaveCount(0);
 
@@ -56,17 +70,26 @@ test.describe("tutoring", () => {
     expect(jobs.filter((j) => j.action === "ask" && j.depth === "quick")[0]!.phases.publication).toBe("Not assessed in this exchange");
   });
 
-  test("UI11 an unpaired device can read and draft, and is told plainly that sending is off", async ({ page }) => {
-    await page.goto(`${L2}?page=1`);
-    await expect(page.getByTestId("slide-canvas")).toHaveAttribute("data-rendered", "1");
-    if (isNarrow(page)) await page.getByRole("tab", { name: "Tutor", exact: true }).click();
-    const tutor = page.getByTestId("tutor-panel");
-    await expect(tutor.getByText("This device is not paired yet, so sending is off.")).toBeVisible();
+  test("UI11 an unpaired device can read and draft, and is told plainly that sending is off", async ({ page, request }) => {
+    const jobsBefore = (await (await request.get("/api/activity")).json()).counts.jobs;
+    const tutor = await openTutor(page, `${L2}?page=1`, "1");
+    // Design specification 5.8 (the tutor tab of R2-V3): on an unpaired device Send is disabled and the line beside it says
+    // why, before anything is typed. The earlier build let Send be pressed and answered with a "Not sent" alert; the rule
+    // pinned here is the same — nothing leaves the device, the learner is told plainly, the draft is kept.
+    const note = tutor.getByTestId("send-note");
+    await expect(note).toContainText("Sending is off because this device is not paired with the tutor. What you type stays here.");
+    await expect(note.getByRole("link", { name: "Pair this device" })).toBeVisible();
     await tutor.locator("#tutor-composer").fill("a draft written before pairing");
-    await tutor.getByTestId("send").click();
-    await expect(tutor.getByRole("alert")).toContainText("Not sent");
-    await expect(tutor.getByRole("link", { name: "Pair this device" })).toBeVisible();
+    await expect(tutor.getByText("Draft saved on this device")).toBeVisible(); // drafting works without pairing
+    await expect(tutor.getByTestId("send")).toBeDisabled();
+    await expect(note).toContainText("Sending is off because this device is not paired with the tutor."); // still the reason once there is text
+    await tutor.locator("#tutor-composer").press("Control+Enter"); // the keyboard way to send is off too
+    await expect(tutor.getByTestId("request-card")).toHaveCount(0);
+    expect((await (await request.get("/api/activity")).json()).counts.jobs, "nothing was sent from an unpaired device").toBe(jobsBefore);
     await expect(tutor.locator("#tutor-composer")).toHaveValue("a draft written before pairing"); // the text is not lost
+    // The stated way out leads to pairing.
+    await note.getByRole("link", { name: "Pair this device" }).click();
+    await expect(page.getByRole("heading", { name: "Connect your course workspace" })).toBeVisible();
   });
 
   test("UI12 Understand gives a fuller explanation; going deeper and trying to explain are the learner's choice", async ({ page, unique }) => {
@@ -78,8 +101,8 @@ test.describe("tutoring", () => {
     await tutor.locator("#tutor-composer").press("Control+Enter");
     const card = tutor.getByTestId("request-card").filter({ hasText: question }).first();
     await expect(card.getByTestId("tutor-reply")).toContainText("Explanation for", { timeout: 20_000 });
-    await expect(card).toContainText("Question · understand");
-    await expect(card.getByRole("note")).toContainText("Not assessed this exchange");
+    await expect(card.getByTestId("tutor-reply")).toContainText("Tutor, explanation"); // an Understand answer, named as such
+    await expect(card.getByRole("note")).toContainText("Not assessed in this exchange.");
 
     await card.getByRole("button", { name: "Go deeper" }).click();
     await expect(tutor.locator("#tutor-composer")).toHaveValue(`Go deeper on: ${question}`);
@@ -87,22 +110,22 @@ test.describe("tutoring", () => {
     await tutor.getByTestId("send").click();
     const deeper = tutor.getByTestId("request-card").filter({ hasText: `Go deeper on: ${question}` });
     await expect(deeper.getByTestId("tutor-reply")).toContainText("Longer explanation", { timeout: 20_000 });
-    await expect(deeper).toContainText("Question · go deeper");
+    await expect(deeper.getByTestId("tutor-reply")).toContainText("Tutor, going deeper");
 
-    // "Try explaining" only switches the mode; no quiz is forced and nothing is submitted.
-    await card.getByRole("button", { name: "Try explaining" }).click();
+    // "Try explaining it" only switches the mode; no quiz is forced and nothing is submitted.
+    await card.getByRole("button", { name: "Try explaining it" }).click();
     await expect(tutor.getByRole("radio", { name: "Explain back" })).toBeChecked();
     await expect(tutor.getByRole("button", { name: "Check my explanation" })).toBeDisabled();
 
-    // The draft keeps the slide it was written for when the learner moves on.
+    // The draft keeps the page it was written for when the learner moves on (R2-S2: pages, not slide numbers).
     await tutor.locator("#tutor-composer").fill("half-written explanation");
     if (isNarrow(page)) await page.getByRole("tab", { name: "Slide", exact: true }).click();
-    await page.getByRole("button", { name: "Next slide" }).click();
+    await page.getByRole("button", { name: "Next page", exact: true }).click();
     if (isNarrow(page)) await page.getByRole("tab", { name: "Tutor", exact: true }).click();
-    await expect(tutor.getByRole("status").filter({ hasText: "This draft belongs to slide 1" })).toBeVisible();
-    await expect(tutor.getByTestId("context-chip")).toHaveText("Slide 1");
-    await tutor.getByRole("button", { name: "Move the draft to slide 2" }).click();
-    await expect(tutor.getByTestId("context-chip")).toHaveText("Slide 2");
+    await expect(tutor.getByRole("status").filter({ hasText: "This draft belongs to page 1" })).toBeVisible();
+    await expect(tutor.getByTestId("context-chip")).toHaveText("About page 1");
+    await tutor.getByRole("button", { name: "Move the draft to page 2" }).click();
+    await expect(tutor.getByTestId("context-chip")).toHaveText("About page 2");
     await tutor.locator("#tutor-composer").fill("");
   });
 
@@ -113,7 +136,8 @@ test.describe("tutoring", () => {
     await tutor.getByRole("radio", { name: "Explain back" }).click();
     await tutor.getByLabel("What to explain").selectOption({ label: "How induction works" });
     await expect(tutor.getByText("Explain how adding an inducer switches on an inducible promoter.")).toBeVisible();
-    await expect(tutor.getByText("Your response is frozen and retained before the tutor sees it.")).toBeVisible();
+    // Before anything is written the line beside the button says nothing is sent yet (design specification 5.8).
+    await expect(tutor.getByTestId("send-note")).toContainText("Nothing is sent until you press “Check my explanation”.");
     // Criteria are not shown before the attempt.
     await expect(tutor).not.toContainText("releases the repressor from the operator so transcription can start");
 
@@ -121,6 +145,8 @@ test.describe("tutoring", () => {
     await tutor.getByLabel("Have you seen this question before?").selectOption("unseen_reported");
     const answer = unique("Inducer binding releases the repressor from the operator, so transcription can start. States matter here.");
     await tutor.locator("#tutor-composer").fill(answer);
+    // The learner is told, before pressing the button, that the response is frozen before the tutor sees it.
+    await expect(tutor.getByTestId("send-note")).toContainText("Your response is kept as you wrote it before the tutor sees it.");
     await tutor.getByRole("button", { name: "Check my explanation" }).click();
 
     const card = tutor.getByTestId("request-card").filter({ hasText: answer });
@@ -245,7 +271,11 @@ test.describe("tutoring", () => {
     await pair(page);
     // Search must not break on such entries (it did, on real data), and finds them by title.
     await page.goto("/study");
-    await page.getByRole("button", { name: /^Search / }).click();
+    // Search is an icon button of the header on a wide window and an item of the header's Menu on a narrow one.
+    if (isNarrow(page)) {
+      await page.getByRole("button", { name: "Menu: search, appearance, sections" }).click();
+      await page.getByRole("menuitem", { name: /^Search / }).click();
+    } else await page.getByRole("button", { name: /^Search / }).click();
     const dialog = page.getByRole("dialog", { name: "Search" });
     await dialog.getByLabel("Search query").fill("problem set 1 question 2");
     await dialog.getByRole("list", { name: "Search results" }).getByRole("link").filter({ hasText: "Problem set 1, question 2" }).first().click();
@@ -299,14 +329,17 @@ test.describe("tutoring", () => {
     await tutor.getByRole("button", { name: "Submit answer" }).click();
     const checkCard = tutor.getByTestId("request-card").filter({ hasText: check });
     await expect(checkCard.getByTestId("tutor-reply")).toContainText("Possible causes are listed as hypotheses, not conclusions.", { timeout: 20_000 });
-    await expect(checkCard).toContainText("Diagnostic answer");
+    // The exchange is kept as a diagnostic answer: named so for assistive technology, and its reply headed as the check.
+    await expect(checkCard).toHaveAccessibleName(/^Diagnostic answer: /);
+    await expect(checkCard.getByTestId("tutor-reply")).toContainText("Tutor, diagnostic check");
+    await expect(checkCard.getByTestId("learner-text")).toHaveText(check);
     await settle(request);
     expect(await attempts(request), "an unrubriced diagnostic answer is retained but not turned into an attempt").toBe(before);
 
     // Back to the lecture: the composer returns to normal and the slide is where it was.
     await expect(tutor.getByRole("radiogroup", { name: "Interaction" })).toBeVisible();
     if (isNarrow(page)) await page.getByRole("tab", { name: "Slide", exact: true }).click();
-    await expect(page.getByTestId("slide-position")).toHaveText("Slide 1 of 3");
+    await expect(page.getByTestId("slide-position")).toHaveText("PDF page 1 of 3"); // R2-S2: the identity line names the physical page
   });
 
   test("UI17 disputing feedback regrades the same response without overwriting it; a better answer is a separate new attempt", async ({ page, request, unique }) => {

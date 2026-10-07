@@ -33,8 +33,14 @@ test("every component story renders cleanly in this theme", async ({ page, reque
   // Content safety is visible in the story: no active element or script link is produced from tutor text.
   await page.goto(`${STORIES}/iframe.html?id=${stories.find((s) => /markdown/i.test(s.id))!.id}&viewMode=story&globals=theme:${theme}`);
   const root = page.locator("#storybook-root");
-  await expect(root.getByRole("link", { name: "safe link" })).toHaveAttribute("href", "https://example.org");
+  // Since the rebuild every story draws its content twice, once on the ground of each theme (the regions
+  // "light theme" and "dark theme"); the safety check holds for each copy.
+  const copies = root.getByRole("region", { name: /^(light|dark) theme$/ });
+  await expect(copies).toHaveCount(2);
+  for (const copy of await copies.all()) {
+    await expect(copy.getByRole("link", { name: "safe link" })).toHaveAttribute("href", "https://example.org");
+    await expect(copy.locator(".katex").first()).toBeVisible(); // maths is typeset, not shown as raw TeX
+  }
   expect(await root.locator("img, script, iframe").count()).toBe(0);
   expect(await root.locator('a[href^="javascript:"]').count()).toBe(0);
-  await expect(root.locator(".katex").first()).toBeVisible(); // maths is typeset, not shown as raw TeX
 });

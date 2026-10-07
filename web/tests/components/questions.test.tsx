@@ -12,7 +12,7 @@ import { QuestionListItem, answerAction, pageCitations, promptParts, questionNam
 import { SAMPLE_COURSE_ID, sampleLectureView, sampleLectureViewWithoutR2, sampleQuestionRowRejectedByLearner, sampleTieKeptByConfirmation } from "@/lib/fixtures/r2-sample";
 import { DECISION_NOTE, NBSP, QUESTION_LIST_LABEL } from "@/lib/labels";
 import { nextContentPage } from "@/lib/r2";
-import type { LectureView, RelatedQuestion, SlidePosition } from "@/lib/types";
+import type { LectureQuestionTie, LectureView, QuestionRow, RelatedQuestion, SlidePosition } from "@/lib/types";
 
 const plain = (value: string | null | undefined): string => (value ?? "").split(NBSP).join(" ").replace(/\s+/g, " ").trim();
 const textOf = (element: Element | null): string => plain(element?.textContent);
@@ -430,6 +430,42 @@ describe("Questions tab, a view without R2 fields", () => {
     const list = screen.getByTestId("lecture-questions");
     expect(within(list).getAllByTestId("question-row")).toHaveLength(8);
     expect(textOf(list)).not.toMatch(/Suggested link|Exact\.|Stated\./);
+  });
+});
+
+describe("a question row in the bank, with the question's own ties (no deck is on screen there)", () => {
+  const exact = sampleLectureView.questions.all.flatMap((entry) => entry.ties ?? []).find((tie) => tie.tie === "exact" && tie.granularity !== "section" && (tie.pages ?? []).length > 0)!;
+  const suggested = sampleLectureView.questions.all.flatMap((entry) => entry.ties ?? []).find((tie) => tie.tie === "agent_inferred" && tie.granularity !== "section")!;
+  const bankRow = (ties: LectureQuestionTie[]): QuestionRow => ({ ...sampleQuestionRowRejectedByLearner, question_id: "S90-Q77", ties, no_link: null,
+    suggestion_history: { stale: 0, rejected_by_verifier: 0, rejected_by_learner: [], decisions_not_shown: [] } });
+
+  it("a course anchor on the slides of its lecture reads as a page of the slides and opens the lecture", () => {
+    mount(<ul><QuestionListItem courseId={SAMPLE_COURSE_ID} row={bankRow([{ ...exact, on_displayed_deck: false, on_lecture_deck: true }])} /></ul>, "/courses/sample-course/questions");
+    const entry = row("S90-Q77");
+    expect(textOf(entry)).not.toMatch(/another file|its source file/);
+    const page = within(entry).getAllByRole("link").find((link) => /^pp?\./.test(link.textContent ?? ""))!;
+    expect(page.getAttribute("href")).toContain(`/lectures/${exact.lecture_id}`);
+  });
+
+  it("a suggested link on the slides of its lecture opens the lecture too", () => {
+    mount(<ul><QuestionListItem courseId={SAMPLE_COURSE_ID} row={bankRow([{ ...suggested, on_displayed_deck: false, on_lecture_deck: true }])} /></ul>, "/courses/sample-course/questions");
+    const page = within(row("S90-Q77")).getAllByRole("link").find((link) => /^pp?\./.test(link.textContent ?? ""))!;
+    expect(page.getAttribute("href")).toContain(`/lectures/${suggested.lecture_id}`);
+  });
+
+  it("a course anchor to a file of no lecture unit (a problem set) keeps the wording of the catalog anchors", () => {
+    const sheet: LectureQuestionTie = { ...exact, tie: "stated", lecture_id: null, source_id: "src-problem-set", pages: [2], transcript_lines: [], on_displayed_deck: false, on_lecture_deck: false, logical_slide_ids: [] } as LectureQuestionTie;
+    mount(<ul><QuestionListItem courseId={SAMPLE_COURSE_ID} row={bankRow([sheet])} /></ul>, "/courses/sample-course/questions");
+    const entry = row("S90-Q77");
+    expect(textOf(entry)).toContain("The course record names p. 2 of its source file, not a slide of the deck.");
+    const page = within(entry).getAllByRole("link").find((link) => /^pp?\./.test(link.textContent ?? ""))!;
+    expect(page.getAttribute("href")).toContain("/sources/src-problem-set"); // the file itself, never a lecture page
+  });
+
+  it("a course anchor to another file of a lecture unit says so", () => {
+    const sheet: LectureQuestionTie = { ...exact, tie: "stated", source_id: "src-in-class-sheet", pages: [3], transcript_lines: [], on_displayed_deck: false, on_lecture_deck: false, logical_slide_ids: [] } as LectureQuestionTie;
+    mount(<ul><QuestionListItem courseId={SAMPLE_COURSE_ID} row={bankRow([sheet])} /></ul>, "/courses/sample-course/questions");
+    expect(textOf(row("S90-Q77"))).toContain("The course record names p. 3 of another file of this unit.");
   });
 });
 

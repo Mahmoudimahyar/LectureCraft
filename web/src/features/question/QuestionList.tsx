@@ -167,8 +167,15 @@ export interface CourseRef {
   /** Words for the file, when the pages are pages of another file and the course record says which kind. */
   fileWords: string | null;
 }
+/**
+ * Whether a tie's pages are pages of slides: of the deck on screen (a lecture list), or, where no deck is on screen (the
+ * bank, with the question's own ties), of the slides of the tie's lecture. A Brain that says neither is read as before.
+ */
+const tieOnSlides = (tie: LectureQuestionTie): boolean => tie.on_lecture_deck === true || tie.on_displayed_deck !== false;
 const refOfTie = (tie: LectureQuestionTie): CourseRef => ({ tie: tie.tie === "exact" ? "exact" : "stated", pages: [...(tie.pages ?? [])], lines: [...(tie.transcript_lines ?? [])], lectureId: tie.lecture_id ?? null,
-  sourceId: tie.source_id ?? null, onDeck: tie.on_displayed_deck !== false, catalogField: tie.catalog_field ?? null, fileWords: null });
+  sourceId: tie.source_id ?? null, onDeck: tieOnSlides(tie), catalogField: tie.catalog_field ?? null,
+  // a file of no lecture unit (a problem set's own file) is "its source file", as the catalog anchors word it; a file of a unit that is not its deck stays "another file of this unit"
+  fileWords: tie.lecture_id ? null : "its source file, not a slide of the deck" });
 /**
  * The course's own anchors of a row from a Brain that sends no tie data, read from the R1 anchors: one reference per
  * basis and file, with the transcript lines of that basis beside its first pages. Nothing is added to what the record names.
@@ -467,7 +474,7 @@ export function SectionTieBasis({ section }: { section: SectionTieDetail | null 
 
 /** A suggested link in the lecture-wide list: "p. 40 supports 2 of 4 criteria: …", the pages as links. */
 export function LectureSuggestedBasis({ courseId, tie, about }: { courseId: string; tie: LectureSuggestedTie; about: string }) {
-  const target: RefTarget = { courseId, lectureId: tie.lecture_id ?? null, sourceId: tie.source_id ?? null, onDeck: tie.on_displayed_deck !== false };
+  const target: RefTarget = { courseId, lectureId: tie.lecture_id ?? null, sourceId: tie.source_id ?? null, onDeck: tieOnSlides(tie) };
   const pages = pageCitations(tie.pages ?? []).map((citation) => <PageLink key={citation.page} citation={citation} target={target} />);
   const single = pageRuns(tie.pages ?? []).length === 1 && (tie.pages ?? []).length === 1;
   const support = supportSentence(tie);
